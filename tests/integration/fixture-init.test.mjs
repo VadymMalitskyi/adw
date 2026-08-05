@@ -36,9 +36,10 @@ function copyFixture(name) {
   return root;
 }
 
-function runInit(root, action, confirmed = false, expectedStatus = 0) {
+function runInit(root, action, confirmed = false, expectedStatus = 0, execution = null) {
   const args = [initScript, action, "--project-root", root];
   if (confirmed) args.push("--confirmed");
+  if (execution) args.push("--execution", execution);
   const result = spawnSync(process.execPath, args, { encoding: "utf8" });
   assert.equal(result.status, expectedStatus, result.stderr || result.stdout);
   return JSON.parse(expectedStatus === 0 ? result.stdout : result.stderr);
@@ -60,7 +61,7 @@ function filesUnder(root, relativeRoot) {
   return paths;
 }
 
-test("empty repository initializes unresolved commands, docs records, and no devcontainer", () => {
+test("empty repository initializes unresolved commands, docs records, and a managed devcontainer", () => {
   const root = copyFixture("empty-repo");
   const headBefore = git(root, "rev-parse", "HEAD");
   const statusBefore = git(root, "status", "--porcelain=v1", "--untracked-files=all");
@@ -68,13 +69,21 @@ test("empty repository initializes unresolved commands, docs records, and no dev
   const preview = runInit(root, "preview");
   assert.equal(preview.mode, "preview");
   assert.equal(preview.docs.action, "create");
-  assert.equal(preview.devcontainer, "untouched");
+  assert.deepEqual(preview.devcontainer, { isolation: "managed-devcontainer", action: "create", required: true, reopen_required: true });
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), statusBefore);
 
   runInit(root, "apply", true);
   assert.equal(git(root, "rev-parse", "HEAD"), headBefore, "init must not commit code-branch artifacts");
-  assert.equal(existsSync(join(root, ".devcontainer")), false);
-  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /^schema: 2$/m);
+  assert.deepEqual(filesUnder(root, ".devcontainer"), [
+    ".devcontainer/Dockerfile",
+    ".devcontainer/adw-managed.json",
+    ".devcontainer/allowed-domains.txt",
+    ".devcontainer/devcontainer.json",
+    ".devcontainer/init-firewall.sh",
+    ".devcontainer/post-create.sh",
+  ]);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /^schema: 3$/m);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /execution:\n  isolation: managed-devcontainer\n  enforcement: required/);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /command: "<unresolved>"[\s\S]*required: false/);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /source: "unresolved: no supported manifest or task-runner target proves a validation command"/);
   assert.deepEqual(filesUnder(root, "worktrees/docs"), [
@@ -94,6 +103,15 @@ test("empty repository initializes unresolved commands, docs records, and no dev
   assert.equal(git(join(root, "worktrees/docs"), "rev-parse", "HEAD"), docsHeadBefore);
 });
 
+test("provider sandbox is an explicit initialization choice and creates no container", () => {
+  const root = copyFixture("empty-repo");
+  const preview = runInit(root, "preview", false, 0, "provider-sandbox");
+  assert.deepEqual(preview.devcontainer, { isolation: "provider-sandbox", action: "none", required: false, reopen_required: false });
+  runInit(root, "apply", true, 0, "provider-sandbox");
+  assert.equal(existsSync(join(root, ".devcontainer")), false);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /execution:\n  isolation: provider-sandbox\n  enforcement: preferred/);
+});
+
 test("existing project keeps instructions, documentation, ignores, and devcontainer bytes", () => {
   const root = copyFixture("existing-project");
   const protectedPaths = [
@@ -110,7 +128,8 @@ test("existing project keeps instructions, documentation, ignores, and devcontai
 
   runInit(root, "apply", true);
   const config = readFileSync(join(root, "adw.yaml"), "utf8");
-  assert.match(config, /^schema: 2$/m);
+  assert.match(config, /^schema: 3$/m);
+  assert.match(config, /execution:\n  isolation: project-devcontainer\n  enforcement: required/);
   for (const [command, source] of [
     ["npm run lint", "package.json#scripts.lint"],
     ["npm run test", "package.json#scripts.test"],
@@ -143,7 +162,7 @@ test("monorepo initialization keeps component commands separate with observable 
 
   runInit(root, "apply", true);
   const config = readFileSync(join(root, "adw.yaml"), "utf8");
-  assert.match(config, /^schema: 2$/m);
+  assert.match(config, /^schema: 3$/m);
   assert.match(config, /path: "apps\/web"/);
   assert.match(config, /path: "services\/api"/);
   for (const source of [
@@ -156,7 +175,7 @@ test("monorepo initialization keeps component commands separate with observable 
   ]) assert.match(config, new RegExp(`source: ${JSON.stringify(source)}`), `missing provenance ${source}`);
   assert.doesNotMatch(config, /publish|deploy/);
   for (const [path, bytes] of sourcesBefore) assert.deepEqual(readFileSync(join(root, path)), bytes, `${path} changed`);
-  assert.equal(existsSync(join(root, ".devcontainer")), false);
+  assert.equal(existsSync(join(root, ".devcontainer/devcontainer.json")), true);
 
   const configBefore = readFileSync(join(root, "adw.yaml"));
   runInit(root, "apply", true);

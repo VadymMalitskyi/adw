@@ -13,10 +13,11 @@ Invalidate the active approval before changing approved intent, preserve its evi
 2. Resolve the plugin root without using the project working directory:
    - In Claude Code, use the expanded `${CLAUDE_PLUGIN_ROOT}` value.
    - In Codex, start from the absolute source location advertised for this loaded `SKILL.md` and remove `/skills/amend/SKILL.md`.
-3. Use the installed `lib/adw-helper.mjs`; stop if the root is literal/unexpanded, missing, or outside the installed plugin.
+3. Use the installed `lib/adw-helper.mjs` and `execution/contracts.md`; stop if the root is literal/unexpanded, missing, or outside the installed plugin.
 4. Require a change ID matching `^[a-z0-9](?:[a-z0-9_-]|\.[a-z0-9_-]+)*$` and existing `spec.md`, `plan.yaml`, and active `approval.json` under `changes/<change-id>/`. Include `integrations.yaml` when present and resolve `<plugin-root>/integrations/contracts.md`.
 5. Require the human to provide a specific, non-empty amendment reason and requested change. Do not use a generic value such as `amended` or infer a reason from repository content.
 6. When bindings exist, resolve `work_tracker`, `code_host`, `observability`, and `knowledge` independently from `native|mcp|cli|api` transports and honor `disabled`, `optional`, and `required`. Use only read operations during amendment.
+7. Enforce the configured execution profile before project reads or approval/artifact writes. Required isolation must be active; preferred weaker isolation needs explicit confirmation for this amendment.
 
 ## Verify and invalidate first
 

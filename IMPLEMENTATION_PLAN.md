@@ -34,7 +34,7 @@ There will be no public `adw` executable, no vendored copy of the skills in each
 5. **Documentation:** code-coupled documentation remains on the code branch; ADW context and change records live on a separate `docs` branch.
 6. **Docs checkout:** the `docs` branch is checked out at root-level `worktrees/docs`; `/worktrees/` is Git-ignored.
 7. **Updates:** provider plugin managers distribute skill changes; `adw:update` migrates project artifacts only when their schema changes.
-8. **Execution environment:** use the agent's existing sandbox by default. Devcontainer support is optional and never installed automatically.
+8. **Execution environment:** use a required managed Dev Container by default for new repositories, preserve project-owned containers, and retain the agent's own sandbox and permissions as an inner boundary.
 9. **Delivery:** one branch and one draft pull request through `code_host`; GitHub is the initial provider, and ADW never merges or deploys.
 10. **Runtime:** Node.js 20+ for bundled internal helpers. Helpers are invoked by skills and are not a user-facing command API.
 11. **Canonical source:** shared skills and contracts are maintained once. Provider-specific files contain packaging only.
@@ -162,7 +162,7 @@ The project does **not** receive:
 - ADW skill implementations.
 - Plugin manifests.
 - ADW helper programs.
-- A devcontainer unless the project already owns one and the user requests changes.
+- Provider-wide tooling or credentials; a project-specific managed devcontainer is created when the project does not already own one.
 - ADW provider implementations, MCP/CLI configuration, or credentials.
 
 ## 5. Artifact contracts
@@ -172,7 +172,7 @@ The project does **not** receive:
 Contains shared project facts:
 
 ```yaml
-schema: 2
+schema: 3
 
 git:
   default_branch: main
@@ -183,6 +183,10 @@ documentation:
   worktree: worktrees/docs
   sync_marker: SYNC.yaml
   delivery: direct-push
+
+execution:
+  isolation: managed-devcontainer
+  enforcement: required
 
 components:
   backend:
@@ -245,7 +249,7 @@ updated_at: 2026-08-05T14:30:00Z
 
 | Skill | Contract |
 |---|---|
-| `adw:init` | Inspect the project, preview changes, create `adw.yaml`, ignore `/worktrees/` and `.adw/`, create or attach the `docs` branch at `worktrees/docs`, and add small managed blocks to `AGENTS.md`/`CLAUDE.md`. Never install a devcontainer automatically. |
+| `adw:init` | Inspect the project, preview changes, create schema-3 `adw.yaml`, select and create the managed devcontainer when absent or preserve a project-owned one, ignore `/worktrees/` and `.adw/`, create or attach the docs worktree, and add bounded routing blocks. |
 | `adw:doctor` | Read-only check of plugin compatibility, project schema, local setup, and each configured capability's requirement, provider, transport, operations, and access level. |
 | `adw:status` | Read-only reconstruction of active changes, approval state, external bindings/receipts, branches, validation, and draft PRs. |
 | `adw:discover` | Analyze repository structure and propose project/component context plus non-secret integration settings; write only after approval. |
@@ -339,10 +343,10 @@ Completed change records remain under `changes/` on the docs branch. Git history
 Work:
 
 - Change the PRD from “repository-installed skill pack” to “privately installed provider plugin plus repository artifacts.”
-- Remove skill vendoring, managed-file hashes inside projects, mandatory devcontainer generation, and source-bundle language.
+- Remove skill vendoring, managed-file hashes, and source-bundle language; retain reviewed managed-container generation as project-specific infrastructure.
 - Add private personal/org marketplace distribution.
 - Restore the separate `docs` branch for ADW context and change records, using root-level ignored `worktrees/docs` locally.
-- Make devcontainers optional and describe the agent sandbox as the default boundary.
+- Define managed, project-owned, and provider-sandbox execution profiles with explicit enforcement.
 - Align skill names to the `adw:<skill>` namespace.
 
 Acceptance:
@@ -401,7 +405,7 @@ Acceptance:
 Work:
 
 - Implement `init`, `doctor`, `status`, and `discover` skills.
-- Preserve existing `AGENTS.md`, `CLAUDE.md`, `.gitignore`, documentation, and devcontainer files.
+- Preserve existing `AGENTS.md`, `CLAUDE.md`, `.gitignore`, documentation, and project-owned devcontainer files; create the managed template only when absent.
 - Add or update only bounded ADW routing blocks.
 - Ensure `.adw/` and root-level `/worktrees/` are ignored before creating local state.
 - Create or attach the `docs` branch and its `worktrees/docs` checkout without disturbing the code checkout.
@@ -413,7 +417,7 @@ Acceptance:
 - Existing instructions survive byte-for-byte outside managed blocks.
 - `doctor` and `status` are read-only.
 - Re-running init reuses the existing docs worktree and never duplicates `/worktrees/` ignore rules.
-- Init never creates or edits `.devcontainer/` without a separate explicit request.
+- Init creates the managed `.devcontainer/` for a new project and never edits an existing project-owned one.
 
 ### WP4 — Build plan, approval, and amendment skills
 

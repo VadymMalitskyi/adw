@@ -19,6 +19,7 @@ const IGNORE_START = "# ADW:START";
 const IGNORE_END = "# ADW:END";
 const skillDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pluginRoot = resolve(skillDirectory, "../..");
+const EXECUTION_MODES = new Set(["managed-devcontainer", "project-devcontainer", "provider-sandbox"]);
 
 function fail(message) {
   process.stderr.write(`${JSON.stringify({ ok: false, error: message })}\n`);
@@ -32,9 +33,11 @@ function parseArguments(argv) {
     if (value === "preview" || value === "apply") args.action = value;
     else if (value === "--confirmed") args.confirmed = true;
     else if (value === "--project-root") args.projectRoot = argv[++index];
+    else if (value === "--execution") args.execution = argv[++index];
     else fail(`unknown argument: ${value}`);
   }
   if (!args.projectRoot) fail("--project-root is required");
+  if (args.execution && !EXECUTION_MODES.has(args.execution)) fail(`unsupported --execution mode: ${args.execution}`);
   if (args.action === "apply" && !args.confirmed) fail("apply requires --confirmed after the user approves the preview");
   return args;
 }
@@ -186,12 +189,12 @@ function yamlScalar(value) {
   return JSON.stringify(String(value));
 }
 
-function projectConfiguration(projectRoot) {
+function projectConfiguration(projectRoot, execution) {
   const components = discoverComponents(projectRoot);
   const commands = detectCommands(projectRoot);
   const lines = [
     "# ADW project configuration. Every executable command cites an observable source.",
-    "schema: 2",
+    "schema: 3",
     "",
     "git:",
     `  default_branch: ${yamlScalar(defaultBranch(projectRoot))}`,
@@ -202,6 +205,10 @@ function projectConfiguration(projectRoot) {
     "  worktree: worktrees/docs",
     "  sync_marker: SYNC.yaml",
     "  delivery: direct-push",
+    "",
+    "execution:",
+    `  isolation: ${execution}`,
+    `  enforcement: ${execution === "provider-sandbox" ? "preferred" : "required"}`,
     "",
     "components:",
   ];
@@ -233,7 +240,40 @@ function readOrEmpty(path) {
   return existsSync(path) ? readFileSync(path, "utf8") : "";
 }
 
-function plannedFiles(projectRoot) {
+function resolveExecution(projectRoot, requested) {
+  const containerDirectory = join(projectRoot, ".devcontainer");
+  const containerConfig = join(containerDirectory, "devcontainer.json");
+  const hasDirectory = existsSync(containerDirectory);
+  const hasConfig = existsSync(containerConfig);
+  const isolation = requested ?? (hasConfig ? "project-devcontainer" : "managed-devcontainer");
+  if (hasDirectory && !hasConfig && isolation !== "provider-sandbox") {
+    throw new Error(".devcontainer exists without devcontainer.json; resolve it or choose provider-sandbox explicitly");
+  }
+  if (isolation === "managed-devcontainer" && hasDirectory) {
+    throw new Error("managed-devcontainer requires an absent .devcontainer directory; preserve the existing container with project-devcontainer or choose provider-sandbox");
+  }
+  if (isolation === "project-devcontainer" && !hasConfig) {
+    throw new Error("project-devcontainer requires an existing .devcontainer/devcontainer.json");
+  }
+  return {
+    isolation,
+    action: isolation === "managed-devcontainer" ? "create" : isolation === "project-devcontainer" ? "preserve" : "none",
+    required: isolation !== "provider-sandbox",
+    reopen_required: isolation !== "provider-sandbox",
+  };
+}
+
+function managedDevcontainerFiles() {
+  const templateRoot = join(pluginRoot, "templates/devcontainer");
+  return ["devcontainer.json", "Dockerfile", "allowed-domains.txt", "init-firewall.sh", "post-create.sh", "adw-managed.json"].map((name) => ({
+    path: `.devcontainer/${name}`,
+    before: "",
+    after: readFileSync(join(templateRoot, name), "utf8"),
+    action: "create-managed-devcontainer",
+  }));
+}
+
+function plannedFiles(projectRoot, execution) {
   const files = [];
   for (const name of ["AGENTS.md", "CLAUDE.md"]) {
     const path = join(projectRoot, name);
@@ -246,7 +286,10 @@ function plannedFiles(projectRoot) {
   const ignoreAfter = replaceManagedBlock(ignoreBefore, IGNORE_START, IGNORE_END, ignoreBlock(ignoreBefore));
   files.push({ path: ".gitignore", before: ignoreBefore, after: ignoreAfter, action: existsSync(ignorePath) ? "update-managed-block" : "create" });
   const configPath = join(projectRoot, "adw.yaml");
-  if (!existsSync(configPath)) files.push({ path: "adw.yaml", before: "", after: projectConfiguration(projectRoot), action: "create" });
+  if (!existsSync(configPath)) {
+    files.push({ path: "adw.yaml", before: "", after: projectConfiguration(projectRoot, execution.isolation), action: "create" });
+    if (execution.isolation === "managed-devcontainer") files.push(...managedDevcontainerFiles());
+  }
   return files;
 }
 
@@ -313,24 +356,32 @@ function initializeDocs(projectRoot, plan) {
   git(projectRoot, ["commit", "-m", "Initialize ADW docs branch"], { cwd: docsPath });
 }
 
-function summarize(files, docs) {
+function summarize(files, docs, execution) {
   return {
     ok: true,
     writes: files.filter((file) => file.before !== file.after).map((file) => ({ path: file.path, action: file.action })),
     unchanged: files.filter((file) => file.before === file.after).map((file) => file.path),
     local_state: [".adw/local.yaml", ".adw/cache/"],
     docs,
-    devcontainer: "untouched",
+    devcontainer: execution,
+    next_steps: execution.reopen_required
+      ? ["commit the reviewed initialization files", "rebuild and reopen the repository in the devcontainer", "authenticate Codex, Claude Code, and required provider tools inside their project-scoped volumes", "install ADW inside the container and run adw:doctor"]
+      : ["run adw:doctor to verify the selected provider sandbox"],
   };
 }
 
 try {
   const args = parseArguments(process.argv.slice(2));
   const projectRoot = assertProjectRoot(args.projectRoot);
-  const files = plannedFiles(projectRoot);
+  const existingConfig = existsSync(join(projectRoot, "adw.yaml"));
+  if (existingConfig && args.execution) throw new Error("--execution cannot replace an existing adw.yaml; use an explicit reviewed migration or infrastructure change");
+  const execution = existingConfig
+    ? { isolation: "existing-configuration", action: "preserve", required: false, reopen_required: false }
+    : resolveExecution(projectRoot, args.execution);
+  const files = plannedFiles(projectRoot, execution);
   const docs = docsPlan(projectRoot);
   if (args.action === "preview") {
-    process.stdout.write(`${JSON.stringify({ mode: "preview", ...summarize(files, docs) }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ mode: "preview", ...summarize(files, docs, execution) }, null, 2)}\n`);
   } else {
     // Ignore rules must exist before any local state or worktree is created.
     writeChangedFiles(projectRoot, files.filter((file) => file.path === ".gitignore"));
@@ -346,7 +397,7 @@ try {
     ].join("\n"), "utf8");
     writeChangedFiles(projectRoot, files.filter((file) => file.path !== ".gitignore"));
     initializeDocs(projectRoot, docs);
-    process.stdout.write(`${JSON.stringify({ mode: "apply", ...summarize(files, { ...docs, action: docs.action === "reuse" ? "reuse" : "ready" }) }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ mode: "apply", ...summarize(files, { ...docs, action: docs.action === "reuse" ? "reuse" : "ready" }, execution) }, null, 2)}\n`);
   }
 } catch (error) {
   fail(error.message);

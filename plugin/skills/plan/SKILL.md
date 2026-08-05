@@ -14,8 +14,9 @@ Create an exact, reviewable `spec.md`, `plan.yaml`, and optional `integrations.y
 3. Resolve the installed plugin root without using the project directory:
    - In Claude Code, use the expanded `${CLAUDE_PLUGIN_ROOT}` value.
    - In Codex, start from the absolute source location advertised for this loaded `SKILL.md` and remove `/skills/plan/SKILL.md`.
-4. Resolve `templates/spec.md`, `templates/plan.yaml`, the supported schemas, `lib/adw-helper.mjs`, and `integrations/contracts.md` under that plugin root. Stop if the root is missing, literal/unexpanded, or outside the installed plugin.
+4. Resolve `templates/spec.md`, `templates/plan.yaml`, the supported schemas, `lib/adw-helper.mjs`, `execution/contracts.md`, and `integrations/contracts.md` under that plugin root. Stop if the root is missing, literal/unexpanded, or outside the installed plugin.
 5. Never write into the installed plugin directory.
+6. Enforce the configured execution profile before running project commands or writing the planning bundle. Required isolation must be active; preferred weaker isolation needs explicit confirmation.
 
 ## Establish the change
 

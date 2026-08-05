@@ -10,7 +10,8 @@ export const EXIT = Object.freeze({ OK: 0, INPUT: 2, SCHEMA_INVALID: 3, APPROVAL
 export const ARTIFACT_SCHEMAS = Object.freeze({
   project: Object.freeze({
     1: new URL("../schemas/project.v1.schema.json", import.meta.url),
-    2: new URL("../schemas/project.v2.schema.json", import.meta.url)
+    2: new URL("../schemas/project.v2.schema.json", import.meta.url),
+    3: new URL("../schemas/project.v3.schema.json", import.meta.url)
   }),
   plan: Object.freeze({ 1: new URL("../schemas/plan.v1.schema.json", import.meta.url) }),
   approval: Object.freeze({
@@ -197,12 +198,18 @@ export async function validateArtifact(artifact, data) {
     }
     result.valid = result.errors.length === 0;
   }
-  if (result.valid && artifact === "project" && data.schema === 2) {
+  if (result.valid && artifact === "project" && (data.schema === 2 || data.schema === 3)) {
     const forbidden = /(?:password|passwd|token|api[_-]?key|secret|credential)/i;
     for (const [capability, integration] of Object.entries(data.integrations ?? {})) {
       for (const key of Object.keys(integration.settings ?? {})) {
         if (forbidden.test(key)) result.errors.push({ path: `/integrations/${capability}/settings/${key}`, keyword: "secret", message: "credential-like settings are forbidden; keep credentials in the provider or client credential store" });
       }
+    }
+    result.valid = result.errors.length === 0;
+  }
+  if (result.valid && artifact === "project" && data.schema === 3) {
+    if (data.execution.isolation === "managed-devcontainer" && data.execution.enforcement !== "required") {
+      result.errors.push({ path: "/execution/enforcement", keyword: "security", message: "managed-devcontainer isolation must be required" });
     }
     result.valid = result.errors.length === 0;
   }

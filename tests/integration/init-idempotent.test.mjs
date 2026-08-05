@@ -53,7 +53,7 @@ test("init previews without writes and applies idempotent bounded changes", () =
 
   const preview = run(root, "preview");
   assert.equal(preview.mode, "preview");
-  assert.equal(preview.devcontainer, "untouched");
+  assert.deepEqual(preview.devcontainer, { isolation: "project-devcontainer", action: "preserve", required: true, reopen_required: true });
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), statusBefore);
   assert.deepEqual(readFileSync(join(root, "AGENTS.md")), agentBefore);
 
@@ -78,7 +78,8 @@ test("init previews without writes and applies idempotent bounded changes", () =
   assert.equal(git(root, "check-ignore", "--no-index", "worktrees/probe"), "worktrees/probe");
 
   const config = readFileSync(join(root, "adw.yaml"), "utf8");
-  assert.match(config, /^schema: 2$/m);
+  assert.match(config, /^schema: 3$/m);
+  assert.match(config, /execution:\n  isolation: project-devcontainer\n  enforcement: required/);
   assert.match(config, /command: "npm run lint"\n\s+source: "package\.json#scripts\.lint"/);
   assert.match(config, /command: "npm run test"\n\s+source: "package\.json#scripts\.test"/);
   assert.doesNotMatch(config, /release/);

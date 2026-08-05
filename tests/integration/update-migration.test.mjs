@@ -14,11 +14,12 @@ function git(root, ...args) {
 }
 
 function config(schema) {
-  return [
+  const lines = [
     `schema: ${schema}`, "", "git:", "  default_branch: main", "", "documentation:",
     "  mode: branch", "  branch: docs", "  worktree: worktrees/docs", "  sync_marker: SYNC.yaml", "  delivery: direct-push",
-    "", "components:", "  app:", "    path: .", "", "validation:", "  default:", "    - npm test", "",
-  ].join("\n");
+  ];
+  if (schema === 3) lines.push("", "execution:", "  isolation: provider-sandbox", "  enforcement: preferred");
+  return [...lines, "", "components:", "  app:", "    path: .", "", "validation:", "  default:", "    - npm test", ""].join("\n");
 }
 
 function fixture(schema) {
@@ -41,8 +42,8 @@ function run(root, args, expected = 0) {
   return result;
 }
 
-test("a schema 2 project is a no-op and touches no project artifact", () => {
-  const root = fixture(2);
+test("a schema 3 project is a no-op and touches no project artifact", () => {
+  const root = fixture(3);
   const head = git(root, "rev-parse", "HEAD");
   const configBefore = readFileSync(join(root, "adw.yaml"), "utf8");
   const historyBefore = readFileSync(join(root, "changes/historical/approval.json"), "utf8");
@@ -58,7 +59,7 @@ test("a schema 2 project is a no-op and touches no project artifact", () => {
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), "");
 });
 
-test("schema 1 to 2 migration requires its reviewed digest and preserves historical change evidence", () => {
+test("schema 1 to 3 migration requires its reviewed digest and preserves historical change evidence", () => {
   const root = fixture(1);
   const before = readFileSync(join(root, "adw.yaml"), "utf8");
   const specBefore = readFileSync(join(root, "changes/historical/spec.md"), "utf8");
@@ -66,7 +67,7 @@ test("schema 1 to 2 migration requires its reviewed digest and preserves histori
   const preview = JSON.parse(run(root, ["preview"]).stdout);
   assert.equal(preview.migration_required, true);
   assert.equal(preview.from_schema, 1);
-  assert.equal(preview.to_schema, 2);
+  assert.equal(preview.to_schema, 3);
   assert.deepEqual(preview.writes, ["adw.yaml"]);
   assert.equal(readFileSync(join(root, "adw.yaml"), "utf8"), before);
 
@@ -76,7 +77,9 @@ test("schema 1 to 2 migration requires its reviewed digest and preserves histori
 
   const applied = JSON.parse(run(root, ["apply", "--confirmed", "--preview-digest", preview.preview_digest]).stdout);
   assert.equal(applied.migrated, true);
-  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /^schema: 2$/m);
+  const migrated = readFileSync(join(root, "adw.yaml"), "utf8");
+  assert.match(migrated, /^schema: 3$/m);
+  assert.match(migrated, /execution:\n  isolation: provider-sandbox\n  enforcement: preferred/);
   assert.equal(readFileSync(join(root, "changes/historical/spec.md"), "utf8"), specBefore);
   assert.equal(readFileSync(join(root, "changes/historical/approval.json"), "utf8"), approvalBefore);
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), "M adw.yaml");

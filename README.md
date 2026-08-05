@@ -6,7 +6,7 @@ ADW is a private, dual-provider plugin that gives Codex and Claude Code the same
 discover -> plan -> approve -> execute -> validate -> draft PR
 ```
 
-The plugin contains the skills, schemas, templates, and deterministic helper. Initialized projects contain only project-specific `adw.yaml`, bounded routing blocks, ignored local state, and a `docs` branch checked out at `worktrees/docs`.
+The plugin contains the skills, schemas, templates, and deterministic helper. New projects also receive a managed Dev Container by default; projects with an existing Dev Container keep it unchanged. Initialized projects contain project-specific `adw.yaml`, bounded routing blocks, ignored local state, the selected execution profile, and a `docs` branch checked out at `worktrees/docs`.
 
 Projects may also opt into provider-neutral integrations for work tracking, code hosting, observability, and knowledge. ADW targets Azure DevOps, GitHub, Datadog, and Notion first, but workflows depend on capabilities rather than provider-specific tools. A project with no integrations keeps the lightweight local workflow.
 
@@ -14,6 +14,7 @@ Projects may also opt into provider-neutral integrations for work tracking, code
 
 - Node.js 20 or newer for the bundled internal helper.
 - Git with worktree support.
+- Docker plus a Dev Containers client for the default managed execution profile.
 - A current Codex or Claude Code plugin manager.
 - Provider tooling only when an integration or external delivery is requested. Credentials remain in the provider, MCP client, CLI, or external credential store.
 
@@ -29,7 +30,7 @@ claude plugin marketplace add /absolute/path/to/adw
 claude plugin install adw@adw-local --scope user
 ```
 
-Then start a new provider session in a target Git project and invoke `adw:init`. See [private installation](docs/private-installation.md) for tagged private repositories, organization distribution, update, and rollback guidance.
+Then start a new provider session in a target Git project and invoke `adw:init`. Review and commit the generated files, rebuild/reopen the repository in its container, authenticate provider tools inside the project-scoped volumes, reinstall ADW there, and run `adw:doctor` before project work. See [private installation](docs/private-installation.md) for tagged private repositories, organization distribution, update, and rollback guidance.
 
 ## Skills
 

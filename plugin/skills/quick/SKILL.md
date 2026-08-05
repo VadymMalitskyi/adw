@@ -9,7 +9,9 @@ Use quick mode only for a narrow, already-understood local correction. It remove
 
 ## Resolve and bound the change
 
-Resolve the plugin root from this loaded skill: use expanded `${CLAUDE_PLUGIN_ROOT}` in Claude Code, or derive it in Codex from the absolute loaded path ending in `/skills/quick/SKILL.md`. Invoke `<plugin-root>/lib/adw-helper.mjs`, read `<plugin-root>/integrations/contracts.md`, and read the plugin version from the provider manifest there; never resolve resources from the project current working directory or write into the installed plugin.
+Resolve the plugin root from this loaded skill: use expanded `${CLAUDE_PLUGIN_ROOT}` in Claude Code, or derive it in Codex from the absolute loaded path ending in `/skills/quick/SKILL.md`. Invoke `<plugin-root>/lib/adw-helper.mjs`, read `<plugin-root>/execution/contracts.md` and `<plugin-root>/integrations/contracts.md`, and read the plugin version from the provider manifest there; never resolve resources from the project current working directory or write into the installed plugin.
+
+Before project commands or edits, enforce `adw.yaml` execution isolation through the execution contract and doctor evidence. Stop when required isolation is not active. Continuing under preferred weaker isolation requires explicit confirmation for this quick change.
 
 Resolve only configured `work_tracker`, `code_host`, `observability`, and `knowledge` capabilities, keeping providers separate from `native|mcp|cli|api` transports. Honor `disabled`, `optional`, and `required`. Use scoped external reads only when they help bound or diagnose the correction. Escalate to `adw:plan` if the change needs a requirement-bearing binding or external requirement mutation. When integrations are absent, keep the local quick workflow unchanged.
 

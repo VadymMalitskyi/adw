@@ -18,7 +18,7 @@ function git(root, ...args) {
 }
 
 function run(script, root, expectedStatus = 0) {
-  const result = spawnSync(process.execPath, [script, "--project-root", root], { encoding: "utf8" });
+  const result = spawnSync(process.execPath, [script, "--project-root", root], { encoding: "utf8", env: { ...process.env, ADW_MANAGED_DEVCONTAINER: "1" } });
   assert.equal(result.status, expectedStatus, result.stderr || result.stdout);
   return JSON.parse(result.stdout);
 }
@@ -101,6 +101,8 @@ test("doctor and status reconstruct initialized state without writes", async () 
   assert.equal(doctor.checks.find(({ id }) => id === "plugin").status, "pass");
   assert.equal(doctor.checks.find(({ id }) => id === "docs-worktree").status, "pass");
   assert.equal(status.read_only, true);
+  assert.equal(status.execution.isolation, "managed-devcontainer");
+  assert.equal(status.execution.active, true);
   assert.equal(status.docs.attached, true);
   assert.equal(status.changes.length, 1);
   assert.equal(status.changes[0].approval.state, "active");

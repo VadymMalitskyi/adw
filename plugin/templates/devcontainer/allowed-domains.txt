@@ -1,0 +1,21 @@
+# Agent inference and browser authentication
+api.openai.com
+auth.openai.com
+chatgpt.com
+api.anthropic.com
+claude.ai
+console.anthropic.com
+
+# Git and private ADW plugin installation
+github.com
+api.github.com
+codeload.github.com
+objects.githubusercontent.com
+raw.githubusercontent.com
+
+# Common dependency registries. Remove entries unused by the project.
+registry.npmjs.org
+pypi.org
+files.pythonhosted.org
+
+# Add only explicitly configured integration and project-tool domains, then rebuild.

@@ -13,9 +13,10 @@ Validate and summarize the current planning artifacts, request a fresh explicit 
 2. Resolve the installed plugin root independently of the project working directory:
    - In Claude Code, use the expanded `${CLAUDE_PLUGIN_ROOT}` value.
    - In Codex, start from the absolute source location advertised for this loaded `SKILL.md` and remove `/skills/approve/SKILL.md`.
-3. Use `lib/adw-helper.mjs` and the version in the installed plugin manifest under that root. Stop if portable resolution fails; never copy the helper into the project.
+3. Use `lib/adw-helper.mjs`, `execution/contracts.md`, and the version in the installed plugin manifest under that root. Stop if portable resolution fails; never copy the helper into the project.
 4. Require a change ID matching `^[a-z0-9](?:[a-z0-9_-]|\.[a-z0-9_-]+)*$` and exact paths `changes/<change-id>/spec.md` and `changes/<change-id>/plan.yaml`. Resolve `<plugin-root>/integrations/contracts.md` and include `changes/<change-id>/integrations.yaml` when it exists.
 5. For bindings, resolve `work_tracker`, `code_host`, `observability`, and `knowledge` capabilities independently from `native|mcp|cli|api` transports and honor `disabled`, `optional`, and `required`. Do not probe integrations when the artifact is absent.
+6. Enforce the configured execution profile before external reads or approval-evidence writes. Required isolation must be active; preferred weaker isolation needs explicit confirmation separate from approval of the plan.
 
 ## Validate the candidate
 

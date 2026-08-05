@@ -24,6 +24,27 @@ function readJson(path) {
   catch (error) { return { error: error.message }; }
 }
 
+function executionSnapshot(projectRoot) {
+  const configPath = join(projectRoot, "adw.yaml");
+  if (!existsSync(configPath)) return { configured: false, active: false, reason: "adw.yaml is missing" };
+  const source = readFileSync(configPath, "utf8");
+  const block = source.match(/^execution:\s*\n((?:^[ \t]+.*(?:\n|$))*)/m)?.[1] ?? "";
+  const isolation = block.match(/^\s+isolation:\s*["']?([^\s"']+)/m)?.[1] ?? null;
+  const enforcement = block.match(/^\s+enforcement:\s*["']?([^\s"']+)/m)?.[1] ?? null;
+  const markers = {
+    managed_devcontainer: process.env.ADW_MANAGED_DEVCONTAINER === "1",
+    project_devcontainer: process.env.ADW_PROJECT_DEVCONTAINER === "1" || process.env.REMOTE_CONTAINERS === "true" || process.env.CODESPACES === "true",
+  };
+  const active = isolation === "managed-devcontainer"
+    ? markers.managed_devcontainer
+    : isolation === "project-devcontainer"
+      ? markers.project_devcontainer
+      : isolation === "provider-sandbox"
+        ? null
+        : false;
+  return { configured: Boolean(isolation && enforcement), isolation, enforcement, active, markers };
+}
+
 async function changeSnapshot(changePath, changeId) {
   const specPath = join(changePath, "spec.md");
   const planPath = join(changePath, "plan.yaml");
@@ -153,6 +174,7 @@ try {
       head: docsHead.status === 0 ? docsHead.stdout.trim() : null,
       dirty: docsDirty.status === 0 ? docsDirty.stdout.trim().split("\n").filter(Boolean) : [],
     },
+    execution: executionSnapshot(projectRoot),
     changes,
     pull_requests: { state: "not-queried", reason: "local snapshot does not access the network; query the configured code_host capability separately" },
     draft_prs: { state: "not-queried", reason: "compatibility alias; query pull_requests through the configured code_host capability" },

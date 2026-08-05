@@ -20,6 +20,8 @@ An interrupted or failed migration rolls back all staged writes. If the process 
 
 Version 0.2 adds optional integration configuration and change bindings. A project that omits integrations retains lightweight behavior. When migrating a configured project, preview provider identifiers and requirement modes, preserve all historical bindings and receipts, and never infer credentials or enable external writes. Migration changes local artifacts only; it does not contact providers.
 
+Version 0.3 adds the schema-3 execution contract. Migration preserves an existing project devcontainer and marks it required. A project without one migrates to `provider-sandbox` with preferred enforcement so an update does not silently add infrastructure or strand an existing workflow. To adopt the managed container later, use a separately reviewed initialization/infrastructure change; do not relabel a provider sandbox without creating and entering the required container.
+
 ## Docs synchronization recovery
 
 `adw:sync-docs` reports drift without mutation by default. Authorized fix mode stops on dirty state, ambiguous history, or a non-fast-forward docs branch. Resolve or preserve the competing docs work first, refresh the report, and authorize a new update. Never force-push the docs branch or advance `SYNC.yaml` without the corresponding reviewed context update.

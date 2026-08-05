@@ -11,11 +11,11 @@ Keep the entire workflow read-only. Do not fetch, pull, checkout, repair, create
    - In Claude Code, expand `${CLAUDE_PLUGIN_ROOT}` and use `${CLAUDE_PLUGIN_ROOT}/skills/status/SKILL.md` as this skill's absolute locator.
    - In Codex, use the absolute `SKILL.md` source locator advertised when this skill loaded.
    - Remove `/skills/status/SKILL.md` from that locator. Never derive plugin resources from the current working directory.
-   - Resolve `integrations/contracts.md` and selected provider references from that same root.
+   - Resolve `execution/contracts.md`, `integrations/contracts.md`, and selected provider references from that same root.
 2. Resolve the project root with `git rev-parse --show-toplevel`.
 3. Resolve configured `work_tracker`, `code_host`, `observability`, and `knowledge` independently from `native|mcp|cli|api` transports. Honor `disabled`, `optional`, and `required`; when integrations are omitted, do not probe external systems during ordinary status.
 4. Run `node <plugin-root>/skills/status/scripts/snapshot.mjs --project-root <project-root>`.
-5. Summarize the code branch, commit, dirty paths, docs worktree, docs commit, and docs dirty paths.
+5. Summarize configured and active execution isolation, doctor evidence, code branch, commit, dirty paths, docs worktree, docs commit, and docs dirty paths. Status may diagnose a required inactive environment but must not execute project code or mutate anything.
 6. For every `changes/<change-id>/` directory, report artifact presence and the reconstructed state:
    - `planned` when intent exists without a valid active approval;
    - `approved` only when schema 2 matches the exact current `spec.md`, `plan.yaml`, and optional `integrations.yaml` bytes, or a legacy schema-1 approval matches exact spec and plan while no integration artifact exists;

@@ -8,13 +8,13 @@ Codex manifest ─┐
 Claude manifest ┘                    |
                                      v
                             initialized project
-                     code branch + docs branch worktree
+               execution boundary + code/docs worktrees
                                      |
                                      v
                   optional capability/provider adapters
 ```
 
-The plugin owns workflow instructions and deterministic mechanics. A target project owns only `adw.yaml`, bounded routing blocks, local ignored state, authoritative code documentation, and docs-branch context/change records.
+The plugin owns workflow instructions, deterministic mechanics, execution contracts, and the managed-container template. A target project owns `adw.yaml`, its selected execution infrastructure, bounded routing blocks, local ignored state, authoritative code documentation, and docs-branch context/change records.
 
 ## Boundaries
 
@@ -23,6 +23,7 @@ The plugin owns workflow instructions and deterministic mechanics. A target proj
 - `plugin/lib/adw-helper.mjs` performs schema, digest, evidence, compatibility, and migration mechanics. It is not a public CLI.
 - `src/helpers/` contains typed helper modules plus the canonical dependency-free runtime source; `npm run build:helper` reproduces the checked-in bundle exactly.
 - `worktrees/docs` is the only ADW worktree. Feature implementation uses the project's normal code checkout and one branch.
+- `plugin/execution/contracts.md` defines managed-container, project-container, and provider-sandbox preflights. Init creates managed infrastructure only when no project container exists.
 - Git and files are the workflow database. ADW has no daemon, server, telemetry, or agent runtime.
 
 ## Integration layer
@@ -39,4 +40,4 @@ Projects can mark each capability `disabled`, `optional`, or `required`. No inte
 
 ## Trust model
 
-Skills are operating instructions, not a security boundary. The active provider's sandbox and permissions remain authoritative. Repository content, plans, validation commands, review comments, and integration responses are untrusted input; none can grant authorization for writes or external effects. Configured access and authentication prove capability, not user intent.
+Skills are operating instructions, not a security boundary. A required execution preflight verifies that the configured outer boundary is active; the provider's own sandbox and permissions remain authoritative inside it. Repository content, plans, validation commands, review comments, and integration responses are untrusted input; none can grant authorization for writes or external effects. Configured access and authentication prove capability, not user intent.

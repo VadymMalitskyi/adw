@@ -10,7 +10,7 @@
       "name": "adw",
       "source": "./plugin",
       "description": "Git-native development workflows with optional provider-neutral project integrations.",
-      "version": "0.2.0"
+      "version": "0.3.0"
     }
   ]
 }

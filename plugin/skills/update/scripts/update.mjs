@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyAtomicMigration, checkCompatibility } from "../../../lib/adw-helper.mjs";
@@ -66,12 +66,16 @@ function validateLegacyShape(text) {
   }
 }
 
-function migrationPlan(text, current, supported) {
+function migrationPlan(root, text, current, supported) {
   const target = Math.max(...supported);
-  if ((current === 0 || current === 1) && target === 2) {
+  if ((current === 0 || current === 1 || current === 2) && target === 3) {
     if (current === 0) validateLegacyShape(text);
-    const content = text.replace(/^schema:\s*[01]\s*(?:#.*)?$/m, "schema: 2");
-    return { from_schema: current, to_schema: 2, operations: [{ path: "adw.yaml", content, expected_content: text }] };
+    const isolation = existsSync(join(root, ".devcontainer/devcontainer.json")) ? "project-devcontainer" : "provider-sandbox";
+    const enforcement = isolation === "project-devcontainer" ? "required" : "preferred";
+    const upgraded = text.replace(/^schema:\s*[012]\s*(?:#.*)?$/m, "schema: 3");
+    const separator = upgraded.endsWith("\n") ? "" : "\n";
+    const content = `${upgraded}${separator}\nexecution:\n  isolation: ${isolation}\n  enforcement: ${enforcement}\n`;
+    return { from_schema: current, to_schema: 3, operations: [{ path: "adw.yaml", content, expected_content: text }] };
   }
   throw new Error(`no bundled, contiguous migration path from project schema ${current} to supported schemas ${supported.join(", ")}`);
 }
@@ -88,8 +92,8 @@ try {
   const current = schemaVersion(before);
   const supported = supportedSchemas();
   const version = pluginVersion();
-  const compatibility = current === 0 && supported.includes(2)
-    ? { compatible: false, migration_required: true, reason: "legacy pre-schema project requires migration to schema 2" }
+  const compatibility = current === 0 && supported.includes(3)
+    ? { compatible: false, migration_required: true, reason: "legacy pre-schema project requires migration to schema 3" }
     : checkCompatibility({ project_schema: current, supported_project_schemas: supported, plugin_version: version });
   const base = { ok: true, mode: args.action, plugin_root: pluginRoot, plugin_version: version, project_schema: current, supported_project_schemas: supported, historical_artifacts: "untouched" };
   if (compatibility.compatible) {
@@ -99,7 +103,7 @@ try {
   } else {
     const status = git(root, ["status", "--porcelain=v1", "--untracked-files=all"]).stdout;
     if (status) throw new Error("project worktree is dirty; commit, stash, or discard changes before migration");
-    const plan = migrationPlan(before, current, supported);
+    const plan = migrationPlan(root, before, current, supported);
     const previewDigest = digest(plan);
     const preview = { ...base, compatible: false, migration_required: true, from_schema: plan.from_schema, to_schema: plan.to_schema, writes: ["adw.yaml"], preview_digest: previewDigest, diff: { path: "adw.yaml", before, after: plan.operations[0].content } };
     if (args.action === "preview") {

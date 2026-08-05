@@ -149,7 +149,8 @@ test("skills preserve the required behavior and safety boundaries", () => {
       ["ignored local state", /\.adw\//],
       ["the root docs worktree", /\/worktrees\//],
       ["both provider routing files", /AGENTS\.md[\s\S]*CLAUDE\.md|CLAUDE\.md[\s\S]*AGENTS\.md/],
-      ["devcontainer preservation", /never (?:create or edit|install|modify|touch)[^\n]*\.devcontainer|devcontainer:\s*untouched/i],
+      ["managed devcontainer default", /default to `managed-devcontainer`|managed `\.devcontainer\/` only when absent/i],
+      ["project devcontainer preservation", /project-devcontainer[\s\S]*preserve|preserve every byte of an existing project devcontainer/i],
     ],
     update: [
       ["project artifact migration", /project artifact|workflow-schema|schema migration/i],
@@ -163,6 +164,7 @@ test("skills preserve the required behavior and safety boundaries", () => {
       ["schema compatibility", /schema/i],
       ["routing checks", /routing/i],
       ["context freshness", /fresh/i],
+      ["execution isolation checks", /execution|isolation/i],
       ["optional integration checks", /optional integration/i],
     ],
     status: [
@@ -338,6 +340,7 @@ test("VERSION, package, provider manifests, and marketplace catalogs stay in par
     ["Claude manifest", readJson("plugin/.claude-plugin/plugin.json").version],
     ["Codex catalog-resolved manifest", codexCatalogManifest.version],
     ["Claude catalog", claudeCatalogEntry.version],
+    ["managed devcontainer marker", readJson("plugin/templates/devcontainer/adw-managed.json").plugin_version],
   ]);
 
   for (const [location, candidate] of values) {

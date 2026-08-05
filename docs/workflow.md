@@ -2,7 +2,7 @@
 
 ## Initialize
 
-`adw:init` previews root `adw.yaml`, ignore rules, routing blocks, and the docs-branch worktree before writing. It derives commands only from manifests, task runners, CI, or existing documentation. Repeated initialization is idempotent and leaves `.devcontainer/` untouched.
+`adw:init` previews root `adw.yaml`, ignore rules, routing blocks, the execution profile, and the docs-branch worktree before writing. It derives commands only from manifests, task runners, CI, or existing documentation. With no existing container it creates the managed `.devcontainer/`; with an existing `devcontainer.json` it selects `project-devcontainer` and preserves every byte. Repeated initialization is idempotent. After managed setup, rebuild/reopen, authenticate tools in the scoped volumes, install ADW inside the container, and run `adw:doctor`.
 
 ## Discover and plan
 
@@ -18,7 +18,7 @@ Any spec or plan byte change makes the approval stale. A change to bound externa
 
 ## Execute and review
 
-`adw:execute` verifies schema compatibility, approval bundle, bound external requirements, docs commit, base branch, working tree, paths, and exact validation commands. It then uses one feature branch and executes tasks sequentially. Scope, design, or requirement drift stops for amendment.
+`adw:execute` first requires doctor evidence that the configured execution isolation is active, then verifies schema compatibility, approval bundle, bound external requirements, docs commit, base branch, working tree, paths, and exact validation commands. It then uses one feature branch and executes tasks sequentially. Scope, design, or requirement drift stops for amendment.
 
 Required checks preserve real exit status. Code-coupled documentation changes with the code. Validation evidence is stored on the docs branch. Configured observability may supply read-only diagnostic evidence. Commit, push, docs direct-push, draft-PR, ticket, and knowledge-base actions occur only within explicit user authorization. External writes use idempotency markers, provider readback, and redacted receipts. ADW never merges, releases, deploys, or automatically closes a work item.
 
@@ -30,4 +30,4 @@ Required checks preserve real exit status. Code-coupled documentation changes wi
 
 ## Maintenance
 
-`adw:status` and `adw:doctor` are read-only. Doctor reports each configured capability's provider, requirement mode, available transport, supported operations, and read/write level without starting authentication. Optional unavailable capabilities do not block; required unavailable capabilities block only workflows that need them. `adw:sync-docs` reports drift by default and updates the docs branch only in explicitly authorized fix mode. `adw:update` migrates project artifact schemas only; provider plugin managers update plugin code.
+`adw:status` and `adw:doctor` are read-only. Both expose configured isolation and active-runtime evidence; a required mismatch blocks workflows that execute project commands. Doctor reports each configured capability's provider, requirement mode, available transport, supported operations, and read/write level without starting authentication. Optional unavailable capabilities do not block; required unavailable capabilities block only workflows that need them. `adw:sync-docs` reports drift by default and updates the docs branch only in explicitly authorized fix mode. `adw:update` migrates project artifact schemas only; provider plugin managers update plugin code.

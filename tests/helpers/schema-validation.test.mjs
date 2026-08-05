@@ -88,6 +88,23 @@ test("project schema v2 supports optional provider-neutral capability configurat
   assert.ok(invalidLegacy.errors.some(({ path }) => path === "/integrations"));
 });
 
+test("project schema v3 requires a coherent execution profile", async () => {
+  const project = {
+    schema: 3,
+    git: { default_branch: "main" },
+    documentation: { mode: "branch", branch: "docs", worktree: "worktrees/docs", sync_marker: "SYNC.yaml", delivery: "direct-push" },
+    execution: { isolation: "managed-devcontainer", enforcement: "required" },
+    components: {},
+    validation: { default: ["npm test"] },
+  };
+  assert.deepEqual(await validateArtifact("project", project), { valid: true, errors: [] });
+
+  project.execution.enforcement = "preferred";
+  const invalid = await validateArtifact("project", project);
+  assert.equal(invalid.valid, false);
+  assert.ok(invalid.errors.some(({ path, keyword }) => path === "/execution/enforcement" && keyword === "security"));
+});
+
 test("integration and external-action v1 schemas accept durable, secret-free evidence", async () => {
   const integration = {
     schema: 1,

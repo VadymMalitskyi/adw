@@ -2,6 +2,14 @@
 
 All notable changes to this private plugin are documented here.
 
+## 0.3.0 - 2026-08-05
+
+- Add a schema-3 execution contract with managed-devcontainer, project-devcontainer, and provider-sandbox profiles.
+- Make a pinned, non-root, egress-filtered managed devcontainer the default for newly initialized repositories.
+- Preserve project-owned devcontainers byte-for-byte and require an explicit active-runtime marker before executing project commands.
+- Install pinned Codex and Claude Code CLIs in the managed image while keeping each agent's own inner permission and sandbox controls enabled.
+- Add doctor and status evidence for configured and active isolation, conservative schema migration, and security-focused container tests.
+
 ## 0.2.0 - 2026-08-05
 
 - Add provider-neutral integration contracts for work trackers, code hosts, observability systems, and knowledge systems.

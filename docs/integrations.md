@@ -29,7 +29,7 @@ Omitting integrations is equivalent to the current lightweight workflow. Configu
 
 ## Transport resolution
 
-An adapter may use a native connected tool, MCP server, authenticated CLI, or direct API. ADW detects the available operations and access level instead of assuming that a configured server can read or write everything. A project may constrain transport choice, but committed workflow artifacts do not contain credentials.
+An adapter may use a native connected tool, MCP server, authenticated CLI, or direct API. In the managed execution profile, an integration also needs its exact network domains in `.devcontainer/allowed-domains.txt`. Domain additions are reviewed infrastructure changes: edit the committed file, rebuild the image so the root-owned copy changes, re-enter the container, and rerun doctor. Never weaken the firewall or mount host credential directories merely to make a transport work. ADW detects the available operations and access level instead of assuming that a configured server can read or write everything. A project may constrain transport choice, but committed workflow artifacts do not contain credentials.
 
 Azure DevOps is the first work-tracker adapter. [Microsoft currently documents](https://learn.microsoft.com/en-us/azure/devops/mcp-server/remote-mcp-server-troubleshooting?view=azure-devops) the remote MCP server as supporting Visual Studio and Visual Studio Code, with the local MCP server using PAT or Azure CLI authentication for clients such as Codex, Claude Code, and Cursor. ADW therefore permits local MCP, authenticated CLI, or REST API fallback while preserving the same capability contract, authorization rules, and receipts.
 

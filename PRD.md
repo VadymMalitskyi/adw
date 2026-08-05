@@ -63,8 +63,8 @@ The developer installs the private ADW plugin using the normal plugin mechanism 
 5. Adds only small bounded ADW routing blocks to existing `AGENTS.md` and `CLAUDE.md` files.
 6. Creates concise project context on the docs branch and optional ignored machine-local configuration.
 7. Discovers and proposes non-secret integration configuration when the project uses external systems; it never installs a transport or starts authentication.
-8. Leaves every devcontainer unchanged unless the user separately requests a devcontainer change.
-9. Reports what is ready, unresolved, or requires manual authentication.
+8. Creates the reviewed managed devcontainer when none exists, or preserves an existing project-owned devcontainer byte-for-byte.
+9. Records the required execution profile and reports the rebuild, runtime verification, unresolved values, and manual authentication steps.
 
 After initialization, the repository contains only project-specific ADW artifacts. Skills, schemas, templates, and helper programs remain in the installed plugin and are never copied into the target project.
 
@@ -281,6 +281,7 @@ Skills that write files, change branches, push commits, open pull requests, modi
 Root-level `adw.yaml` is committed and contains only shared project facts:
 
 - Workflow schema and default branch.
+- Execution isolation profile and enforcement level.
 - Components and their paths.
 - Setup, formatting, lint, test, and build commands.
 - Protected paths.
@@ -365,9 +366,9 @@ No background check may apply an update or change repository files.
 
 ## 10. Execution environment and security
 
-The default execution boundary is the active agent's existing sandbox and permission model. ADW uses it without installing or changing a container.
+The default execution boundary for a new repository is an ADW-managed Dev Container plus the active agent's inner sandbox and permission model. `adw:init` creates the managed container only when `.devcontainer/` is absent. An existing project-owned devcontainer is preserved byte-for-byte and selected instead. `provider-sandbox` is an explicit portable fallback, and schema migrations adopt it conservatively when no container already exists.
 
-Devcontainer support is optional. `adw:init` never creates or edits `.devcontainer/`; a separate explicit request is required for any such change, and existing image, features, mounts, and lifecycle behavior must be preserved unless the user authorizes specific differences.
+Required isolation is an execution preflight: project commands and edits stop unless the configured runtime marker is active. Init preview/apply is the sole bootstrap exception.
 
 The security model must be described honestly:
 
@@ -476,7 +477,7 @@ Version 0.2 is complete when all of the following work on at least two different
 | Approval | Explicit human confirmation bound to file digests |
 | Default execution | One agent, one branch, sequential tasks |
 | Validation | Existing project commands with recorded process results |
-| Safety boundary | Use the agent's existing sandbox; devcontainers are optional |
+| Safety boundary | Required managed or project Dev Container by default, layered with the agent's own sandbox and permissions |
 | Delivery boundary | Draft pull request through `code_host`; GitHub first |
 | Merge and deployment | Always human-controlled and outside ADW |
 | External systems | Optional capability/provider adapters; never required for the core workflow |

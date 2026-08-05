@@ -14,6 +14,8 @@ claude plugin install adw@adw-local --scope user
 
 Start a new session after installation or update so the provider reloads skill metadata. The plugin is installed into provider-managed storage; do not copy `plugin/` into a target project.
 
+For a newly initialized project, review and commit `.devcontainer/`, then rebuild and reopen it with a Dev Containers client. Codex CLI and Claude Code CLI are pinned in the image; authenticate them inside their project-scoped named volumes, install ADW from the approved source inside the container, and run `adw:doctor`. Existing project-owned containers are preserved and must provide `ADW_PROJECT_DEVCONTAINER=1` in their active runtime.
+
 External provider tooling is installed and authenticated separately. ADW does not install MCP servers, CLIs, or credentials as part of plugin installation. Projects without integrations need none of them.
 
 ## Tagged private repository

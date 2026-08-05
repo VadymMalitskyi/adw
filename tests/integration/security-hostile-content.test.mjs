@@ -44,7 +44,7 @@ function commitFixture(root) {
 }
 
 function run(script, args, expectedStatus = 0) {
-  const result = spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
+  const result = spawnSync(process.execPath, [script, ...args], { encoding: "utf8", env: { ...process.env, ADW_MANAGED_DEVCONTAINER: "1" } });
   assert.equal(result.status, expectedStatus, result.stderr || result.stdout);
   const stream = expectedStatus === 0 ? result.stdout : (result.stderr || result.stdout);
   return JSON.parse(stream);
