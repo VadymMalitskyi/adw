@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adw.local/schemas/approval.v2.schema.json",
+  "title": "ADW approval bundle evidence v2",
+  "type": "object",
+  "required": ["schema", "status", "approver", "approved_at", "plugin_version", "docs_commit", "digest_algorithm", "inputs", "digest"],
+  "properties": {
+    "schema": { "const": 2 },
+    "status": { "enum": ["active", "superseded"] },
+    "approver": { "type": "string", "minLength": 1 },
+    "approved_at": { "type": "string", "format": "date-time" },
+    "plugin_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$" },
+    "docs_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "digest_algorithm": { "const": "sha256" },
+    "inputs": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["path", "digest"],
+        "properties": {
+          "path": { "type": "string", "pattern": "^(?:spec\\.md|plan\\.yaml|integrations\\.yaml)$" },
+          "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "invalidated_at": { "type": "string", "format": "date-time" },
+    "invalidation_reason": { "type": "string", "minLength": 1 },
+    "replaced_by": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  },
+  "additionalProperties": false
+}

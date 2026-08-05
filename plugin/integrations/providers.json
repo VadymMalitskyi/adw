@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "providers": [
+    {
+      "provider": "azure-devops",
+      "capabilities": ["work_tracker"],
+      "transports": ["native", "mcp", "cli", "api"],
+      "reference": "providers/azure-devops.md"
+    },
+    {
+      "provider": "github",
+      "capabilities": ["code_host", "work_tracker"],
+      "transports": ["native", "mcp", "cli", "api"],
+      "reference": "providers/github.md"
+    },
+    {
+      "provider": "datadog",
+      "capabilities": ["observability"],
+      "transports": ["native", "mcp", "cli", "api"],
+      "reference": "providers/datadog.md"
+    },
+    {
+      "provider": "notion",
+      "capabilities": ["knowledge"],
+      "transports": ["native", "mcp", "cli", "api"],
+      "reference": "providers/notion.md"
+    }
+  ]
+}

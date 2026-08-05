@@ -8,13 +8,23 @@ import { fileURLToPath } from "node:url";
 
 export const EXIT = Object.freeze({ OK: 0, INPUT: 2, SCHEMA_INVALID: 3, APPROVAL_INVALID: 4, VALIDATION_FAILED: 5, INCOMPATIBLE: 6, PATH_VIOLATION: 7, MIGRATION_FAILED: 8, INTERNAL: 9 });
 export const ARTIFACT_SCHEMAS = Object.freeze({
-  project: new URL("../schemas/project.v1.schema.json", import.meta.url),
-  plan: new URL("../schemas/plan.v1.schema.json", import.meta.url),
-  approval: new URL("../schemas/approval.v1.schema.json", import.meta.url),
-  validation: new URL("../schemas/validation.v1.schema.json", import.meta.url)
+  project: Object.freeze({
+    1: new URL("../schemas/project.v1.schema.json", import.meta.url),
+    2: new URL("../schemas/project.v2.schema.json", import.meta.url)
+  }),
+  plan: Object.freeze({ 1: new URL("../schemas/plan.v1.schema.json", import.meta.url) }),
+  approval: Object.freeze({
+    1: new URL("../schemas/approval.v1.schema.json", import.meta.url),
+    2: new URL("../schemas/approval.v2.schema.json", import.meta.url)
+  }),
+  validation: Object.freeze({ 1: new URL("../schemas/validation.v1.schema.json", import.meta.url) }),
+  integration: Object.freeze({ 1: new URL("../schemas/integration.v1.schema.json", import.meta.url) }),
+  "external-action": Object.freeze({ 1: new URL("../schemas/external-action.v1.schema.json", import.meta.url) })
 });
 
 const DOMAIN = Buffer.from("ADW-APPROVAL-DIGEST-V1\0", "utf8");
+const BUNDLE_DOMAIN = Buffer.from("ADW-APPROVAL-BUNDLE-V2\0", "utf8");
+const REQUIREMENTS_DOMAIN = Buffer.from("ADW-INTEGRATION-REQUIREMENTS-V1\0", "utf8");
 const schemaCache = new Map();
 
 function framedField(label, content) {
@@ -34,6 +44,44 @@ export function verifyApprovalDigest(spec, plan, approval) {
 
 export function createApproval({ approver, approved_at, plugin_version, docs_commit, spec, plan }) {
   return { schema: 1, status: "active", approver, approved_at, plugin_version, docs_commit, digest_algorithm: "sha256", digest: computeApprovalDigest(spec, plan) };
+}
+
+function contentDigest(content) {
+  if (!(typeof content === "string" || Buffer.isBuffer(content))) throw new TypeError("approval input content must be a string or buffer");
+  return createHash("sha256").update(content).digest("hex");
+}
+
+function normalizeApprovalInputs(inputs) {
+  if (!Array.isArray(inputs)) throw new TypeError("approval inputs must be an array");
+  const expected = ["spec.md", "plan.yaml", "integrations.yaml"];
+  if (inputs.length < 2 || inputs.length > 3) throw new TypeError("approval inputs must contain spec.md, plan.yaml, and optional integrations.yaml");
+  return inputs.map((input, index) => {
+    if (!input || input.path !== expected[index]) throw new TypeError(`approval input ${index + 1} must be ${expected[index]}`);
+    return { path: input.path, content: input.content };
+  });
+}
+
+export function computeApprovalBundle(inputs) {
+  const normalized = normalizeApprovalInputs(inputs);
+  const hash = createHash("sha256").update(BUNDLE_DOMAIN);
+  const descriptors = normalized.map(({ path, content }) => {
+    hash.update(framedField(path, content));
+    return { path, digest: contentDigest(content) };
+  });
+  return { inputs: descriptors, digest: hash.digest("hex") };
+}
+
+export function createApprovalBundle({ approver, approved_at, plugin_version, docs_commit, inputs }) {
+  const bundle = computeApprovalBundle(inputs);
+  return { schema: 2, status: "active", approver, approved_at, plugin_version, docs_commit, digest_algorithm: "sha256", inputs: bundle.inputs, digest: bundle.digest };
+}
+
+export function verifyApprovalBundle(inputs, approval) {
+  if (!approval || approval.schema !== 2 || approval.digest_algorithm !== "sha256" || !/^[0-9a-f]{64}$/.test(approval.digest ?? "")) return false;
+  let bundle;
+  try { bundle = computeApprovalBundle(inputs); } catch { return false; }
+  if (JSON.stringify(bundle.inputs) !== JSON.stringify(approval.inputs)) return false;
+  return timingSafeEqual(Buffer.from(bundle.digest, "hex"), Buffer.from(approval.digest, "hex"));
 }
 
 function typeMatches(value, type) {
@@ -110,15 +158,22 @@ export function validateJsonSchema(schema, value) {
   return { valid: errors.length === 0, errors };
 }
 
-export async function loadArtifactSchema(artifact) {
-  const url = ARTIFACT_SCHEMAS[artifact];
-  if (!url) throw new InputError(`unknown artifact ${JSON.stringify(artifact)}; expected project, plan, approval, or validation`);
-  if (!schemaCache.has(artifact)) schemaCache.set(artifact, JSON.parse(await readFile(url, "utf8")));
-  return schemaCache.get(artifact);
+export async function loadArtifactSchema(artifact, version) {
+  const versions = ARTIFACT_SCHEMAS[artifact];
+  if (!versions) throw new InputError(`unknown artifact ${JSON.stringify(artifact)}; expected ${Object.keys(ARTIFACT_SCHEMAS).join(", ")}`);
+  const url = versions[version];
+  if (!url) throw new InputError(`unsupported ${artifact} schema ${JSON.stringify(version)}; expected ${Object.keys(versions).join(", ")}`);
+  const key = `${artifact}:${version}`;
+  if (!schemaCache.has(key)) schemaCache.set(key, JSON.parse(await readFile(url, "utf8")));
+  return schemaCache.get(key);
 }
 
 export async function validateArtifact(artifact, data) {
-  const result = validateJsonSchema(await loadArtifactSchema(artifact), data);
+  if (!data || !Number.isInteger(data.schema)) return { valid: false, errors: [{ path: "/schema", keyword: "required", message: "must be an integer artifact schema version" }] };
+  let schema;
+  try { schema = await loadArtifactSchema(artifact, data.schema); }
+  catch (error) { return { valid: false, errors: [{ path: "/schema", keyword: "version", message: error.message }] }; }
+  const result = validateJsonSchema(schema, data);
   if (artifact === "plan" && Array.isArray(data?.tasks)) {
     data.tasks.forEach((task, index) => { if (task?.id !== index + 1) result.errors.push({ path: `/tasks/${index}/id`, keyword: "sequence", message: `must be ${index + 1} so tasks execute sequentially` }); });
     if (data.documentation?.impact !== "none" && Array.isArray(data.documentation?.files) && data.documentation.files.length === 0) result.errors.push({ path: "/documentation/files", keyword: "documentation", message: "must list files when documentation impact is update or new" });
@@ -134,6 +189,37 @@ export async function validateArtifact(artifact, data) {
     const invalidationFields = [data.invalidated_at, data.invalidation_reason, data.replaced_by].filter((value) => value !== undefined);
     if (data.status === "active" && invalidationFields.length !== 0) result.errors.push({ path: "/status", keyword: "lifecycle", message: "active approvals cannot contain invalidation fields" });
     if (data.status === "superseded" && (!data.invalidated_at || !data.invalidation_reason)) result.errors.push({ path: "/status", keyword: "lifecycle", message: "superseded approvals require invalidated_at and invalidation_reason" });
+    if (data.schema === 2) {
+      const expectedPaths = ["spec.md", "plan.yaml", "integrations.yaml"];
+      const paths = data.inputs.map(({ path }) => path);
+      if (paths.some((path, index) => path !== expectedPaths[index])) result.errors.push({ path: "/inputs", keyword: "order", message: "must contain spec.md, plan.yaml, and optional integrations.yaml in canonical order" });
+      if (new Set(paths).size !== paths.length) result.errors.push({ path: "/inputs", keyword: "unique", message: "must not contain duplicate paths" });
+    }
+    result.valid = result.errors.length === 0;
+  }
+  if (result.valid && artifact === "project" && data.schema === 2) {
+    const forbidden = /(?:password|passwd|token|api[_-]?key|secret|credential)/i;
+    for (const [capability, integration] of Object.entries(data.integrations ?? {})) {
+      for (const key of Object.keys(integration.settings ?? {})) {
+        if (forbidden.test(key)) result.errors.push({ path: `/integrations/${capability}/settings/${key}`, keyword: "secret", message: "credential-like settings are forbidden; keep credentials in the provider or client credential store" });
+      }
+    }
+    result.valid = result.errors.length === 0;
+  }
+  if (result.valid && artifact === "integration") {
+    const names = data.bindings.map(({ name }) => name);
+    if (new Set(names).size !== names.length) result.errors.push({ path: "/bindings", keyword: "unique", message: "binding names must be unique" });
+    for (const [index, binding] of data.bindings.entries()) {
+      const hasDigest = binding.requirements_digest !== undefined;
+      const hasFields = binding.requirement_fields !== undefined;
+      if (hasDigest !== hasFields) result.errors.push({ path: `/bindings/${index}`, keyword: "requirements", message: "requirements_digest and requirement_fields must appear together" });
+    }
+    result.valid = result.errors.length === 0;
+  }
+  if (result.valid && artifact === "external-action") {
+    if (data.effect === "write" && (!data.authorized_by || !data.authorization_digest)) result.errors.push({ path: "/authorized_by", keyword: "authorization", message: "write actions require explicit authorization evidence" });
+    if (data.status === "succeeded" && data.verified !== true) result.errors.push({ path: "/verified", keyword: "readback", message: "successful actions require verified readback" });
+    if (data.status === "succeeded" && !data.readback_digest) result.errors.push({ path: "/readback_digest", keyword: "readback", message: "successful actions require a readback digest" });
     result.valid = result.errors.length === 0;
   }
   return result;
@@ -151,6 +237,52 @@ export function recordValidation({ change_id, plugin_version, code_commit, docs_
   const normalizedDeferred = deferred.map((item) => ({ command: item.command, reason: item.reason, required: item.required !== false }));
   const failed = normalized.some((item) => item.required && item.exit_code !== 0) || normalizedDeferred.some((item) => item.required);
   return { schema: 1, change_id, plugin_version, code_commit, docs_commit, recorded_at, status: failed ? "failed" : "passed", commands: normalized, deferred: normalizedDeferred };
+}
+
+function jsonDigest(value) {
+  return createHash("sha256").update(JSON.stringify(value ?? null)).digest("hex");
+}
+
+function canonicalJson(value) {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "number" && Number.isFinite(value)) return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`);
+    return `{${entries.join(",")}}`;
+  }
+  throw new InputError("requirements fields must contain only JSON-compatible values");
+}
+
+export function computeRequirementsDigest(fields) {
+  if (!fields || typeof fields !== "object" || Array.isArray(fields)) throw new InputError("requirements fields must be a JSON object");
+  return createHash("sha256").update(REQUIREMENTS_DOMAIN).update(canonicalJson(fields)).digest("hex");
+}
+
+export function recordExternalAction(input) {
+  const authorization = input.authorized_by ?? input.authorization;
+  const receipt = {
+    schema: 1,
+    change_id: input.change_id,
+    sequence: input.sequence,
+    capability: input.capability,
+    provider: input.provider,
+    transport: input.transport,
+    operation: input.operation,
+    effect: input.effect,
+    target: input.target,
+    idempotency_key: input.idempotency_key,
+    requested_at: input.requested_at,
+    status: input.status ?? "succeeded",
+    request_digest: input.request_digest ?? jsonDigest(input.payload),
+    readback_digest: input.readback_digest ?? jsonDigest(input.readback),
+    verified: input.verified === true,
+    summary: redactAndBound(input.summary)
+  };
+  if (authorization !== undefined) receipt.authorized_by = typeof authorization === "string" ? authorization : authorization.actor;
+  if (input.authorization_digest !== undefined) receipt.authorization_digest = input.authorization_digest;
+  for (const key of ["external_id", "url", "before_revision", "after_revision"]) if (input[key] !== undefined) receipt[key] = input[key];
+  return receipt;
 }
 
 export async function runValidationCommand(input, cwd) {
@@ -295,8 +427,17 @@ export async function dispatch(command, rawInput) {
     }
     case "digest":
       return { exitCode: EXIT.OK, body: { ok: true, algorithm: "sha256", digest: computeApprovalDigest(input.spec, input.plan) } };
+    case "digest-bundle": {
+      const bundle = computeApprovalBundle(input.inputs);
+      return { exitCode: EXIT.OK, body: { ok: true, algorithm: "sha256", ...bundle } };
+    }
     case "create-approval": {
       const approval = createApproval(input);
+      const validation = await validateArtifact("approval", approval);
+      return { exitCode: validation.valid ? EXIT.OK : EXIT.SCHEMA_INVALID, body: validation.valid ? { ok: true, approval } : { ok: false, errors: validation.errors } };
+    }
+    case "create-approval-bundle": {
+      const approval = createApprovalBundle(input);
       const validation = await validateArtifact("approval", approval);
       return { exitCode: validation.valid ? EXIT.OK : EXIT.SCHEMA_INVALID, body: validation.valid ? { ok: true, approval } : { ok: false, errors: validation.errors } };
     }
@@ -305,6 +446,13 @@ export async function dispatch(command, rawInput) {
       const commitMatches = input.docs_commit === undefined || input.docs_commit === input.approval?.docs_commit;
       const verified = validation.valid && input.approval.status === "active" && commitMatches && verifyApprovalDigest(input.spec, input.plan, input.approval);
       const reason = verified ? "approval matches exact spec, plan, and docs commit" : !validation.valid ? "approval artifact is invalid" : input.approval.status !== "active" ? "approval has been superseded" : !commitMatches ? "approval is bound to a different docs commit" : "approval digest does not match exact spec and plan content";
+      return { exitCode: verified ? EXIT.OK : EXIT.APPROVAL_INVALID, body: { ok: verified, verified, errors: validation.errors, reason } };
+    }
+    case "verify-approval-bundle": {
+      const validation = await validateArtifact("approval", input.approval);
+      const commitMatches = input.docs_commit === undefined || input.docs_commit === input.approval?.docs_commit;
+      const verified = validation.valid && input.approval.status === "active" && commitMatches && verifyApprovalBundle(input.inputs, input.approval);
+      const reason = verified ? "approval matches the exact input bundle and docs commit" : !validation.valid ? "approval artifact is invalid" : input.approval.status !== "active" ? "approval has been superseded" : !commitMatches ? "approval is bound to a different docs commit" : "approval digest does not match the exact input bundle";
       return { exitCode: verified ? EXIT.OK : EXIT.APPROVAL_INVALID, body: { ok: verified, verified, errors: validation.errors, reason } };
     }
     case "record-validation": {
@@ -326,6 +474,13 @@ export async function dispatch(command, rawInput) {
       if (!validation.valid) return { exitCode: EXIT.SCHEMA_INVALID, body: { ok: false, errors: validation.errors } };
       return { exitCode: evidence.status === "passed" ? EXIT.OK : EXIT.VALIDATION_FAILED, body: { ok: evidence.status === "passed", evidence } };
     }
+    case "record-external-action": {
+      const receipt = recordExternalAction(input);
+      const validation = await validateArtifact("external-action", receipt);
+      return { exitCode: validation.valid ? EXIT.OK : EXIT.SCHEMA_INVALID, body: validation.valid ? { ok: true, receipt } : { ok: false, errors: validation.errors } };
+    }
+    case "digest-requirements":
+      return { exitCode: EXIT.OK, body: { ok: true, algorithm: "sha256", digest: computeRequirementsDigest(input.fields) } };
     case "check-compatibility": {
       const compatibility = checkCompatibility(input);
       return { exitCode: compatibility.compatible ? EXIT.OK : EXIT.INCOMPATIBLE, body: { ok: compatibility.compatible, ...compatibility } };

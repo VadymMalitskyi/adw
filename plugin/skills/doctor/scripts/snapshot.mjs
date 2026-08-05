@@ -36,6 +36,27 @@ function yamlValue(text, key) {
   return match ? (match[1] ?? match[2] ?? match[3]).trim() : undefined;
 }
 
+function integrationDeclarations(text) {
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex((line) => /^integrations:\s*(?:#.*)?$/.test(line));
+  if (start === -1) return [];
+  const declarations = [];
+  let current;
+  for (const line of lines.slice(start + 1)) {
+    if (/^\S/.test(line)) break;
+    const capability = /^  (work_tracker|code_host|observability|knowledge):\s*(?:#.*)?$/.exec(line);
+    if (capability) {
+      current = { capability: capability[1] };
+      declarations.push(current);
+      continue;
+    }
+    if (!current) continue;
+    const field = /^    (provider|requirement|transport|access):\s*(?:"([^"]*)"|'([^']*)'|([^#\n]+))/.exec(line);
+    if (field) current[field[1]] = (field[2] ?? field[3] ?? field[4]).trim();
+  }
+  return declarations;
+}
+
 function manifestChecks() {
   const codexPath = join(pluginRoot, ".codex-plugin/plugin.json");
   const claudePath = join(pluginRoot, ".claude-plugin/plugin.json");
@@ -68,8 +89,22 @@ function projectChecks(projectRoot) {
     const config = readFileSync(configPath, "utf8");
     const schema = yamlValue(config, "schema");
     const worktree = yamlValue(config, "worktree");
-    checks.push(check("project-schema", schema === "1" ? "pass" : "fail", schema === "1" ? "project schema 1 is supported" : `unsupported or unresolved schema: ${schema ?? "missing"}`));
+    checks.push(check("project-schema", schema === "2" ? "pass" : "fail", schema === "2" ? "project schema 2 is supported" : `unsupported or migration-required schema: ${schema ?? "missing"}`));
     checks.push(check("docs-config", worktree === "worktrees/docs" ? "pass" : "fail", worktree === "worktrees/docs" ? "docs worktree uses worktrees/docs" : `unexpected docs worktree: ${worktree ?? "missing"}`));
+    const integrations = integrationDeclarations(config);
+    if (integrations.length === 0) {
+      checks.push(check("integrations", "info", "no integrations configured; lightweight workflow is enabled"));
+    } else {
+      for (const integration of integrations) {
+        const configured = integration.provider && ["disabled", "optional", "required"].includes(integration.requirement);
+        checks.push(check(
+          `integration:${integration.capability}`,
+          configured ? "info" : "fail",
+          configured ? `${integration.provider} is declared as ${integration.requirement}; runtime capability probe is required` : "provider or requirement is missing",
+          { ...integration, transport: integration.transport ?? "auto", availability: "not-probed" },
+        ));
+      }
+    }
   }
 
   for (const [path, start, end] of [

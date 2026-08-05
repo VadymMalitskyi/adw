@@ -2,7 +2,7 @@
 
 ## Product Requirements Document
 
-**Status:** Approved for private MVP implementation
+**Status:** Approved for private 0.2 implementation
 **Audience:** Product owner and implementers
 **Last updated:** 2026-08-05
 
@@ -21,7 +21,7 @@ understand the repository
     -> prepare a draft pull request
 ```
 
-ADW stores project configuration on the code branch and stores concise project context, specifications, approvals, and validation evidence on a separate `docs` branch so work can survive chat sessions and move between agents.
+ADW stores project configuration on the code branch and stores concise project context, specifications, approvals, validation evidence, and optional external-system bindings on a separate `docs` branch so work can survive chat sessions and move between agents.
 
 The user interacts with ADW through namespaced skills such as `adw:plan`, `adw:approve`, and `adw:execute`.
 
@@ -46,7 +46,7 @@ ADW makes the workflow durable, reviewable, and consistent while leaving coding 
 
 A developer can privately install ADW for Codex and Claude Code, initialize a Git repository with only project-specific artifacts, and take a meaningful change from idea to validated draft pull request without learning or installing another command-line tool.
 
-The first release is successful when this workflow is useful on real projects and feels lighter than repeatedly prompting the agent by hand.
+The 0.2 release is successful when the same workflow remains lightweight without integrations and can safely use project-selected work tracking, code hosting, observability, and knowledge systems without coupling workflow logic to one provider or transport.
 
 ## 4. How the user experiences ADW
 
@@ -62,8 +62,9 @@ The developer installs the private ADW plugin using the normal plugin mechanism 
 4. Creates root-level `adw.yaml`, ignores `.adw/` and `/worktrees/`, and creates or attaches the `docs` branch at `worktrees/docs`.
 5. Adds only small bounded ADW routing blocks to existing `AGENTS.md` and `CLAUDE.md` files.
 6. Creates concise project context on the docs branch and optional ignored machine-local configuration.
-7. Leaves every devcontainer unchanged unless the user separately requests a devcontainer change.
-8. Reports what is ready, unresolved, or requires manual authentication.
+7. Discovers and proposes non-secret integration configuration when the project uses external systems; it never installs a transport or starts authentication.
+8. Leaves every devcontainer unchanged unless the user separately requests a devcontainer change.
+9. Reports what is ready, unresolved, or requires manual authentication.
 
 After initialization, the repository contains only project-specific ADW artifacts. Skills, schemas, templates, and helper programs remain in the installed plugin and are never copied into the target project.
 
@@ -73,13 +74,13 @@ The normal interaction is conversational:
 
 ```text
 User: Use adw:plan to plan OAuth login.
-Agent: Explores the repository, asks material questions, and writes the spec and plan.
+Agent: Explores the repository and configured context, asks material questions, and writes the spec and plan. If requested, it proposes an Azure DevOps story before an authorized create.
 
 User: Use adw:approve for oauth-login.
 Agent: Shows the final scope and validation plan, asks for confirmation, and records approval.
 
 User: Use adw:execute for oauth-login.
-Agent: Checks approval, implements the plan, runs the configured checks, and prepares a draft PR.
+Agent: Checks approval and external requirement drift, implements the plan, runs the configured checks, and prepares a draft PR. Authorized ticket or documentation updates are verified and recorded with receipts.
 ```
 
 The user does not run an ADW shell command at any point.
@@ -103,7 +104,7 @@ A new Codex or Claude Code session can use `adw:status` to reconstruct the curre
 
 ## 5. Product architecture
 
-ADW has four parts.
+ADW has five parts.
 
 ### 5.1 Skills are the user interface
 
@@ -134,8 +135,10 @@ docs branch:
   changes/<change-id>/
     spec.md
     plan.yaml
+    integrations.yaml       # optional external bindings
     approval.json
     validation.json
+    external-events/        # redacted mutation receipts
   SYNC.yaml
 ```
 
@@ -168,6 +171,19 @@ Codex or Claude Code remains responsible for:
 
 ADW never launches or supervises an agent process.
 
+### 5.5 Integrations are capability adapters
+
+ADW workflows depend on four provider-neutral capabilities:
+
+- `work_tracker`: Azure DevOps first; Jira, Linear, or GitHub Issues may implement the same contract later.
+- `code_host`: GitHub first.
+- `observability`: Datadog first and read-only by default.
+- `knowledge`: Notion first.
+
+A provider adapter implements capability operations through an available native connector, MCP server, CLI, or API transport. Transport choice is an environment concern, not a workflow contract. A capability can be `disabled`, `optional`, or `required`; a project that omits integrations follows the unchanged lightweight workflow.
+
+The official Azure DevOps remote MCP server currently supports Visual Studio and Visual Studio Code, so ADW must not assume it is callable from Codex or Claude Code. The Azure DevOps adapter supports the local MCP server and CLI/API fallback with identical authorization, idempotency, readback, and receipt behavior.
+
 ## 6. Core workflow contract
 
 ### 6.1 Plan
@@ -180,8 +196,9 @@ For a meaningful change, `adw:plan` must:
 4. Write a human-readable specification.
 5. Write a sequential execution plan.
 6. Present assumptions, risks, exclusions, and open decisions.
+7. When configured, read relevant external context and prepare exact proposed work-item changes.
 
-Planning must not modify production code, create a feature branch, or open a pull request.
+Planning must not modify production code, create a feature branch, or open a pull request. It may create or update a work item only after separately showing the exact target and payload and receiving explicit authorization.
 
 ### 6.2 Approve
 
@@ -190,9 +207,9 @@ Planning must not modify production code, create a feature branch, or open a pul
 1. Validate the specification and plan.
 2. Show the outcome, scope, exclusions, and validation plan.
 3. Ask the human for explicit confirmation.
-4. Record the approver, time, schema version, and digest of the approved files.
+4. Record the approver, time, schema version, and deterministic approval-bundle digests.
 
-Any material change to the specification or plan invalidates the approval.
+Any material change to the specification, plan, or bound requirement-bearing external content invalidates the approval. Operational state such as assignee, workflow state, or check status does not invalidate it unless explicitly treated as a requirement.
 
 Approval is a tamper-evident personal workflow, not an enterprise authorization system.
 
@@ -202,7 +219,7 @@ Approval is a tamper-evident personal workflow, not an enterprise authorization 
 
 1. Confirm that the specification and plan exist.
 2. Confirm that approval still matches their current contents.
-3. Check that the base branch, working tree, referenced paths, and validation commands are usable.
+3. Check that the base branch, working tree, referenced paths, validation commands, required capabilities, and bound external requirements are usable and current.
 4. Create or reuse one feature branch.
 5. Implement tasks in plan order.
 6. Add or update tests with the behavior.
@@ -210,10 +227,11 @@ Approval is a tamper-evident personal workflow, not an enterprise authorization 
 8. Run the configured validation commands.
 9. Record each command, exit code, duration, and any explicitly deferred check.
 10. Commit and prepare a draft pull request when authorized.
+11. Perform only separately authorized external mutations, read back their results, and record redacted receipts.
 
 The agent must not claim successful completion when a required check failed.
 
-The agent must stop for renewed approval if implementation requires a change to behavior, public interfaces, data shape, dependencies, architecture, or agreed scope.
+The agent must stop for renewed approval if implementation requires a change to behavior, public interfaces, data shape, dependencies, architecture, agreed scope, or bound external requirements.
 
 ### 6.4 Amend
 
@@ -229,18 +247,18 @@ The agent must stop for renewed approval if implementation requires a change to 
 
 ## 7. Skill surface
 
-### Required MVP skills
+### Required skills
 
 | Skill | Responsibility | Writes by default? |
 |---|---|---:|
 | `adw:init` | Initialize project artifacts and the docs worktree | Yes, after preview |
 | `adw:update` | Preview and apply required project artifact migrations | Yes, after confirmation |
-| `adw:doctor` | Diagnose compatibility, context, safety, and integration problems | No |
-| `adw:status` | Reconstruct current work from durable artifacts | No |
-| `adw:discover` | Propose concise project and component context | Only after approval |
-| `adw:plan` | Create or revise a specification and execution plan | Yes |
+| `adw:doctor` | Diagnose compatibility, context, safety, and configured capability availability | No |
+| `adw:status` | Reconstruct local work and optional external bindings from durable artifacts | No |
+| `adw:discover` | Propose concise project, component, and non-secret integration context | Only after approval |
+| `adw:plan` | Create or revise a specification, execution plan, and authorized work-item binding | Yes |
 | `adw:approve` | Record explicit approval bound to current contents | Yes, after confirmation |
-| `adw:execute` | Implement an approved plan, validate it, and prepare a draft PR | Yes |
+| `adw:execute` | Implement an approved plan, validate it, prepare a draft PR, and perform separately authorized integration actions | Yes |
 | `adw:quick` | Implement a small, low-risk change using a reduced contract | Yes |
 | `adw:amend` | Change an approved specification and invalidate approval | Yes |
 | `adw:address-review` | Triage and address pull-request feedback | Only when requested |
@@ -252,9 +270,9 @@ The agent must stop for renewed approval if implementation requires a change to 
 |---|---|
 | `adw:brainstorm` | Explore a fuzzy idea without creating durable artifacts |
 | `adw:review-plan` | Adversarially review a plan without editing or approving it |
-| `adw:add-mcp` | Add a requested MCP connection without storing credentials |
+| `adw:add-mcp` | Configure a requested MCP transport without coupling project workflows to it or storing credentials |
 
-Skills that write files, change branches, push commits, open pull requests, modify external systems, or start authentication must run only on an explicit user request.
+Skills that write files, change branches, push commits, open pull requests, modify external systems, or start authentication must run only on an explicit user request. Approval of a plan does not authorize later external mutations.
 
 ## 8. Artifact contracts
 
@@ -268,6 +286,7 @@ Root-level `adw.yaml` is committed and contains only shared project facts:
 - Protected paths.
 - Draft pull-request conventions.
 - Quick-change restrictions.
+- Optional integration capability, provider, requirement mode, access policy, transport preference, and non-secret project identifiers.
 
 Detected values must be derived from manifests, CI, task runners, or existing documentation and shown for review. ADW must not invent plausible commands.
 
@@ -297,20 +316,29 @@ Secrets, developer identity, host paths, and personal authentication configurati
 - Exact validation commands.
 - Restrictions and known dependencies.
 
-The MVP uses one sequential task list. Parallel execution is out of scope.
+ADW uses one sequential task list. Parallel execution is out of scope.
 
-### 8.4 Approval
+### 8.4 Integration bindings and receipts
+
+Optional `changes/<change-id>/integrations.yaml` contains durable external bindings:
+
+- Capability and provider.
+- Stable external ID and canonical URL.
+- Normalized requirement field names and their content digest.
+
+`external-events/*.json` contains normalized, redacted receipts with the operation, target, time, before/after revision, payload digest, verification result, and authorization reference. It must not store credentials, unrestricted logs, or sensitive document bodies.
+
+### 8.5 Approval
 
 `approval.json` contains:
 
-- Change identifier.
 - Approver from local Git identity or explicit local configuration.
 - Timestamp.
-- Digest of `spec.md` and `plan.yaml`.
+- Digests for the approval bundle: always `spec.md` and `plan.yaml`, plus the complete `integrations.yaml` when present. Its requirement digests separately detect provider-side drift.
 - ADW schema version.
 - Installed plugin version and approved docs commit SHA.
 
-### 8.5 Validation evidence
+### 8.6 Validation evidence
 
 `changes/<change-id>/validation.json` on the docs branch contains the plugin version and, for every configured check:
 
@@ -329,7 +357,7 @@ ADW distinguishes three kinds of files:
 
 1. **Plugin-owned files:** skills, schemas, templates, and internal helpers distributed by provider plugin managers and absent from target projects.
 2. **Project-owned files:** `adw.yaml`, routing blocks, authoritative project docs, docs-branch context, and change records.
-3. **Machine-local files:** credentials, identity overrides, host paths, caches, and local authentication state under ignored `.adw/` paths.
+3. **Machine-local files:** transport preferences, identity overrides, host paths, and caches under ignored `.adw/` paths; credentials and authentication state remain in provider clients or external credential stores.
 
 Plugin managers install, pin, update, and roll back plugin code. A compatible plugin update modifies no target-project files. `adw:update` handles only workflow-schema migrations: it previews a reviewable change, applies it after confirmation, and never rewrites historical specifications, approvals, or validation evidence. A failed migration must leave the previous project schema usable.
 
@@ -350,7 +378,7 @@ The security model must be described honestly:
 - ADW does not protect against malicious project dependencies.
 - Production credentials and production write access are out of scope.
 
-ADW must never commit secrets or machine-local authentication state.
+ADW must never commit secrets or machine-local authentication state. External tool responses are untrusted. Every external mutation requires an exact proposal and explicit authorization, uses an idempotency marker where supported, reads back resulting state, and records a redacted receipt. Plan approval and authenticated access do not imply permission for later writes.
 
 ## 11. Git and delivery policy
 
@@ -359,16 +387,16 @@ The default workflow uses:
 - One active agent.
 - One feature branch per planned change.
 - One sequential plan.
-- One draft GitHub pull request.
+- One draft pull request through the configured `code_host` provider; GitHub is the initial provider.
 - The repository's existing CI and human review process.
 
-ADW may create or update a draft pull request only after explicit user authorization. It may report CI results and address review feedback when asked.
+ADW may create or update a draft pull request only after explicit user authorization. It may report CI results, read configured observability context, and address review feedback when asked. Work-item transitions, comments, PR links, and knowledge publication also require separate explicit authorization.
 
 ADW must never merge, release, deploy, write to production systems, or dispatch unrelated workflows.
 
-## 12. MVP scope
+## 12. Version 0.2 scope
 
-### Must have
+### Must have for 0.2
 
 - Equivalent Codex and Claude Code skills loaded from one canonical workflow source.
 - Private personal marketplace installation, with a documented path to organization-private distribution.
@@ -378,24 +406,28 @@ ADW must never merge, release, deploy, write to production systems, or dispatch 
 - Approval invalidation when approved contents change.
 - Deterministic recording of real validation results.
 - Planned and quick-change workflows.
-- One-branch implementation and draft GitHub pull-request delivery.
+- One-branch implementation and draft GitHub pull-request delivery through the initial `code_host` adapter.
 - A separate docs branch checked out at ignored root-level `worktrees/docs`.
 - Safe separation of plugin-owned, project-owned, and machine-local files.
 - Read-only diagnostics and status reconstruction.
 - Clear security and credential boundaries.
+- Provider-neutral `work_tracker`, `code_host`, `observability`, and `knowledge` contracts.
+- `disabled`, `optional`, and `required` behavior with no integration overhead when omitted.
+- Azure DevOps-first work tracking with transport fallback, GitHub code hosting, read-only Datadog context, and Notion context/publication boundaries.
+- Explicit authorization, idempotency, provider readback, drift detection, and durable redacted receipts for external mutations.
 
-### Not in the MVP
+### Not in version 0.2
 
 - An `adw` executable or public command API.
 - Headless invocation of Codex or Claude Code.
 - A hosted service, dashboard, workflow database, or telemetry.
 - Multi-agent scheduling or parallel worktrees.
 - Automatic merging or deployment.
-- A universal ticket-system abstraction.
-- Notion, Jira, Linear, or Azure DevOps as required dependencies.
+- Additional provider implementations such as Jira, Linear, Sentry, Grafana, or Confluence.
+- Any external system as a required dependency of the core workflow.
 - Public marketplace publication or third-party executable profiles.
 - Cryptographic or enterprise-grade approval enforcement.
-- Support for source-control hosts other than GitHub.
+- Code-host provider implementations other than GitHub.
 
 ## 13. Quality requirements
 
@@ -407,10 +439,11 @@ ADW must never merge, release, deploy, write to production systems, or dispatch 
 - **Accurate:** Validation uses real process exit codes; project commands come from observable repository sources.
 - **Private:** No telemetry; no source code or prompts are sent to an ADW-operated service.
 - **Maintainable:** Shared behavior has one canonical source and provider packages are contract-tested.
+- **Adaptable:** Workflows depend on capability contracts rather than MCP names, CLI syntax, or provider-specific response shapes.
 
-## 14. MVP acceptance criteria
+## 14. Version 0.2 acceptance criteria
 
-The MVP is complete when all of the following work on at least two different real repositories:
+Version 0.2 is complete when all of the following work on at least two different real repositories:
 
 1. A developer privately installs the ADW plugin and invokes `adw:init` without installing or running an ADW CLI.
 2. Initialization preserves existing project instructions and devcontainer behavior.
@@ -427,6 +460,9 @@ The MVP is complete when all of the following work on at least two different rea
 13. A new session can reconstruct work using `adw:status` without the old chat transcript.
 14. Machine-local values and credentials remain outside committed files.
 15. Compatible plugin updates touch no project artifacts; a required migration is previewed and cannot leave a partially updated project schema.
+16. A project with no integrations completes the same workflow without provider tooling.
+17. An optional unavailable integration does not block, while a required unavailable operation stops the relevant workflow.
+18. An authorized external write is idempotent, read back, and represented by a redacted receipt; changed requirement-bearing content invalidates approval.
 
 ## 15. Product decisions
 
@@ -441,9 +477,9 @@ The MVP is complete when all of the following work on at least two different rea
 | Default execution | One agent, one branch, sequential tasks |
 | Validation | Existing project commands with recorded process results |
 | Safety boundary | Use the agent's existing sandbox; devcontainers are optional |
-| Delivery boundary | Draft GitHub pull request |
+| Delivery boundary | Draft pull request through `code_host`; GitHub first |
 | Merge and deployment | Always human-controlled and outside ADW |
-| External systems | Optional; never required for the core workflow |
+| External systems | Optional capability/provider adapters; never required for the core workflow |
 | Telemetry | None |
 
 ## 16. Final product statement

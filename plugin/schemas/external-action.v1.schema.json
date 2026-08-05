@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adw.local/schemas/external-action.v1.schema.json",
+  "title": "ADW external action receipt v1",
+  "type": "object",
+  "required": ["schema", "change_id", "sequence", "capability", "provider", "transport", "operation", "effect", "target", "idempotency_key", "requested_at", "status", "request_digest", "verified", "summary"],
+  "properties": {
+    "schema": { "const": 1 },
+    "change_id": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]|\\.[a-z0-9_-]+)*$" },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "capability": { "enum": ["work_tracker", "code_host", "observability", "knowledge"] },
+    "provider": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "transport": { "enum": ["native", "mcp", "cli", "api"] },
+    "operation": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+    "effect": { "enum": ["read", "write"] },
+    "target": { "type": "string", "minLength": 1 },
+    "idempotency_key": { "type": "string", "pattern": "^adw:[^:]+:[a-z0-9](?:[a-z0-9_-]|\\.[a-z0-9_-]+)*:[a-z][a-z0-9_-]*(?::[^:]+)*$" },
+    "requested_at": { "type": "string", "format": "date-time" },
+    "authorized_by": { "type": "string", "minLength": 1 },
+    "authorization_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "status": { "enum": ["succeeded", "failed"] },
+    "request_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "readback_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "external_id": { "type": "string", "minLength": 1 },
+    "url": { "type": "string", "pattern": "^https://" },
+    "before_revision": { "type": "string", "minLength": 1 },
+    "after_revision": { "type": "string", "minLength": 1 },
+    "verified": { "type": "boolean" },
+    "summary": { "type": "string", "maxLength": 4000 }
+  },
+  "additionalProperties": false
+}

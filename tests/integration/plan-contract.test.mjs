@@ -12,13 +12,15 @@ function readSkill(name) {
   return readFileSync(resolve(repositoryRoot, `plugin/skills/${name}/SKILL.md`), "utf8");
 }
 
-test("plan skill creates only docs-worktree planning artifacts and stops before delivery", () => {
+test("plan skill creates a bounded docs-worktree planning bundle and stops before implementation", () => {
   const skill = readSkill("plan");
 
   assert.match(skill, /changes\/<change-id>\/spec\.md/);
   assert.match(skill, /changes\/<change-id>\/plan\.yaml/);
-  assert.match(skill, /Mutate only the two change artifacts inside the configured docs worktree/);
-  assert.match(skill, /Never modify application code/);
+  assert.match(skill, /planning bundle/);
+  assert.match(skill, /integrations\.yaml/);
+  assert.match(skill, /external-events/);
+  assert.match(skill, /never modify application code/i);
   assert.match(skill, /Never create or switch a code branch/);
   assert.match(skill, /Never implement a task/);
   assert.match(skill, /Do not create `approval\.json`/);

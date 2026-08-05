@@ -41,8 +41,8 @@ function run(root, args, expected = 0) {
   return result;
 }
 
-test("a compatible plugin update touches no project artifact", () => {
-  const root = fixture(1);
+test("a schema 2 project is a no-op and touches no project artifact", () => {
+  const root = fixture(2);
   const head = git(root, "rev-parse", "HEAD");
   const configBefore = readFileSync(join(root, "adw.yaml"), "utf8");
   const historyBefore = readFileSync(join(root, "changes/historical/approval.json"), "utf8");
@@ -58,13 +58,15 @@ test("a compatible plugin update touches no project artifact", () => {
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), "");
 });
 
-test("migration requires its reviewed digest, rolls back failed attempts, and preserves history", () => {
-  const root = fixture(0);
+test("schema 1 to 2 migration requires its reviewed digest and preserves historical change evidence", () => {
+  const root = fixture(1);
   const before = readFileSync(join(root, "adw.yaml"), "utf8");
   const specBefore = readFileSync(join(root, "changes/historical/spec.md"), "utf8");
   const approvalBefore = readFileSync(join(root, "changes/historical/approval.json"), "utf8");
   const preview = JSON.parse(run(root, ["preview"]).stdout);
   assert.equal(preview.migration_required, true);
+  assert.equal(preview.from_schema, 1);
+  assert.equal(preview.to_schema, 2);
   assert.deepEqual(preview.writes, ["adw.yaml"]);
   assert.equal(readFileSync(join(root, "adw.yaml"), "utf8"), before);
 
@@ -74,7 +76,7 @@ test("migration requires its reviewed digest, rolls back failed attempts, and pr
 
   const applied = JSON.parse(run(root, ["apply", "--confirmed", "--preview-digest", preview.preview_digest]).stdout);
   assert.equal(applied.migrated, true);
-  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /^schema: 1$/m);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /^schema: 2$/m);
   assert.equal(readFileSync(join(root, "changes/historical/spec.md"), "utf8"), specBefore);
   assert.equal(readFileSync(join(root, "changes/historical/approval.json"), "utf8"), approvalBefore);
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), "M adw.yaml");

@@ -74,6 +74,7 @@ test("empty repository initializes unresolved commands, docs records, and no dev
   runInit(root, "apply", true);
   assert.equal(git(root, "rev-parse", "HEAD"), headBefore, "init must not commit code-branch artifacts");
   assert.equal(existsSync(join(root, ".devcontainer")), false);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /^schema: 2$/m);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /command: "<unresolved>"[\s\S]*required: false/);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /source: "unresolved: no supported manifest or task-runner target proves a validation command"/);
   assert.deepEqual(filesUnder(root, "worktrees/docs"), [
@@ -109,6 +110,7 @@ test("existing project keeps instructions, documentation, ignores, and devcontai
 
   runInit(root, "apply", true);
   const config = readFileSync(join(root, "adw.yaml"), "utf8");
+  assert.match(config, /^schema: 2$/m);
   for (const [command, source] of [
     ["npm run lint", "package.json#scripts.lint"],
     ["npm run test", "package.json#scripts.test"],
@@ -141,6 +143,7 @@ test("monorepo initialization keeps component commands separate with observable 
 
   runInit(root, "apply", true);
   const config = readFileSync(join(root, "adw.yaml"), "utf8");
+  assert.match(config, /^schema: 2$/m);
   assert.match(config, /path: "apps\/web"/);
   assert.match(config, /path: "services\/api"/);
   for (const source of [

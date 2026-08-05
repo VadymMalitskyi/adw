@@ -258,6 +258,50 @@ test("generic skills do not depend on legacy enterprise or orchestration workflo
   }
 });
 
+test("provider inventory is explicit, bounded, and backed by provider references", () => {
+  const inventory = readJson("plugin/integrations/providers.json");
+  assert.equal(inventory.schema, 1);
+  assert.ok(Array.isArray(inventory.providers));
+  assert.deepEqual(inventory.providers.map(({ provider }) => provider).sort(), ["azure-devops", "datadog", "github", "notion"]);
+
+  const allowedCapabilities = new Set(["work_tracker", "code_host", "observability", "knowledge"]);
+  const allowedTransports = new Set(["native", "mcp", "cli", "api"]);
+  for (const entry of inventory.providers) {
+    assert.match(entry.provider, /^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+    assert.ok(Array.isArray(entry.capabilities) && entry.capabilities.length > 0, `${entry.provider}: missing capabilities`);
+    assert.ok(Array.isArray(entry.transports) && entry.transports.length > 0, `${entry.provider}: missing transports`);
+    assert.ok(entry.capabilities.every((item) => allowedCapabilities.has(item)), `${entry.provider}: unknown capability`);
+    assert.ok(entry.transports.every((item) => allowedTransports.has(item)), `${entry.provider}: unknown transport`);
+    assert.match(entry.reference, /^providers\/[a-z0-9-]+\.md$/);
+    const referencePath = resolve(pluginRoot, "integrations", entry.reference);
+    assert.ok(existsSync(referencePath), `${entry.provider}: missing provider reference ${entry.reference}`);
+    const reference = readFileSync(referencePath, "utf8");
+    assert.match(reference, new RegExp(entry.provider.replace("azure-devops", "Azure DevOps"), "i"));
+    for (const capability of entry.capabilities) assert.match(reference, new RegExp(`\\b${capability}\\b`), `${entry.provider}: reference omits ${capability}`);
+  }
+});
+
+test("integration-aware workflow language depends on capabilities and shared contracts", () => {
+  const contract = read("plugin/integrations/contracts.md");
+  assert.match(contract, /capabilit/i);
+  for (const capability of ["work_tracker", "code_host", "observability", "knowledge"]) {
+    assert.match(contract, new RegExp(`\\b${capability}\\b`), `shared contract omits ${capability}`);
+  }
+
+  const workflows = ["plan", "approve", "execute", "amend", "doctor", "discover", "status", "quick", "address-review"];
+  for (const name of workflows) {
+    const source = skillText(name);
+    assert.match(source, /integrations\/contracts\.md/, `${name}: missing shared integration contract`);
+    assert.doesNotMatch(source, /Azure DevOps|\bADO\b|Datadog|Notion/i, `${name}: workflow must select providers from configuration, not embed one provider`);
+  }
+
+  for (const name of ["plan", "approve", "execute"]) {
+    const source = skillText(name);
+    assert.match(source, /integrations\.yaml/, `${name}: missing durable integration binding artifact`);
+  }
+  assert.match(skillText("plan"), /disabled[\s\S]*optional[\s\S]*required/, "plan: missing integration requirement handling");
+});
+
 test("every skill resolves bundled resources portably for Claude Code and Codex", () => {
   for (const name of REQUIRED_SKILLS) {
     const source = skillText(name);

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { createApproval, dispatch, EXIT } from "../../plugin/lib/adw-helper.mjs";
+import { createApprovalBundle, dispatch, EXIT } from "../../plugin/lib/adw-helper.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const read = (path) => readFileSync(resolve(root, path), "utf8");
@@ -25,9 +25,9 @@ test("execute binds exact approved bytes to the pre-approval docs commit", () =>
   assert.match(executeAgent, /default_prompt: "Use \$execute /);
   assert.match(execute, /exact raw bytes/);
   assert.match(execute, /pre-approval artifact commit, not the approval commit or current docs `HEAD`/);
-  assert.match(execute, /verify-approval/);
+  assert.match(execute, /verify-approval-bundle/);
   assert.match(execute, /approval\.docs_commit/);
-  assert.match(execute, /Any byte change, missing approval, superseded approval/);
+  assert.match(execute, /bound-byte change, missing input, missing or superseded approval/);
 });
 
 test("execute is one-agent sequential execution with guarded paths and commands", () => {
@@ -38,23 +38,28 @@ test("execute is one-agent sequential execution with guarded paths and commands"
   assert.match(execute, /Reject absolute paths, `\.\.`.*symlink escapes/s);
   assert.match(execute, /Missing required commands are blockers, never implicit deferrals/);
   assert.match(execute, /stop and route the discovery through `adw:amend`/);
-  assert.doesNotMatch(execute, /Azure DevOps|Notion/i);
-  assert.match(execute, /Never create per-task worktrees, parallel implementation branches, integration branches, tickets, or multiple pull requests/);
+  assert.doesNotMatch(execute, /Azure DevOps|\bADO\b|Datadog|Notion/i);
+  assert.match(execute, /Never create per-task worktrees, parallel implementation branches, integration branches, unplanned tickets, or multiple pull requests/);
 });
 
 test("the helper behavior required by execute rejects drift and preserves failed checks", async () => {
   const commit = "a".repeat(40);
-  const approval = createApproval({
+  const inputs = [
+    { path: "spec.md", content: "approved spec\n" },
+    { path: "plan.yaml", content: "approved plan\n" },
+  ];
+  const approval = createApprovalBundle({
     approver: "Ada",
     approved_at: "2026-08-05T12:00:00Z",
     plugin_version: "0.1.0",
     docs_commit: commit,
-    spec: "approved spec\n",
-    plan: "approved plan\n",
+    inputs,
   });
-  const stale = await dispatch("verify-approval", {
-    spec: "changed spec\n",
-    plan: "approved plan\n",
+  const stale = await dispatch("verify-approval-bundle", {
+    inputs: [
+      { path: "spec.md", content: "changed spec\n" },
+      inputs[1],
+    ],
     docs_commit: approval.docs_commit,
     approval,
   });
@@ -81,8 +86,8 @@ test("execute records honest helper evidence and gates draft delivery", () => {
   assert.match(execute, /validation\.json/);
   assert.match(execute, /Update every code-coupled documentation file/);
   assert.match(execute, /required deferral keeps status `failed`/);
-  assert.match(execute, /only when the user explicitly authorizes/);
-  assert.match(execute, /one draft GitHub pull request/);
+  assert.match(execute, /user explicitly requests delivery and authorizes the exact external action/);
+  assert.match(execute, /draft pull request[\s\S]{0,300}configured `code_host`/);
   assert.match(execute, /never mark it ready, approve it, merge it, release it, or deploy it/);
   assert.match(execute, /never force-push/i);
 });

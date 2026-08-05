@@ -78,6 +78,7 @@ test("init previews without writes and applies idempotent bounded changes", () =
   assert.equal(git(root, "check-ignore", "--no-index", "worktrees/probe"), "worktrees/probe");
 
   const config = readFileSync(join(root, "adw.yaml"), "utf8");
+  assert.match(config, /^schema: 2$/m);
   assert.match(config, /command: "npm run lint"\n\s+source: "package\.json#scripts\.lint"/);
   assert.match(config, /command: "npm run test"\n\s+source: "package\.json#scripts\.test"/);
   assert.doesNotMatch(config, /release/);

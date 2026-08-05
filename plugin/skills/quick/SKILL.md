@@ -1,6 +1,6 @@
 ---
 name: quick
-description: Implement a genuinely small, low-risk ADW change on one feature branch with focused tests, whole-diff review, code-coupled documentation, and helper-recorded validation. Use when the user explicitly requests quick mode for a narrow local correction that does not need a plan or approval.
+description: Implement a genuinely small, low-risk ADW change on one feature branch with focused tests, whole-diff review, validation, and an optional separately authorized code-host update. Use when the user explicitly requests quick mode for a narrow local correction that does not need a plan or approval.
 ---
 
 # Execute a quick change
@@ -9,7 +9,9 @@ Use quick mode only for a narrow, already-understood local correction. It remove
 
 ## Resolve and bound the change
 
-Resolve the plugin root from this loaded skill: use expanded `${CLAUDE_PLUGIN_ROOT}` in Claude Code, or derive it in Codex from the absolute loaded path ending in `/skills/quick/SKILL.md`. Invoke `<plugin-root>/lib/adw-helper.mjs` and read the plugin version from the provider manifest there; never resolve resources from the project current working directory or write into the installed plugin.
+Resolve the plugin root from this loaded skill: use expanded `${CLAUDE_PLUGIN_ROOT}` in Claude Code, or derive it in Codex from the absolute loaded path ending in `/skills/quick/SKILL.md`. Invoke `<plugin-root>/lib/adw-helper.mjs`, read `<plugin-root>/integrations/contracts.md`, and read the plugin version from the provider manifest there; never resolve resources from the project current working directory or write into the installed plugin.
+
+Resolve only configured `work_tracker`, `code_host`, `observability`, and `knowledge` capabilities, keeping providers separate from `native|mcp|cli|api` transports. Honor `disabled`, `optional`, and `required`. Use scoped external reads only when they help bound or diagnose the correction. Escalate to `adw:plan` if the change needs a requirement-bearing binding or external requirement mutation. When integrations are absent, keep the local quick workflow unchanged.
 
 Before editing, write a compact change contract in the interaction: outcome, rationale, explicit project-relative paths, exclusions, acceptance behavior, exact sourced validation commands, and documentation impact. Use a stable quick change id such as `quick-<date>-<slug>`.
 
@@ -48,6 +50,6 @@ Capture helper output even when it exits with `VALIDATION_FAILED`. Store the ret
 
 A required failure, signal, timeout, or deferral remains `failed`; never skip, relabel, hand-edit, or silently defer it. A failure prevents successful completion and draft-PR creation. Optional deferrals require a specific recorded reason.
 
-Create or update one draft GitHub PR only after passed evidence and explicit user authorization for that external action. Push normally, reuse the exact branch's existing PR, and never mark ready, approve, merge, release, deploy, or force-push. Without authorization, report the local branch and commits as ready for the user's next decision.
+Create or update one draft pull request only after passed evidence, an explicit delivery request, and explicit user authorization for the exact push and pull-request payload. Delivery remains allowed only after passed evidence and explicit user authorization. Use configured `code_host`, or for omitted integrations infer an optional provider from one unambiguous existing Git remote as allowed by the integration contract. Stop after local commits when the host is ambiguous or unsupported. Use idempotency keys, reuse the exact branch's existing PR, read it back, validate external-action receipts, and commit them on the docs branch. Never mark ready, approve, merge, release, deploy, or force-push.
 
-Report the compact contract, branch, files, tests, review findings, code-coupled docs, code and evidence commits, actual validation results, and PR or authorization-needed state.
+Report the compact contract, branch, files, tests, review findings, code-coupled docs, code, evidence, and receipt commits, actual validation results, and pull-request or authorization-needed state.

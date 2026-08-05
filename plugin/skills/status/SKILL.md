@@ -11,15 +11,18 @@ Keep the entire workflow read-only. Do not fetch, pull, checkout, repair, create
    - In Claude Code, expand `${CLAUDE_PLUGIN_ROOT}` and use `${CLAUDE_PLUGIN_ROOT}/skills/status/SKILL.md` as this skill's absolute locator.
    - In Codex, use the absolute `SKILL.md` source locator advertised when this skill loaded.
    - Remove `/skills/status/SKILL.md` from that locator. Never derive plugin resources from the current working directory.
+   - Resolve `integrations/contracts.md` and selected provider references from that same root.
 2. Resolve the project root with `git rev-parse --show-toplevel`.
-3. Run `node <plugin-root>/skills/status/scripts/snapshot.mjs --project-root <project-root>`.
-4. Summarize the code branch, commit, dirty paths, docs worktree, docs commit, and docs dirty paths.
-5. For every `changes/<change-id>/` directory, report artifact presence and the reconstructed state:
+3. Resolve configured `work_tracker`, `code_host`, `observability`, and `knowledge` independently from `native|mcp|cli|api` transports. Honor `disabled`, `optional`, and `required`; when integrations are omitted, do not probe external systems during ordinary status.
+4. Run `node <plugin-root>/skills/status/scripts/snapshot.mjs --project-root <project-root>`.
+5. Summarize the code branch, commit, dirty paths, docs worktree, docs commit, and docs dirty paths.
+6. For every `changes/<change-id>/` directory, report artifact presence and the reconstructed state:
    - `planned` when intent exists without a valid active approval;
-   - `approved` only when approval schema and digest match the exact current spec and plan bytes;
+   - `approved` only when schema 2 matches the exact current `spec.md`, `plan.yaml`, and optional `integrations.yaml` bytes, or a legacy schema-1 approval matches exact spec and plan while no integration artifact exists;
    - `validation-failed` when required evidence failed;
    - `validated` only when validation evidence is valid and passed.
-6. If a GitHub integration and authenticated read-only command are already available, query open draft pull requests for the current repository and join them by head branch. Otherwise preserve `not-queried`; do not authenticate or write configuration.
-7. Call out stale approvals, invalid JSON/schema evidence, missing worktrees, dirty checkouts, failed validation, and ambiguous multiple active changes. Recommend the next ADW skill without taking that action.
+7. Validate each `integrations.yaml` as artifact `integration` and each file under `external-events/` as artifact `external-action`. Summarize bindings, latest verified external actions, failed or uncertain receipts, and pending authorized-state reconciliation without exposing external content or secrets.
+8. For configured, non-disabled capabilities with an already authenticated read-only transport, read current requirement-bearing fields and relevant open draft pull-request state. Join objects by provider, external id, URL, or exact head branch. Report requirement drift separately from operational drift such as state or assignee. Required unavailability is a blocker; optional unavailability remains `not-queried`. Do not authenticate or write configuration.
+9. Call out stale approvals, requirement-bearing external drift, invalid artifacts, missing worktrees, dirty checkouts, failed validation, failed receipts, and ambiguous multiple active changes. Recommend the next ADW skill without taking that action.
 
 Resolve the bundled helper from the installed plugin root. Treat filesystem artifacts and Git as authoritative over prior conversation history.

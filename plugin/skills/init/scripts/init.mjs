@@ -191,7 +191,7 @@ function projectConfiguration(projectRoot) {
   const commands = detectCommands(projectRoot);
   const lines = [
     "# ADW project configuration. Every executable command cites an observable source.",
-    "schema: 1",
+    "schema: 2",
     "",
     "git:",
     `  default_branch: ${yamlScalar(defaultBranch(projectRoot))}`,
@@ -336,7 +336,14 @@ try {
     writeChangedFiles(projectRoot, files.filter((file) => file.path === ".gitignore"));
     mkdirSync(join(projectRoot, ".adw/cache"), { recursive: true });
     const localConfig = join(projectRoot, ".adw/local.yaml");
-    if (!existsSync(localConfig)) writeFileSync(localConfig, "# Machine-local ADW settings. This file is ignored by Git.\n", "utf8");
+    if (!existsSync(localConfig)) writeFileSync(localConfig, [
+      "# Machine-local ADW settings. This file is ignored by Git.",
+      "# Credentials belong in provider clients or credential stores, never here.",
+      "# integrations:",
+      "#   work_tracker:",
+      "#     transport: auto",
+      "",
+    ].join("\n"), "utf8");
     writeChangedFiles(projectRoot, files.filter((file) => file.path !== ".gitignore"));
     initializeDocs(projectRoot, docs);
     process.stdout.write(`${JSON.stringify({ mode: "apply", ...summarize(files, { ...docs, action: docs.action === "reuse" ? "reuse" : "ready" }) }, null, 2)}\n`);

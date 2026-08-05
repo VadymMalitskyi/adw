@@ -4,7 +4,7 @@ import { validateArtifact } from "../../plugin/lib/adw-helper.mjs";
 
 const sha = "a".repeat(40);
 
-test("all four versioned artifact schemas accept representative values", async () => {
+test("legacy v1 artifact schemas remain valid", async () => {
   const artifacts = {
     project: {
       schema: 1,
@@ -24,6 +24,114 @@ test("all four versioned artifact schemas accept representative values", async (
     validation: { schema: 1, change_id: "fix-api", plugin_version: "0.1.0", code_commit: sha, docs_commit: sha, recorded_at: "2026-08-05T12:00:00Z", status: "passed", commands: [{ command: "npm test", cwd: ".", exit_code: 0, signal: null, timed_out: false, duration_ms: 5, summary: "ok", required: true }], deferred: [] }
   };
   for (const [kind, value] of Object.entries(artifacts)) assert.deepEqual(await validateArtifact(kind, value), { valid: true, errors: [] }, kind);
+});
+
+test("project schema v2 supports optional provider-neutral capability configuration", async () => {
+  const base = {
+    schema: 2,
+    git: { default_branch: "main" },
+    documentation: { mode: "branch", branch: "docs", worktree: "worktrees/docs", sync_marker: "SYNC.yaml", delivery: "direct-push" },
+    components: {},
+    validation: { default: ["npm test"] },
+  };
+
+  assert.deepEqual(await validateArtifact("project", base), { valid: true, errors: [] });
+
+  const integrated = {
+    ...base,
+    integrations: {
+      work_tracker: {
+        provider: "azure-devops",
+        requirement: "required",
+        settings: { organization: "contoso", project: "platform" },
+      },
+      code_host: { provider: "github", requirement: "required" },
+      observability: { provider: "datadog", requirement: "optional", settings: { site: "datadoghq.eu" } },
+      knowledge: { provider: "notion", requirement: "disabled" },
+    },
+  };
+  assert.deepEqual(await validateArtifact("project", integrated), { valid: true, errors: [] });
+
+  const badRequirement = structuredClone(integrated);
+  badRequirement.integrations.observability.requirement = "best-effort";
+  const invalidRequirement = await validateArtifact("project", badRequirement);
+  assert.equal(invalidRequirement.valid, false);
+  assert.ok(invalidRequirement.errors.some(({ path, keyword }) => path === "/integrations/observability/requirement" && keyword === "enum"));
+
+  const missingProvider = structuredClone(integrated);
+  delete missingProvider.integrations.work_tracker.provider;
+  const invalidProvider = await validateArtifact("project", missingProvider);
+  assert.equal(invalidProvider.valid, false);
+  assert.ok(invalidProvider.errors.some(({ path, keyword }) => path === "/integrations/work_tracker/provider" && keyword === "required"));
+
+  const secretSetting = structuredClone(integrated);
+  secretSetting.integrations.work_tracker.settings.access_token = "must-not-be-committed";
+  const invalidSecret = await validateArtifact("project", secretSetting);
+  assert.equal(invalidSecret.valid, false);
+  assert.ok(invalidSecret.errors.some(({ path, keyword }) => path === "/integrations/work_tracker/settings/access_token" && keyword === "secret"));
+
+  const structuredSetting = structuredClone(integrated);
+  structuredSetting.integrations.work_tracker.settings.scope = { area: "backend" };
+  const invalidSetting = await validateArtifact("project", structuredSetting);
+  assert.equal(invalidSetting.valid, false);
+  assert.ok(invalidSetting.errors.some(({ path, keyword }) => path === "/integrations/work_tracker/settings/scope" && keyword === "type"));
+
+  const unknownCapability = structuredClone(integrated);
+  unknownCapability.integrations.release_manager = { provider: "example", requirement: "optional" };
+  const invalidCapability = await validateArtifact("project", unknownCapability);
+  assert.equal(invalidCapability.valid, false);
+  assert.ok(invalidCapability.errors.some(({ path, keyword }) => path === "/integrations/release_manager" && keyword === "additionalProperties"));
+
+  const legacyWithIntegrations = { ...base, schema: 1, integrations: integrated.integrations };
+  const invalidLegacy = await validateArtifact("project", legacyWithIntegrations);
+  assert.equal(invalidLegacy.valid, false);
+  assert.ok(invalidLegacy.errors.some(({ path }) => path === "/integrations"));
+});
+
+test("integration and external-action v1 schemas accept durable, secret-free evidence", async () => {
+  const integration = {
+    schema: 1,
+    change_id: "api.retry",
+    bindings: [
+      {
+        name: "primary_work_item",
+        capability: "work_tracker",
+        provider: "azure-devops",
+        requirement: "required",
+        external_id: "12345",
+        url: "https://dev.azure.com/contoso/platform/_workitems/edit/12345",
+        requirements_digest: "b".repeat(64),
+        requirement_fields: ["title", "description", "acceptance_criteria"],
+      },
+    ],
+  };
+  assert.deepEqual(await validateArtifact("integration", integration), { valid: true, errors: [] });
+
+  const receipt = {
+    schema: 1,
+    change_id: "api.retry",
+    sequence: 1,
+    capability: "work_tracker",
+    provider: "azure-devops",
+    transport: "cli",
+    operation: "create_work_item",
+    effect: "write",
+    target: "contoso/platform",
+    idempotency_key: "adw:platform:api.retry:create_work_item",
+    requested_at: "2026-08-05T12:00:00Z",
+    authorized_by: "Ada",
+    authorization_digest: "d".repeat(64),
+    status: "succeeded",
+    request_digest: "c".repeat(64),
+    readback_digest: "e".repeat(64),
+    summary: "created and read back work item 12345",
+    verified: true,
+  };
+  assert.deepEqual(await validateArtifact("external-action", receipt), { valid: true, errors: [] });
+
+  const secretBearing = { ...receipt, access_token: "must-not-be-recorded" };
+  const invalidSecret = await validateArtifact("external-action", secretBearing);
+  assert.equal(invalidSecret.valid, false);
 });
 
 test("invalid values return actionable JSON pointers and contract-specific errors", async () => {

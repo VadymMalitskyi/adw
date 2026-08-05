@@ -8,12 +8,14 @@ discover -> plan -> approve -> execute -> validate -> draft PR
 
 The plugin contains the skills, schemas, templates, and deterministic helper. Initialized projects contain only project-specific `adw.yaml`, bounded routing blocks, ignored local state, and a `docs` branch checked out at `worktrees/docs`.
 
+Projects may also opt into provider-neutral integrations for work tracking, code hosting, observability, and knowledge. ADW targets Azure DevOps, GitHub, Datadog, and Notion first, but workflows depend on capabilities rather than provider-specific tools. A project with no integrations keeps the lightweight local workflow.
+
 ## Requirements
 
 - Node.js 20 or newer for the bundled internal helper.
 - Git with worktree support.
 - A current Codex or Claude Code plugin manager.
-- GitHub tooling only when the user explicitly authorizes draft-PR work.
+- Provider tooling only when an integration or external delivery is requested. Credentials remain in the provider, MCP client, CLI, or external credential store.
 
 ## Private development installation
 
@@ -29,14 +31,14 @@ claude plugin install adw@adw-local --scope user
 
 Then start a new provider session in a target Git project and invoke `adw:init`. See [private installation](docs/private-installation.md) for tagged private repositories, organization distribution, update, and rollback guidance.
 
-## MVP skills
+## Skills
 
 - Foundation: `adw:init`, `adw:doctor`, `adw:status`, `adw:discover`
 - Change loop: `adw:plan`, `adw:approve`, `adw:amend`, `adw:execute`
 - Delivery: `adw:quick`, `adw:address-review`
 - Maintenance: `adw:sync-docs`, `adw:update`
 
-The first release intentionally excludes the deferred `brainstorm`, `review-plan`, and `add-mcp` skills.
+The optional integration layer is configured per project; it is not a requirement for the core plan/approve/execute loop. The `brainstorm`, `review-plan`, and `add-mcp` skills remain deferred, and ADW uses only transports already configured by the user. See [integration architecture](docs/integrations.md) for capabilities, provider and transport resolution, external-action safety, and Azure DevOps transport limitations.
 
 ## Development
 
@@ -46,4 +48,4 @@ claude plugin validate --strict plugin
 claude plugin validate --strict .claude-plugin/marketplace.json
 ```
 
-ADW never merges, releases, deploys, force-pushes, or applies external writes without explicit authorization.
+ADW never merges, releases, deploys, force-pushes, or applies external writes without explicit authorization. Every authorized external mutation is idempotent where the provider permits it, read back for verification, and recorded as a redacted receipt.

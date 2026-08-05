@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { createApproval, recordValidation } from "../../plugin/lib/adw-helper.mjs";
+import { createApproval, createApprovalBundle, recordValidation } from "../../plugin/lib/adw-helper.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const initScript = join(repositoryRoot, "plugin/skills/init/scripts/init.mjs");
@@ -66,13 +66,15 @@ test("doctor and status reconstruct initialized state without writes", async () 
   git(docs, "add", "changes/sample-change/spec.md", "changes/sample-change/plan.yaml");
   git(docs, "commit", "-q", "-m", "Plan sample change");
   const planCommit = git(docs, "rev-parse", "HEAD");
-  const approval = createApproval({
+  const approval = createApprovalBundle({
     approver: "test-user",
     approved_at: "2026-08-05T12:00:00Z",
     plugin_version: "0.1.0",
     docs_commit: planCommit,
-    spec,
-    plan,
+    inputs: [
+      { path: "spec.md", content: spec },
+      { path: "plan.yaml", content: plan },
+    ],
   });
   writeFileSync(join(change, "approval.json"), `${JSON.stringify(approval, null, 2)}\n`);
   git(docs, "add", "changes/sample-change/approval.json");
@@ -105,6 +107,7 @@ test("doctor and status reconstruct initialized state without writes", async () 
   assert.equal(status.changes[0].validation.state, "passed");
   assert.equal(status.changes[0].state, "validated");
   assert.equal(status.draft_prs.state, "not-queried");
+  assert.equal(status.pull_requests.state, "not-queried");
   assert.equal(fingerprint(root), beforeFingerprint);
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), codeStatusBefore);
   assert.equal(git(docs, "status", "--porcelain=v1", "--untracked-files=all"), docsStatusBefore);

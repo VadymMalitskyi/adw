@@ -48,29 +48,30 @@ function schemaVersion(text) {
 }
 
 function supportedSchemas() {
-  return readdirSync(join(pluginRoot, "schemas"))
+  const versions = readdirSync(join(pluginRoot, "schemas"))
     .map((name) => /^project\.v([0-9]+)\.schema\.json$/.exec(name))
     .filter(Boolean)
     .map((match) => Number(match[1]))
     .sort((a, b) => a - b);
+  return versions.length === 0 ? [] : [versions.at(-1)];
 }
 
 function pluginVersion() {
   return JSON.parse(readFileSync(join(pluginRoot, ".codex-plugin/plugin.json"), "utf8")).version;
 }
 
-function migrateZeroToOne(text) {
+function validateLegacyShape(text) {
   for (const section of ["git", "documentation", "components", "validation"]) {
     if (!new RegExp(`^${section}:\\s*$`, "m").test(text)) throw new Error(`legacy schema 0 configuration is missing required ${section} section; migrate manually`);
   }
-  return text.replace(/^schema:\s*0\s*(?:#.*)?$/m, "schema: 1");
 }
 
 function migrationPlan(text, current, supported) {
   const target = Math.max(...supported);
-  if (current === 0 && target >= 1 && supported.includes(1)) {
-    const content = migrateZeroToOne(text);
-    return { from_schema: 0, to_schema: 1, operations: [{ path: "adw.yaml", content, expected_content: text }] };
+  if ((current === 0 || current === 1) && target === 2) {
+    if (current === 0) validateLegacyShape(text);
+    const content = text.replace(/^schema:\s*[01]\s*(?:#.*)?$/m, "schema: 2");
+    return { from_schema: current, to_schema: 2, operations: [{ path: "adw.yaml", content, expected_content: text }] };
   }
   throw new Error(`no bundled, contiguous migration path from project schema ${current} to supported schemas ${supported.join(", ")}`);
 }
@@ -87,8 +88,8 @@ try {
   const current = schemaVersion(before);
   const supported = supportedSchemas();
   const version = pluginVersion();
-  const compatibility = current === 0 && supported.includes(1)
-    ? { compatible: false, migration_required: true, reason: "legacy pre-schema project requires migration to schema 1" }
+  const compatibility = current === 0 && supported.includes(2)
+    ? { compatible: false, migration_required: true, reason: "legacy pre-schema project requires migration to schema 2" }
     : checkCompatibility({ project_schema: current, supported_project_schemas: supported, plugin_version: version });
   const base = { ok: true, mode: args.action, plugin_root: pluginRoot, plugin_version: version, project_schema: current, supported_project_schemas: supported, historical_artifacts: "untouched" };
   if (compatibility.compatible) {

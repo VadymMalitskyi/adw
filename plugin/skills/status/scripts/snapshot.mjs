@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { verifyApprovalDigest, validateArtifact } from "../../../lib/adw-helper.mjs";
+import { verifyApprovalBundle, verifyApprovalDigest, validateArtifact } from "../../../lib/adw-helper.mjs";
 
 function parseArguments(argv) {
   const index = argv.indexOf("--project-root");
@@ -28,32 +28,57 @@ async function changeSnapshot(changePath, changeId) {
   const specPath = join(changePath, "spec.md");
   const planPath = join(changePath, "plan.yaml");
   const approvalPath = join(changePath, "approval.json");
+  const integrationsPath = join(changePath, "integrations.yaml");
   const validationPath = join(changePath, "validation.json");
+  const externalEventsPath = join(changePath, "external-events");
   const snapshot = {
     change_id: changeId,
     artifacts: {
       spec: existsSync(specPath),
       plan: existsSync(planPath),
       approval: existsSync(approvalPath),
+      integrations: existsSync(integrationsPath),
       validation: existsSync(validationPath),
+      external_events: existsSync(externalEventsPath) ? readdirSync(externalEventsPath).filter((name) => name.endsWith(".json")).length : 0,
     },
     approval: { state: "missing" },
     validation: { state: "missing" },
+    external_actions: { total: 0, valid: 0, invalid: [] },
     state: "draft",
   };
+  if (existsSync(externalEventsPath)) {
+    const names = readdirSync(externalEventsPath).filter((name) => name.endsWith(".json")).sort();
+    snapshot.external_actions.total = names.length;
+    for (const name of names) {
+      const parsed = readJson(join(externalEventsPath, name));
+      if (parsed.error) snapshot.external_actions.invalid.push({ path: name, reason: parsed.error });
+      else {
+        const schema = await validateArtifact("external-action", parsed.value);
+        if (schema.valid) snapshot.external_actions.valid += 1;
+        else snapshot.external_actions.invalid.push({ path: name, reason: "external action schema is invalid" });
+      }
+    }
+  }
   if (existsSync(approvalPath)) {
     const parsed = readJson(approvalPath);
     if (parsed.error) snapshot.approval = { state: "invalid", reason: parsed.error };
     else {
       const schema = await validateArtifact("approval", parsed.value);
-      const digestMatches = snapshot.artifacts.spec && snapshot.artifacts.plan && verifyApprovalDigest(readFileSync(specPath), readFileSync(planPath), parsed.value);
+      let digestMatches = false;
+      if (schema.valid && parsed.value.schema === 2) {
+        const paths = parsed.value.inputs.map(({ path }) => path);
+        const present = paths.every((path) => existsSync(join(changePath, path)));
+        digestMatches = present && verifyApprovalBundle(paths.map((path) => ({ path, content: readFileSync(join(changePath, path)) })), parsed.value);
+      } else if (schema.valid && parsed.value.schema === 1) {
+        digestMatches = snapshot.artifacts.spec && snapshot.artifacts.plan && verifyApprovalDigest(readFileSync(specPath), readFileSync(planPath), parsed.value);
+      }
       const active = schema.valid && parsed.value.status === "active" && digestMatches;
       snapshot.approval = {
         state: active ? "active" : "invalid",
         approver: parsed.value.approver,
         approved_at: parsed.value.approved_at,
         docs_commit: parsed.value.docs_commit,
-        reason: active ? "digest matches current spec and plan bytes" : !schema.valid ? "approval schema is invalid" : parsed.value.status !== "active" ? "approval is superseded" : "approval digest is stale",
+        reason: active ? "digest matches current approval input bytes" : !schema.valid ? "approval schema is invalid" : parsed.value.status !== "active" ? "approval is superseded" : "approval digest is stale",
       };
     }
   }
@@ -129,7 +154,8 @@ try {
       dirty: docsDirty.status === 0 ? docsDirty.stdout.trim().split("\n").filter(Boolean) : [],
     },
     changes,
-    draft_prs: { state: "not-queried", reason: "local snapshot does not access the network; query the configured GitHub integration separately" },
+    pull_requests: { state: "not-queried", reason: "local snapshot does not access the network; query the configured code_host capability separately" },
+    draft_prs: { state: "not-queried", reason: "compatibility alias; query pull_requests through the configured code_host capability" },
   }, null, 2)}\n`);
 } catch (error) {
   process.stdout.write(`${JSON.stringify({ ok: false, read_only: true, error: error.message })}\n`);

@@ -23,7 +23,8 @@ test("the generated helper remains dependency-free and runnable on Node 20", () 
 
 test("the bundle covers every operational helper entry point maintained in source", () => {
   const operationalExports = new Map([
-    ["src/helpers/approval.ts", ["computeApprovalDigest", "verifyApprovalDigest", "createApproval"]],
+    ["src/helpers/approval.ts", ["computeApprovalDigest", "verifyApprovalDigest", "createApproval", "computeApprovalBundle", "createApprovalBundle", "verifyApprovalBundle"]],
+    ["src/helpers/integrations.ts", ["computeRequirementsDigest", "recordExternalAction"]],
     ["src/helpers/migration.ts", ["resolveProjectPath", "applyAtomicMigration"]],
     ["src/helpers/project-version.ts", ["checkCompatibility"]],
     ["src/helpers/schemas.ts", ["validateJsonSchema"]],
@@ -46,6 +47,7 @@ test("security- and evidence-critical source invariants are represented in the b
     ["src/helpers/project-version.ts", ["project_schema", "supported_project_schemas", "artifact_plugin_version", "migration_required"]],
     ["src/helpers/schemas.ts", ["additionalProperties", "date-time", "unresolvable schema reference"]],
     ["src/helpers/validation.ts", ["authorization", "[REDACTED]", "timed_out", "required"]],
+    ["src/helpers/integrations.ts", ["ADW-INTEGRATION-REQUIREMENTS-V1\\0", "authorization", "[REDACTED]", "readback_digest"]],
   ]);
 
   for (const [sourcePath, markers] of invariantMarkers) {

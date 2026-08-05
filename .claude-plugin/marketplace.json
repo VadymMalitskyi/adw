@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "adw-local",
-  "description": "Private local marketplace for the ADW development workflow plugin.",
+  "description": "Private local marketplace for ADW and its optional project integrations.",
   "owner": {
     "name": "ADW maintainers"
   },
@@ -9,8 +9,8 @@
     {
       "name": "adw",
       "source": "./plugin",
-      "description": "Git-native planning, approval, execution, and documentation workflows for software projects.",
-      "version": "0.1.0"
+      "description": "Git-native development workflows with optional provider-neutral project integrations.",
+      "version": "0.2.0"
     }
   ]
 }

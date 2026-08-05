@@ -42,6 +42,9 @@ test("quick retains execution safety, evidence, docs, and delivery gates", () =>
   assert.match(quick, /helper's `run-validation` command/);
   assert.match(quick, /Capture helper output even when it exits with `VALIDATION_FAILED`/);
   assert.match(quick, /required failure, signal, timeout, or deferral remains `failed`/);
-  assert.match(quick, /only after passed evidence and explicit user authorization/);
-  assert.match(quick, /never mark ready, approve, merge, release, deploy, or force-push/);
+  assert.match(quick, /only after passed evidence/);
+  assert.match(quick, /authorization for the exact push and pull-request payload/);
+  assert.match(quick, /explicit (?:user )?(?:authorization|delivery request)/);
+  assert.match(quick, /configured `code_host`/);
+  assert.match(quick, /never mark ready, approve, merge, release, deploy, or force-push/i);
 });

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { createApproval, dispatch, EXIT } from "../../plugin/lib/adw-helper.mjs";
+import { createApprovalBundle, dispatch, EXIT } from "../../plugin/lib/adw-helper.mjs";
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(testDirectory, "../..");
@@ -14,14 +14,17 @@ function readSkill(name) {
 
 const spec = Buffer.from("# Change: api-retry\n\nExact spec bytes.\n", "utf8");
 const plan = Buffer.from("schema: 1\nchange_id: api-retry\n", "utf8");
+const inputs = [
+  { path: "spec.md", content: spec },
+  { path: "plan.yaml", content: plan },
+];
 const docsCommit = "a".repeat(40);
-const approval = createApproval({
+const approval = createApprovalBundle({
   approver: "Ada",
   approved_at: "2026-08-05T12:00:00Z",
   plugin_version: "0.1.0",
   docs_commit: docsCommit,
-  spec,
-  plan,
+  inputs,
 });
 
 test("approval skill binds a fresh explicit human decision to exact bytes and pre-approval commit", () => {
@@ -33,8 +36,8 @@ test("approval skill binds a fresh explicit human decision to exact bytes and pr
   assert.match(skill, /End the interaction and wait for a fresh response/);
   assert.match(skill, /Do not trim whitespace, normalize line endings, reserialize YAML/);
   assert.match(skill, /pre-approval artifact commit, not the later approval commit/);
-  assert.match(skill, /create-approval/);
-  assert.match(skill, /Never edit the spec or plan during approval/);
+  assert.match(skill, /create-approval-bundle/);
+  assert.match(skill, /Never edit any approval input/);
 });
 
 test("approve and amend skills share portable helper resolution", () => {
@@ -47,19 +50,21 @@ test("approve and amend skills share portable helper resolution", () => {
 });
 
 test("helper rejects exact-byte drift, commit drift, and superseded approval", async () => {
-  const current = await dispatch("verify-approval", { spec, plan, docs_commit: docsCommit, approval });
+  const current = await dispatch("verify-approval-bundle", { inputs, docs_commit: docsCommit, approval });
   assert.equal(current.exitCode, EXIT.OK);
 
-  const byteDrift = await dispatch("verify-approval", {
-    spec: Buffer.from(`${spec.toString("utf8")}\n`, "utf8"),
-    plan,
+  const byteDrift = await dispatch("verify-approval-bundle", {
+    inputs: [
+      { path: "spec.md", content: Buffer.from(`${spec.toString("utf8")}\n`, "utf8") },
+      inputs[1],
+    ],
     docs_commit: docsCommit,
     approval,
   });
   assert.equal(byteDrift.exitCode, EXIT.APPROVAL_INVALID);
-  assert.match(byteDrift.body.reason, /digest does not match exact spec and plan content/);
+  assert.match(byteDrift.body.reason, /digest does not match the exact input bundle/);
 
-  const commitDrift = await dispatch("verify-approval", { spec, plan, docs_commit: "b".repeat(40), approval });
+  const commitDrift = await dispatch("verify-approval-bundle", { inputs, docs_commit: "b".repeat(40), approval });
   assert.equal(commitDrift.exitCode, EXIT.APPROVAL_INVALID);
   assert.match(commitDrift.body.reason, /different docs commit/);
 
@@ -71,7 +76,7 @@ test("helper rejects exact-byte drift, commit drift, and superseded approval", a
   };
   const validEvidence = await dispatch("validate", { artifact: "approval", data: superseded });
   assert.equal(validEvidence.exitCode, EXIT.OK);
-  const invalidated = await dispatch("verify-approval", { spec, plan, docs_commit: docsCommit, approval: superseded });
+  const invalidated = await dispatch("verify-approval-bundle", { inputs, docs_commit: docsCommit, approval: superseded });
   assert.equal(invalidated.exitCode, EXIT.APPROVAL_INVALID);
   assert.match(invalidated.body.reason, /superseded/);
 });
