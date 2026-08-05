@@ -1,0 +1,4 @@
+interface:
+  display_name: "ADW Amend"
+  short_description: "Amend a plan and invalidate approval"
+  default_prompt: "Use $amend to revise an ADW plan and preserve approval history."

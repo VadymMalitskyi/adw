@@ -1,0 +1,10 @@
+{
+  "name": "@fixture/web",
+  "private": true,
+  "scripts": {
+    "lint": "eslint src",
+    "test": "node --test",
+    "build": "vite build",
+    "publish": "fixture-publish-must-not-be-selected"
+  }
+}

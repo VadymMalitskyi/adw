@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adw.local/schemas/validation.v1.schema.json",
+  "title": "ADW validation evidence v1",
+  "type": "object",
+  "required": ["schema", "change_id", "plugin_version", "code_commit", "docs_commit", "recorded_at", "status", "commands", "deferred"],
+  "properties": {
+    "schema": { "const": 1 },
+    "change_id": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]|\\.[a-z0-9_-]+)*$" },
+    "plugin_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$" },
+    "code_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "docs_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "recorded_at": { "type": "string", "format": "date-time" },
+    "status": { "enum": ["passed", "failed"] },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["command", "cwd", "exit_code", "signal", "timed_out", "duration_ms", "summary", "required"],
+        "properties": {
+          "command": { "type": "string", "minLength": 1 },
+          "cwd": { "type": "string", "minLength": 1 },
+          "exit_code": { "anyOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
+          "signal": { "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+          "timed_out": { "type": "boolean" },
+          "duration_ms": { "type": "integer", "minimum": 0 },
+          "summary": { "type": "string", "maxLength": 4000 },
+          "required": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "deferred": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["command", "reason", "required"],
+        "properties": {
+          "command": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "minLength": 1 },
+          "required": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

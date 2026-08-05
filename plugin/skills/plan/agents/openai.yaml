@@ -1,0 +1,4 @@
+interface:
+  display_name: "ADW Plan"
+  short_description: "Plan a repository-grounded ADW change"
+  default_prompt: "Use $plan to create an ADW specification and sequential plan."

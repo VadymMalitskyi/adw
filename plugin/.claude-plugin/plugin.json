@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "adw",
+  "displayName": "ADW",
+  "version": "0.1.0",
+  "description": "Git-native planning, approval, execution, and documentation workflows for software projects.",
+  "author": {
+    "name": "ADW maintainers"
+  },
+  "skills": "./skills/"
+}

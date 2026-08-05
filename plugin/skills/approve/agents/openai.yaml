@@ -1,0 +1,4 @@
+interface:
+  display_name: "ADW Approve"
+  short_description: "Approve exact ADW planning artifacts"
+  default_prompt: "Use $approve to validate and approve the current ADW plan."

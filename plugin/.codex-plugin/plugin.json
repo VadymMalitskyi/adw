@@ -1,0 +1,22 @@
+{
+  "name": "adw",
+  "version": "0.1.0",
+  "description": "Git-native planning, approval, execution, and documentation workflows for software projects.",
+  "author": {
+    "name": "ADW maintainers"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "ADW",
+    "shortDescription": "Run reviewable, Git-native development workflows",
+    "longDescription": "ADW provides reusable project initialization, planning, approval, execution, validation, and documentation workflows without copying plugin code into each project.",
+    "developerName": "ADW maintainers",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive"
+    ],
+    "defaultPrompt": [
+      "Check this project's ADW setup."
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "existing-fixture",
+  "private": true,
+  "scripts": {
+    "lint": "eslint src",
+    "test": "node --test",
+    "build": "node tools/build.mjs",
+    "deploy": "fixture-deploy-must-not-be-selected"
+  }
+}

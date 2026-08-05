@@ -1,0 +1,22 @@
+# ADW project configuration. Commands must cite an observable project source.
+schema: 1
+
+git:
+  default_branch: main
+
+documentation:
+  mode: branch
+  branch: docs
+  worktree: worktrees/docs
+  sync_marker: SYNC.yaml
+  delivery: direct-push
+
+components:
+  app:
+    path: .
+
+validation:
+  default:
+    - command: "<replace with a verified command>"
+      source: "<manifest, task runner, CI workflow, or existing documentation>"
+      required: true

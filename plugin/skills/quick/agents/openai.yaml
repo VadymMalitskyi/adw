@@ -1,0 +1,4 @@
+interface:
+  display_name: "ADW Quick"
+  short_description: "Deliver a small low-risk ADW correction"
+  default_prompt: "Use $quick to implement this narrow low-risk change with full validation."

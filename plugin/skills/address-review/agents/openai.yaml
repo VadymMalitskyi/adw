@@ -1,0 +1,4 @@
+interface:
+  display_name: "ADW Address Review"
+  short_description: "Address ADW pull-request review feedback"
+  default_prompt: "Use $address-review to classify and address the review feedback on this ADW pull request."

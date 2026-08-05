@@ -1,0 +1,5 @@
+{
+  "name": "fixture-owned-container",
+  "build": { "dockerfile": "Dockerfile" },
+  "customizations": { "fixture": true }
+}

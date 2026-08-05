@@ -1,0 +1,23 @@
+schema: 1
+change_id: <change-id>
+summary: <concise implementation summary>
+
+tasks:
+  - id: 1
+    title: <task title>
+    description: <specific sequential implementation work>
+    affected_paths:
+      - <project-relative path>
+    anchors:
+      - <symbol, heading, or line reference>
+    restrictions:
+      - <scope or safety constraint>
+    validation:
+      - command: <exact command>
+        cwd: .
+        timeout_ms: 120000
+        required: true
+
+documentation:
+  impact: none # none | update | new
+  files: []

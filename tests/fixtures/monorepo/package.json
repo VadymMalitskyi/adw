@@ -1,0 +1,11 @@
+{
+  "name": "polyglot-fixture",
+  "private": true,
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "lint": "npm run lint --workspace @fixture/web",
+    "test": "npm run test --workspaces --if-present"
+  }
+}

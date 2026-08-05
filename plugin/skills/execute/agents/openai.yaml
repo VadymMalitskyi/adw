@@ -1,0 +1,4 @@
+interface:
+  display_name: "ADW Execute"
+  short_description: "Execute an approved ADW change safely"
+  default_prompt: "Use $execute to implement an approved ADW change and record validation evidence."
