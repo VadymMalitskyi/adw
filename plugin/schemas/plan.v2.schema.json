@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adw.local/schemas/plan.v2.schema.json",
+  "title": "ADW sequential implementation plan v2",
+  "type": "object",
+  "required": ["schema", "change_id", "summary", "effective_policy", "tasks", "documentation"],
+  "properties": {
+    "schema": { "const": 2 },
+    "change_id": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9_-]|\\.[a-z0-9_-]+)*$" },
+    "summary": { "type": "string", "minLength": 1 },
+    "effective_policy": {
+      "type": "object",
+      "required": ["components", "unowned_paths", "project_policy_digest", "required_validation"],
+      "properties": {
+        "components": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "unowned_paths": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "project_policy_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "required_validation": { "type": "array", "items": { "$ref": "#/$defs/validation" } },
+        "work_tracker": {
+          "type": "object",
+          "required": ["binding", "ensure", "stage", "cardinality"],
+          "properties": {
+            "binding": { "enum": ["optional", "required"] },
+            "ensure": { "enum": ["link-only", "create-or-link"] },
+            "stage": { "enum": ["plan", "execute"] },
+            "cardinality": { "enum": ["one-per-change", "one-parent-plus-plan-tasks"] },
+            "profile": { "type": "string", "minLength": 1 },
+            "profile_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "child_profile": { "type": "string", "minLength": 1 },
+            "child_profile_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "description", "affected_paths", "validation"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "affected_paths": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$" } },
+          "anchors": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "restrictions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "validation": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/validation" } }
+        },
+        "additionalProperties": false
+      }
+    },
+    "documentation": {
+      "type": "object",
+      "required": ["impact", "files"],
+      "properties": {
+        "impact": { "enum": ["none", "update", "new"] },
+        "files": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "validation": {
+      "type": "object",
+      "required": ["command", "cwd", "timeout_ms", "required", "source"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "cwd": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$" },
+        "timeout_ms": { "type": "integer", "minimum": 1 },
+        "required": { "type": "boolean" },
+        "source": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

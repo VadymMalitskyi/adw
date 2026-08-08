@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const skillDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -58,6 +58,22 @@ function integrationDeclarations(text) {
   return declarations;
 }
 
+function componentDeclarations(text) {
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex((line) => /^components:\s*(?:#.*)?$/.test(line));
+  if (start === -1) return [];
+  const components = [];
+  let current;
+  for (const line of lines.slice(start + 1)) {
+    if (/^\S/.test(line)) break;
+    const component = /^  ([A-Za-z0-9_-]+):\s*(?:#.*)?$/.exec(line);
+    if (component) { current = { name: component[1] }; components.push(current); continue; }
+    const path = current && /^    path:\s*(?:"([^"]*)"|'([^']*)'|([^#\n]+))/.exec(line);
+    if (path) current.path = (path[1] ?? path[2] ?? path[3]).trim();
+  }
+  return components;
+}
+
 function executionDeclaration(text) {
   const lines = text.split(/\r?\n/);
   const start = lines.findIndex((line) => /^execution:\s*(?:#.*)?$/.test(line));
@@ -69,6 +85,68 @@ function executionDeclaration(text) {
     if (field) execution[field[1]] = (field[2] ?? field[3] ?? field[4]).trim();
   }
   return execution;
+}
+
+function workTrackerWorkflow(text) {
+  const lines = text.split(/\r?\n/);
+  const workflows = lines.findIndex((line) => /^workflows:\s*(?:#.*)?$/.test(line));
+  if (workflows === -1) return null;
+  const start = lines.findIndex((line, index) => index > workflows && /^  work_tracker:\s*(?:#.*)?$/.test(line));
+  if (start === -1) return null;
+  const policy = {};
+  for (const line of lines.slice(start + 1)) {
+    if (/^\S|^  \S/.test(line)) break;
+    const field = /^    (binding|ensure|stage|cardinality|profile|child_profile):\s*(?:"([^"]*)"|'([^']*)'|([^#\n]+))/.exec(line);
+    if (field) policy[field[1]] = (field[2] ?? field[3] ?? field[4]).trim();
+  }
+  return policy;
+}
+
+function workTrackerPolicyChecks(projectRoot, config, integrations) {
+  const policy = workTrackerWorkflow(config);
+  if (!policy) return [];
+  const tracker = integrations.find(({ capability }) => capability === "work_tracker");
+  const validPolicy = ["optional", "required"].includes(policy.binding)
+    && ["link-only", "create-or-link"].includes(policy.ensure)
+    && ["plan", "execute"].includes(policy.stage)
+    && ["one-per-change", "one-parent-plus-plan-tasks"].includes(policy.cardinality)
+    && tracker && tracker.requirement !== "disabled"
+    && (policy.binding !== "required" || tracker.requirement === "required")
+    && (policy.ensure !== "create-or-link" || tracker.access === "read-write");
+  const checks = [check("workflow:work_tracker", validPolicy ? "pass" : "fail", validPolicy ? `${policy.binding} ${policy.ensure} policy at ${policy.stage}` : "invalid work-tracker policy or disabled capability", policy)];
+  if (!policy.profile) {
+    if (policy.ensure === "create-or-link") checks.push(check("workflow:work_tracker:profile", "fail", "create-or-link policy requires a profile"));
+    return checks;
+  }
+  const target = resolve(projectRoot, policy.profile);
+  const rel = relative(projectRoot, target);
+  if (isAbsolute(policy.profile) || rel === ".." || rel.startsWith("../") || !existsSync(target) || lstatSync(target).isSymbolicLink()) {
+    checks.push(check("workflow:work_tracker:profile", "fail", "profile must be an existing non-symlink project-relative file", { profile: policy.profile }));
+    return checks;
+  }
+  const profile = readFileSync(target, "utf8");
+  const provider = yamlValue(profile, "provider");
+  const structurallyPresent = yamlValue(profile, "schema") === "1"
+    && Boolean(yamlValue(profile, "id"))
+    && Boolean(yamlValue(profile, "object_type"))
+    && /^required_fields:\s*$/m.test(profile)
+    && /^requirement_fields:\s*$/m.test(profile);
+  const valid = structurallyPresent && provider === tracker?.provider;
+  checks.push(check("workflow:work_tracker:profile", valid ? "pass" : "fail", valid ? "profile structure and provider match" : "profile structure or provider is invalid", { profile: policy.profile, provider, sha256: createHash("sha256").update(profile).digest("hex") }));
+  if (policy.cardinality === "one-parent-plus-plan-tasks" && !policy.child_profile) checks.push(check("workflow:work_tracker:child-profile", "fail", "one-parent-plus-plan-tasks requires a child profile"));
+  if (policy.child_profile) {
+    const childTarget = resolve(projectRoot, policy.child_profile);
+    const childRel = relative(projectRoot, childTarget);
+    if (isAbsolute(policy.child_profile) || childRel === ".." || childRel.startsWith("../") || !existsSync(childTarget) || lstatSync(childTarget).isSymbolicLink()) {
+      checks.push(check("workflow:work_tracker:child-profile", "fail", "child profile must be an existing non-symlink project-relative file", { profile: policy.child_profile }));
+    } else {
+      const child = readFileSync(childTarget, "utf8");
+      const childProvider = yamlValue(child, "provider");
+      const childValid = yamlValue(child, "schema") === "1" && Boolean(yamlValue(child, "id")) && Boolean(yamlValue(child, "object_type")) && /^required_fields:\s*$/m.test(child) && /^requirement_fields:\s*$/m.test(child) && childProvider === tracker?.provider;
+      checks.push(check("workflow:work_tracker:child-profile", childValid ? "pass" : "fail", childValid ? "child profile structure and provider match" : "child profile structure or provider is invalid", { profile: policy.child_profile, provider: childProvider, sha256: createHash("sha256").update(child).digest("hex") }));
+    }
+  }
+  return checks;
 }
 
 function managedDevcontainerChecks(projectRoot, execution) {
@@ -176,8 +254,11 @@ function projectChecks(projectRoot) {
     const config = readFileSync(configPath, "utf8");
     const schema = yamlValue(config, "schema");
     const worktree = yamlValue(config, "worktree");
-    checks.push(check("project-schema", schema === "3" ? "pass" : "fail", schema === "3" ? "project schema 3 is supported" : `unsupported or migration-required schema: ${schema ?? "missing"}`));
+    checks.push(check("project-schema", schema === "4" ? "pass" : "fail", schema === "4" ? "project schema 4 is supported" : `unsupported or migration-required schema: ${schema ?? "missing"}`));
     checks.push(check("docs-config", worktree === "worktrees/docs" ? "pass" : "fail", worktree === "worktrees/docs" ? "docs worktree uses worktrees/docs" : `unexpected docs worktree: ${worktree ?? "missing"}`));
+    const componentPaths = componentDeclarations(config).map(({ path }) => path).filter(Boolean);
+    const uniqueComponents = new Set(componentPaths).size === componentPaths.length;
+    checks.push(check("components", uniqueComponents ? "pass" : "fail", uniqueComponents ? `${componentPaths.length} component path(s) have unambiguous ownership` : "duplicate component paths create ambiguous ownership"));
     checks.push(...executionChecks(projectRoot, config));
     const integrations = integrationDeclarations(config);
     if (integrations.length === 0) {
@@ -193,6 +274,7 @@ function projectChecks(projectRoot) {
         ));
       }
     }
+    checks.push(...workTrackerPolicyChecks(projectRoot, config, integrations));
   }
 
   for (const [path, start, end] of [

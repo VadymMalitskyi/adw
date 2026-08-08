@@ -11,9 +11,13 @@ export const ARTIFACT_SCHEMAS = Object.freeze({
   project: Object.freeze({
     1: new URL("../schemas/project.v1.schema.json", import.meta.url),
     2: new URL("../schemas/project.v2.schema.json", import.meta.url),
-    3: new URL("../schemas/project.v3.schema.json", import.meta.url)
+    3: new URL("../schemas/project.v3.schema.json", import.meta.url),
+    4: new URL("../schemas/project.v4.schema.json", import.meta.url)
   }),
-  plan: Object.freeze({ 1: new URL("../schemas/plan.v1.schema.json", import.meta.url) }),
+  plan: Object.freeze({
+    1: new URL("../schemas/plan.v1.schema.json", import.meta.url),
+    2: new URL("../schemas/plan.v2.schema.json", import.meta.url)
+  }),
   approval: Object.freeze({
     1: new URL("../schemas/approval.v1.schema.json", import.meta.url),
     2: new URL("../schemas/approval.v2.schema.json", import.meta.url)
@@ -21,7 +25,8 @@ export const ARTIFACT_SCHEMAS = Object.freeze({
   validation: Object.freeze({ 1: new URL("../schemas/validation.v1.schema.json", import.meta.url) }),
   integration: Object.freeze({ 1: new URL("../schemas/integration.v1.schema.json", import.meta.url) }),
   "external-action": Object.freeze({ 1: new URL("../schemas/external-action.v1.schema.json", import.meta.url) }),
-  "incident-report": Object.freeze({ 1: new URL("../schemas/incident-report.v1.schema.json", import.meta.url) })
+  "incident-report": Object.freeze({ 1: new URL("../schemas/incident-report.v1.schema.json", import.meta.url) }),
+  "work-item-profile": Object.freeze({ 1: new URL("../schemas/work-item-profile.v1.schema.json", import.meta.url) })
 });
 
 const DOMAIN = Buffer.from("ADW-APPROVAL-DIGEST-V1\0", "utf8");
@@ -180,6 +185,15 @@ export async function validateArtifact(artifact, data) {
     data.tasks.forEach((task, index) => { if (task?.id !== index + 1) result.errors.push({ path: `/tasks/${index}/id`, keyword: "sequence", message: `must be ${index + 1} so tasks execute sequentially` }); });
     if (data.documentation?.impact !== "none" && Array.isArray(data.documentation?.files) && data.documentation.files.length === 0) result.errors.push({ path: "/documentation/files", keyword: "documentation", message: "must list files when documentation impact is update or new" });
     if (data.documentation?.impact === "none" && Array.isArray(data.documentation?.files) && data.documentation.files.length !== 0) result.errors.push({ path: "/documentation/files", keyword: "documentation", message: "must be empty when documentation impact is none" });
+    if (data.schema === 2) {
+      const components = data.effective_policy?.components ?? [];
+      if (new Set(components).size !== components.length) result.errors.push({ path: "/effective_policy/components", keyword: "unique", message: "components must be unique" });
+      const unownedPaths = data.effective_policy?.unowned_paths ?? [];
+      if (new Set(unownedPaths).size !== unownedPaths.length) result.errors.push({ path: "/effective_policy/unowned_paths", keyword: "unique", message: "unowned paths must be unique" });
+      const tracker = data.effective_policy?.work_tracker;
+      if (tracker && ((tracker.profile === undefined) !== (tracker.profile_digest === undefined))) result.errors.push({ path: "/effective_policy/work_tracker", keyword: "profile", message: "profile and profile_digest must appear together" });
+      if (tracker && ((tracker.child_profile === undefined) !== (tracker.child_profile_digest === undefined))) result.errors.push({ path: "/effective_policy/work_tracker", keyword: "profile", message: "child_profile and child_profile_digest must appear together" });
+    }
     result.valid = result.errors.length === 0;
   }
   if (result.valid && artifact === "validation") {
@@ -199,7 +213,7 @@ export async function validateArtifact(artifact, data) {
     }
     result.valid = result.errors.length === 0;
   }
-  if (result.valid && artifact === "project" && (data.schema === 2 || data.schema === 3)) {
+  if (result.valid && artifact === "project" && (data.schema === 2 || data.schema === 3 || data.schema === 4)) {
     const forbidden = /(?:password|passwd|token|api[_-]?key|secret|credential)/i;
     for (const [capability, integration] of Object.entries(data.integrations ?? {})) {
       for (const key of Object.keys(integration.settings ?? {})) {
@@ -208,9 +222,17 @@ export async function validateArtifact(artifact, data) {
     }
     result.valid = result.errors.length === 0;
   }
-  if (result.valid && artifact === "project" && data.schema === 3) {
+  if (result.valid && artifact === "project" && (data.schema === 3 || data.schema === 4)) {
     if (data.execution.isolation === "managed-devcontainer" && data.execution.enforcement !== "required") {
       result.errors.push({ path: "/execution/enforcement", keyword: "security", message: "managed-devcontainer isolation must be required" });
+    }
+    if (data.schema === 4 && data.workflows?.work_tracker) {
+      const tracker = data.workflows.work_tracker;
+      if (!data.integrations?.work_tracker || data.integrations.work_tracker.requirement === "disabled") result.errors.push({ path: "/workflows/work_tracker", keyword: "capability", message: "requires an enabled integrations.work_tracker capability" });
+      if (tracker.binding === "required" && data.integrations?.work_tracker?.requirement !== "required") result.errors.push({ path: "/workflows/work_tracker/binding", keyword: "capability", message: "required binding requires integrations.work_tracker.requirement to be required" });
+      if (tracker.ensure === "create-or-link" && data.integrations?.work_tracker?.access !== "read-write") result.errors.push({ path: "/workflows/work_tracker/ensure", keyword: "access", message: "create-or-link requires read-write work_tracker access" });
+      if (tracker.ensure === "create-or-link" && !tracker.profile) result.errors.push({ path: "/workflows/work_tracker/profile", keyword: "required", message: "is required when ensure is create-or-link" });
+      if (tracker.cardinality === "one-parent-plus-plan-tasks" && !tracker.child_profile) result.errors.push({ path: "/workflows/work_tracker/child_profile", keyword: "required", message: "is required for one-parent-plus-plan-tasks" });
     }
     result.valid = result.errors.length === 0;
   }
@@ -248,6 +270,17 @@ export async function validateArtifact(artifact, data) {
     if (data.proposed_fix.needed === "yes" && data.proposed_fix.route === "none") result.errors.push({ path: "/proposed_fix/route", keyword: "routing", message: "must select adw:quick or adw:plan when a code fix is needed" });
     result.valid = result.errors.length === 0;
   }
+  if (result.valid && artifact === "work-item-profile") {
+    for (const key of ["required_fields", "allowed_fields", "requirement_fields"]) {
+      const values = data[key] ?? [];
+      if (new Set(values).size !== values.length) result.errors.push({ path: `/${key}`, keyword: "unique", message: `${key} must be unique` });
+    }
+    const declared = new Set([...(data.required_fields ?? []), ...(data.allowed_fields ?? []), ...Object.keys(data.defaults ?? {})]);
+    for (const field of data.requirement_fields ?? []) if (!declared.has(field)) result.errors.push({ path: "/requirement_fields", keyword: "declared", message: `requirement field is not declared by the profile: ${field}` });
+    const forbidden = /(?:password|passwd|token|api[_-]?key|secret|credential)/i;
+    for (const field of declared) if (forbidden.test(field)) result.errors.push({ path: "/required_fields", keyword: "secret", message: `credential-like work-item field is forbidden: ${field}` });
+    result.valid = result.errors.length === 0;
+  }
   return result;
 }
 
@@ -278,6 +311,108 @@ function canonicalJson(value) {
     return `{${entries.join(",")}}`;
   }
   throw new InputError("requirements fields must contain only JSON-compatible values");
+}
+
+export function computePolicyDigest(policy) {
+  return createHash("sha256").update("ADW-EFFECTIVE-POLICY-V1\0").update(canonicalJson(policy)).digest("hex");
+}
+
+function safePolicyPath(path, label) {
+  if (typeof path !== "string" || path.length === 0 || path.startsWith("/") || path.includes("\0") || path.split("/").includes("..")) throw new InputError(`${label} must be a safe project-relative path`);
+  return path.replace(/^\.\//, "").replace(/\/$/, "") || ".";
+}
+
+function componentMatches(componentPath, affectedPath) {
+  return componentPath === "." || affectedPath === componentPath || affectedPath.startsWith(`${componentPath}/`);
+}
+
+function resolvedValidation(item, sourcePath, defaultCwd = ".") {
+  if (typeof item === "string") return { command: item, cwd: defaultCwd, timeout_ms: 120000, required: true, source: sourcePath };
+  return { command: item.command, cwd: item.cwd ?? defaultCwd, timeout_ms: item.timeout_ms ?? 120000, required: item.required !== false, source: item.source };
+}
+
+export function validateWorkItemPayload(profile, payload) {
+  const errors = [];
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return { valid: false, errors: ["payload must be an object"] };
+  if (payload.provider !== profile.provider) errors.push(`payload provider must be ${profile.provider}`);
+  if (payload.object_type !== profile.object_type) errors.push(`payload object_type must be ${profile.object_type}`);
+  if (!payload.fields || typeof payload.fields !== "object" || Array.isArray(payload.fields)) errors.push("payload fields must be an object");
+  if (errors.length) return { valid: false, errors };
+  const fields = { ...(profile.defaults ?? {}), ...payload.fields };
+  const forbidden = /(?:password|passwd|token|api[_-]?key|secret|credential)/i;
+  for (const field of profile.required_fields ?? []) if (!(field in fields)) errors.push(`required field is missing: ${field}`);
+  const allowed = new Set([...(profile.required_fields ?? []), ...(profile.allowed_fields ?? []), ...Object.keys(profile.defaults ?? {})]);
+  for (const field of Object.keys(fields)) if (!allowed.has(field)) errors.push(`field is not allowed by profile: ${field}`);
+  for (const field of Object.keys(fields)) if (forbidden.test(field)) errors.push(`credential-like field is forbidden: ${field}`);
+  for (const [field, value] of Object.entries(fields)) if (!(typeof value === "string" || typeof value === "number" || typeof value === "boolean" || (Array.isArray(value) && value.every((item) => typeof item === "string")))) errors.push(`field value must be a scalar or string array: ${field}`);
+  return errors.length ? { valid: false, errors } : { valid: true, errors: [], normalized: { provider: profile.provider, object_type: profile.object_type, fields } };
+}
+
+export function resolveProjectPolicy({ project, affected_paths, profiles = {} }) {
+  if (!project || project.schema !== 4) throw new InputError("effective policy resolution requires project schema 4");
+  if (!Array.isArray(affected_paths) || affected_paths.length === 0) throw new InputError("affected_paths must be a non-empty array");
+  const paths = [...new Set(affected_paths.map((path) => safePolicyPath(path, "affected path")))];
+  const components = Object.entries(project.components ?? {}).map(([name, value]) => ({ name, ...value, path: safePolicyPath(value.path, `component ${name} path`) }));
+  const selected = new Set();
+  const unownedPaths = [];
+  for (const path of paths) {
+    const candidates = components.filter((component) => componentMatches(component.path, path));
+    if (candidates.length === 0) { unownedPaths.push(path); continue; }
+    const longest = Math.max(...candidates.map((component) => component.path === "." ? 0 : component.path.length));
+    const owners = candidates.filter((component) => (component.path === "." ? 0 : component.path.length) === longest);
+    if (owners.length !== 1) throw new InputError(`affected path ${path} has ambiguous component ownership: ${owners.map(({ name }) => name).sort().join(", ")}`);
+    selected.add(owners[0].name);
+  }
+  const validations = [];
+  for (const [index, item] of (project.validation?.default ?? []).entries()) validations.push(resolvedValidation(item, `adw.yaml#validation.default[${index}]`));
+  for (const name of [...selected].sort()) {
+    const component = project.components[name];
+    for (const [index, item] of (component.validation?.default ?? []).entries()) validations.push(resolvedValidation(item, `adw.yaml#components.${name}.validation.default[${index}]`, component.path));
+  }
+  const deduplicated = new Map();
+  for (const item of validations) {
+    const key = `${item.cwd}\0${item.command}`;
+    const previous = deduplicated.get(key);
+    if (!previous) deduplicated.set(key, item);
+    else if (item.required && !previous.required) deduplicated.set(key, { ...previous, required: true });
+  }
+  const effective = { components: [...selected].sort(), unowned_paths: unownedPaths.sort(), required_validation: [...deduplicated.values()] };
+  const tracker = project.workflows?.work_tracker;
+  if (tracker) {
+    if (!project.integrations?.work_tracker || project.integrations.work_tracker.requirement === "disabled") throw new InputError("work_tracker workflow requires an enabled work_tracker integration");
+    if (tracker.binding === "required" && project.integrations.work_tracker.requirement !== "required") throw new InputError("required work_tracker binding requires a required work_tracker integration");
+    if (tracker.ensure === "create-or-link" && project.integrations.work_tracker.access !== "read-write") throw new InputError("create-or-link work_tracker workflow requires read-write access");
+    const resolvedTracker = { ...tracker };
+    if (tracker.ensure === "create-or-link" && !tracker.profile) throw new InputError("create-or-link work_tracker workflow requires a profile");
+    if (tracker.profile) {
+      const profile = profiles[tracker.profile];
+      if (!profile) throw new InputError(`work-item profile was not supplied: ${tracker.profile}`);
+      if (profile.provider !== project.integrations.work_tracker.provider) throw new InputError("work-item profile provider must match the configured work_tracker provider");
+      resolvedTracker.profile_digest = computePolicyDigest(profile);
+    }
+    if (tracker.cardinality === "one-parent-plus-plan-tasks" && !tracker.child_profile) throw new InputError("one-parent-plus-plan-tasks work_tracker workflow requires a child_profile");
+    if (tracker.child_profile) {
+      const childProfile = profiles[tracker.child_profile];
+      if (!childProfile) throw new InputError(`work-item child profile was not supplied: ${tracker.child_profile}`);
+      if (childProfile.provider !== project.integrations.work_tracker.provider) throw new InputError("work-item child profile provider must match the configured work_tracker provider");
+      resolvedTracker.child_profile_digest = computePolicyDigest(childProfile);
+    }
+    effective.work_tracker = resolvedTracker;
+  }
+  return { ...effective, project_policy_digest: computePolicyDigest(effective) };
+}
+
+export function resolveValidationSet({ effective_policy, tasks }) {
+  const candidates = [...(effective_policy?.required_validation ?? [])];
+  for (const task of tasks ?? []) for (const item of task.validation ?? []) candidates.push({ ...item, source: item.source ?? `plan task ${task.id}` });
+  const resolved = new Map();
+  for (const item of candidates) {
+    const key = `${item.cwd}\0${item.command}`;
+    const previous = resolved.get(key);
+    if (!previous) resolved.set(key, { ...item });
+    else resolved.set(key, { ...previous, required: previous.required || item.required, timeout_ms: Math.min(previous.timeout_ms, item.timeout_ms) });
+  }
+  return [...resolved.values()];
 }
 
 export function computeRequirementsDigest(fields) {
@@ -507,6 +642,26 @@ export async function dispatch(command, rawInput) {
     }
     case "digest-requirements":
       return { exitCode: EXIT.OK, body: { ok: true, algorithm: "sha256", digest: computeRequirementsDigest(input.fields) } };
+    case "resolve-project-policy": {
+      const projectValidation = await validateArtifact("project", input.project);
+      if (!projectValidation.valid) return { exitCode: EXIT.SCHEMA_INVALID, body: { ok: false, errors: projectValidation.errors } };
+      for (const [path, profile] of Object.entries(input.profiles ?? {})) {
+        const profileValidation = await validateArtifact("work-item-profile", profile);
+        if (!profileValidation.valid) return { exitCode: EXIT.SCHEMA_INVALID, body: { ok: false, profile: path, errors: profileValidation.errors } };
+      }
+      const policy = resolveProjectPolicy(input);
+      return { exitCode: EXIT.OK, body: { ok: true, policy } };
+    }
+    case "digest-policy":
+      return { exitCode: EXIT.OK, body: { ok: true, algorithm: "sha256", digest: computePolicyDigest(input.policy) } };
+    case "resolve-validation-set":
+      return { exitCode: EXIT.OK, body: { ok: true, commands: resolveValidationSet(input) } };
+    case "validate-work-item-payload": {
+      const profileValidation = await validateArtifact("work-item-profile", input.profile);
+      if (!profileValidation.valid) return { exitCode: EXIT.SCHEMA_INVALID, body: { ok: false, errors: profileValidation.errors } };
+      const result = validateWorkItemPayload(input.profile, input.payload);
+      return { exitCode: result.valid ? EXIT.OK : EXIT.SCHEMA_INVALID, body: { ok: result.valid, ...result } };
+    }
     case "check-compatibility": {
       const compatibility = checkCompatibility(input);
       return { exitCode: compatibility.compatible ? EXIT.OK : EXIT.INCOMPATIBLE, body: { ok: compatibility.compatible, ...compatibility } };

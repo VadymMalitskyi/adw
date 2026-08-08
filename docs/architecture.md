@@ -16,6 +16,8 @@ Claude manifest ┘                    |
 
 The plugin owns workflow instructions, deterministic mechanics, execution contracts, and the managed-container template. A target project owns `adw.yaml`, its selected execution infrastructure, bounded routing blocks, local ignored state, authoritative code documentation, and docs-branch context/change records.
 
+Schema-4 projects may also own `adw/work-items/*.yaml` payload profiles. The helper resolves affected paths to their single most-specific component, adds global and affected-component validation, resolves optional tracker workflow policy, and digests only that effective subset into plan schema 2. This permits project specialization without copying or overriding core ADW skills.
+
 ## Boundaries
 
 - Provider manifests contain packaging metadata only.

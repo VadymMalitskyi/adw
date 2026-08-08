@@ -68,14 +68,18 @@ function validateLegacyShape(text) {
 
 function migrationPlan(root, text, current, supported) {
   const target = Math.max(...supported);
-  if ((current === 0 || current === 1 || current === 2) && target === 3) {
+  if ((current === 0 || current === 1 || current === 2) && target === 4) {
     if (current === 0) validateLegacyShape(text);
     const isolation = existsSync(join(root, ".devcontainer/devcontainer.json")) ? "project-devcontainer" : "provider-sandbox";
     const enforcement = isolation === "project-devcontainer" ? "required" : "preferred";
-    const upgraded = text.replace(/^schema:\s*[012]\s*(?:#.*)?$/m, "schema: 3");
+    const upgraded = text.replace(/^schema:[ \t]*[012][ \t]*(?:#.*)?$/m, "schema: 4");
     const separator = upgraded.endsWith("\n") ? "" : "\n";
     const content = `${upgraded}${separator}\nexecution:\n  isolation: ${isolation}\n  enforcement: ${enforcement}\n`;
-    return { from_schema: current, to_schema: 3, operations: [{ path: "adw.yaml", content, expected_content: text }] };
+    return { from_schema: current, to_schema: 4, operations: [{ path: "adw.yaml", content, expected_content: text }] };
+  }
+  if (current === 3 && target === 4) {
+    const content = text.replace(/^schema:[ \t]*3[ \t]*(?:#.*)?$/m, "schema: 4");
+    return { from_schema: 3, to_schema: 4, operations: [{ path: "adw.yaml", content, expected_content: text }] };
   }
   throw new Error(`no bundled, contiguous migration path from project schema ${current} to supported schemas ${supported.join(", ")}`);
 }
@@ -92,8 +96,8 @@ try {
   const current = schemaVersion(before);
   const supported = supportedSchemas();
   const version = pluginVersion();
-  const compatibility = current === 0 && supported.includes(3)
-    ? { compatible: false, migration_required: true, reason: "legacy pre-schema project requires migration to schema 3" }
+  const compatibility = current === 0 && supported.includes(4)
+    ? { compatible: false, migration_required: true, reason: "legacy pre-schema project requires migration to schema 4" }
     : checkCompatibility({ project_schema: current, supported_project_schemas: supported, plugin_version: version });
   const base = { ok: true, mode: args.action, plugin_root: pluginRoot, plugin_version: version, project_schema: current, supported_project_schemas: supported, historical_artifacts: "untouched" };
   if (compatibility.compatible) {

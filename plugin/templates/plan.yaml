@@ -1,6 +1,12 @@
-schema: 1
+schema: 2
 change_id: <change-id>
 summary: <concise implementation summary>
+
+effective_policy:
+  components: []
+  unowned_paths: []
+  project_policy_digest: <64-character sha256 digest>
+  required_validation: []
 
 tasks:
   - id: 1
@@ -17,6 +23,7 @@ tasks:
         cwd: .
         timeout_ms: 120000
         required: true
+        source: <manifest, task runner, CI workflow, or existing documentation>
 
 documentation:
   impact: none # none | update | new

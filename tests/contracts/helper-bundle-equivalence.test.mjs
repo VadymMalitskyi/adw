@@ -27,6 +27,7 @@ test("the bundle covers every operational helper entry point maintained in sourc
     ["src/helpers/integrations.ts", ["computeRequirementsDigest", "recordExternalAction"]],
     ["src/helpers/migration.ts", ["resolveProjectPath", "applyAtomicMigration"]],
     ["src/helpers/project-version.ts", ["checkCompatibility"]],
+    ["src/helpers/project-policy.ts", ["computePolicyDigest", "resolveProjectPolicy", "resolveValidationSet", "validateWorkItemPayload"]],
     ["src/helpers/schemas.ts", ["validateJsonSchema"]],
     ["src/helpers/validation.ts", ["recordValidation", "runValidationCommand"]],
   ]);
@@ -45,6 +46,7 @@ test("security- and evidence-critical source invariants are represented in the b
     ["src/helpers/approval.ts", ["ADW-APPROVAL-DIGEST-V1\\0", "sha256", "timingSafeEqual"]],
     ["src/helpers/migration.ts", ["realpath", "isAbsolute", "expected_content", ".adw-migration-"]],
     ["src/helpers/project-version.ts", ["project_schema", "supported_project_schemas", "artifact_plugin_version", "migration_required"]],
+    ["src/helpers/project-policy.ts", ["ADW-EFFECTIVE-POLICY-V1\\0", "affected_paths", "project_policy_digest", "required_validation"]],
     ["src/helpers/schemas.ts", ["additionalProperties", "date-time", "unresolvable schema reference"]],
     ["src/helpers/validation.ts", ["authorization", "[REDACTED]", "timed_out", "required"]],
     ["src/helpers/integrations.ts", ["ADW-INTEGRATION-REQUIREMENTS-V1\\0", "authorization", "[REDACTED]", "readback_digest"]],

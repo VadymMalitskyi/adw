@@ -1,4 +1,4 @@
-export type ArtifactKind = "project" | "plan" | "approval" | "validation" | "integration" | "external-action" | "incident-report";
+export type ArtifactKind = "project" | "plan" | "approval" | "validation" | "integration" | "external-action" | "incident-report" | "work-item-profile";
 
 export interface ValidationIssue {
   path: string;

@@ -37,12 +37,13 @@ This ordering ensures interruption cannot leave changed intent paired with an ac
 
 1. Explore relevant code and authoritative documentation read-only as needed to ground the requested revision.
 2. Update only the required inputs among `changes/<change-id>/spec.md`, `plan.yaml`, and existing `integrations.yaml` in the docs worktree. Keep the original change ID. Read bound external requirements when needed, but perform no external mutation.
-3. Keep the plan as one contiguous sequence numbered from 1. Update affected paths, anchors, restrictions, and each structured validation descriptor (`command`, `cwd`, `timeout_ms`, `required`) to match the amendment.
-4. Reconcile the specification and plan documentation declarations. Require files for `update` or `new` and an empty list for `none`.
-5. Preserve the amendment reason in the superseded approval evidence. Also summarize the changed scope and rationale in the specification's Decisions section so future readers do not need chat history.
-6. Parse and validate the amended plan and optional integration artifact with the bundled helper. Preserve canonical `requirement_fields` names and recompute `requirements_digest` with `digest-requirements` only after verified external reads. Check for placeholders and ensure all acceptance criteria remain covered.
-7. Review the diff and commit only the amended approval inputs on the docs branch. Leave `approval.json` superseded. Do not compute or create a replacement approval.
-8. Report the reason, invalidated digest, history path, lifecycle commit, artifact commit, material changes, documentation impact, and exact validation commands. Stop and require a fresh `adw:approve` interaction.
+3. For plan schema 2, recompute affected components and effective policy with `resolve-project-policy` after changing paths, validation, bindings, or project-relevant requirements. Copy the helper result unchanged, validate referenced profiles, and require a configured mandatory binding before replacement approval.
+4. Keep the plan as one contiguous sequence numbered from 1. Update affected paths, anchors, restrictions, and each structured validation descriptor (`command`, `cwd`, `timeout_ms`, `required`, `source`) to match the amendment.
+5. Reconcile the specification and plan documentation declarations. Require files for `update` or `new` and an empty list for `none`.
+6. Preserve the amendment reason in the superseded approval evidence. Also summarize the changed scope and rationale in the specification's Decisions section so future readers do not need chat history.
+7. Parse and validate the amended plan and optional integration artifact with the bundled helper. Preserve canonical `requirement_fields` names and recompute `requirements_digest` with `digest-requirements` only after verified external reads. Check for placeholders and ensure all acceptance criteria remain covered.
+8. Review the diff and commit only the amended approval inputs on the docs branch. Leave `approval.json` superseded. Do not compute or create a replacement approval.
+9. Report the reason, invalidated digest, history path, lifecycle commit, artifact commit, material changes, documentation impact, and exact validation commands. Stop and require a fresh `adw:approve` interaction.
 
 Do not push unless the human separately authorizes the configured docs delivery operation.
 

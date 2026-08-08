@@ -1,5 +1,5 @@
 # ADW project configuration. Commands must cite an observable project source.
-schema: 3
+schema: 4
 
 git:
   default_branch: main
@@ -23,6 +23,8 @@ validation:
   default:
     - command: "<replace with a verified command>"
       source: "<manifest, task runner, CI workflow, or existing documentation>"
+      cwd: .
+      timeout_ms: 120000
       required: true
 
 # Optional. Omit this block for lightweight projects.
@@ -35,3 +37,15 @@ validation:
 #     settings:
 #       organization: "<organization>"
 #       project: "<project>"
+
+# Optional project workflow policy. A required binding is resolved during
+# planning; configuration never authorizes the external mutation itself.
+# workflows:
+#   work_tracker:
+#     binding: required
+#     ensure: create-or-link
+#     stage: plan
+#     cardinality: one-per-change
+#     profile: adw/work-items/feature-story.yaml
+#     # Required only for one-parent-plus-plan-tasks:
+#     child_profile: adw/work-items/implementation-task.yaml

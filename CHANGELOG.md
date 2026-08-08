@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add project schema 4 with optional work-tracker workflow policy and committed payload-profile references.
+- Add plan schema 2 with digest-bound effective components, validation, and tracker policy.
+- Add deterministic project-policy resolution, work-item profile and payload validation, schema-3-to-4 migration, diagnostics, and contract coverage.
+
 All notable changes to this private plugin are documented here.
 
 ## Unreleased

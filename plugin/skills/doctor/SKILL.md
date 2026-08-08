@@ -23,8 +23,9 @@ Perform every check read-only. Do not repair files, create caches, refresh integ
    - optional origin and project-owned devcontainer state.
 5. Follow the execution contract. For a managed container, verify its marker, pinned agents, root-owned firewall wiring, project-scoped volumes, forbidden-mount absence, non-root runtime marker, and current execution inside it. For a project container, report deviations and require its runtime marker. For a provider sandbox, report the real active filesystem/network/approval policy that the script cannot attest. A required unverifiable runtime fails doctor.
 6. If `adw.yaml` declares integrations, follow the integration contract and inspect `work_tracker`, `code_host`, `observability`, and `knowledge` independently. Report capability, provider, requirement, selected or available `native|mcp|cli|api` transports, existing authentication state, and effective read/write support. Do not authenticate, refresh tokens, install software, retrieve business content, or mutate anything. Treat `required` unavailability as a failure, `optional` unavailability as a warning, and `disabled` capabilities as informational without probing them. Never print credentials or secret environment values.
-7. If integrations are absent, report `lightweight: no integrations configured` and do not probe external tools.
-8. Treat a missing resource, a literal unexpanded Claude variable, or a path outside the installed plugin root as a plugin failure.
-9. Offer `adw:init`, `adw:update`, or a manual project edit as a separate follow-up. Make no repair during doctor.
+7. For schema-4 workflow policy, validate each referenced work-item profile, provider match, field coherence, safe path, and operation support. Report binding, ensure mode, stage, cardinality, profile path, and digest. Fail on a missing or invalid profile, ambiguous duplicate component paths, a workflow using a disabled capability, or an unavailable required create/link operation. Do not read business objects or create anything.
+8. If integrations are absent, report `lightweight: no integrations configured` and do not probe external tools.
+9. Treat a missing resource, a literal unexpanded Claude variable, or a path outside the installed plugin root as a plugin failure.
+10. Offer `adw:init`, `adw:update`, or a manual project edit as a separate follow-up. Make no repair during doctor.
 
 Resolve any bundled schema, template, helper, or script from the same plugin root. Never write generated state into the installed plugin directory.

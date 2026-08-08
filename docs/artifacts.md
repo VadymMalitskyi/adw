@@ -3,6 +3,7 @@
 ## Code branch
 
 - `adw.yaml`: committed shared configuration and workflow schema.
+- `adw/work-items/*.yaml`: optional committed project-owned tracker payload profiles referenced by schema-4 workflow policy.
 - `.adw/local.yaml`: optional ignored machine-local values.
 - `AGENTS.md` and `CLAUDE.md`: existing content plus one bounded routing block.
 - `worktrees/docs`: ignored checkout of the configured docs branch.
@@ -12,7 +13,7 @@
 
 - `architecture.md` and `components/*.md`: concise agent context linking to authoritative project docs.
 - `changes/<change-id>/spec.md`: outcome, behavior, scope, exclusions, decisions, risks, acceptance criteria, and documentation impact.
-- `changes/<change-id>/plan.yaml`: ordered tasks, anchors, restrictions, and exact validation commands.
+- `changes/<change-id>/plan.yaml`: ordered tasks, anchors, restrictions, exact validation commands, and for schema 2 the digest-bound effective component, validation, and tracker policy snapshot.
 - `changes/<change-id>/integrations.yaml`: optional durable external bindings and requirement digests; never credentials.
 - `changes/<change-id>/approval.json`: approver, time, approval-bundle digests, schema/plugin versions, and approved docs commit.
 - `changes/<change-id>/validation.json`: bound code/docs revisions and exact command evidence.

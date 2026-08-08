@@ -4,7 +4,7 @@ Treat the configured execution environment as an enforceable preflight, not docu
 
 ## Resolve the profile
 
-Read `adw.yaml` schema 3 `execution.isolation` and `execution.enforcement` before any project or external mutation:
+Read schema-3-or-newer `adw.yaml` `execution.isolation` and `execution.enforcement` before any project or external mutation:
 
 - `managed-devcontainer`: require `.devcontainer/adw-managed.json`, the managed files, and `ADW_MANAGED_DEVCONTAINER=1` in the active process.
 - `project-devcontainer`: preserve project-owned files; require `.devcontainer/devcontainer.json` and a runtime marker such as `ADW_PROJECT_DEVCONTAINER=1`.

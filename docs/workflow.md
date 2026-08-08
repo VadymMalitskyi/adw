@@ -10,6 +10,8 @@ With no existing container, init renders the managed `.devcontainer/` from that 
 
 `adw:discover` proposes concise `architecture.md` and `components/` context and writes only after approval. It can also propose non-secret integration configuration. `adw:plan` updates the docs worktree, explores relevant code, and creates `changes/<change-id>/spec.md` plus a sequential `plan.yaml`.
 
+For schema-4 projects, planning resolves affected paths to configured components and snapshots additive global/component validation plus optional work-tracker policy into plan schema 2. A required requirement-bearing work item is linked or separately authorized and created before approval using its validated project profile. Execution recomputes the effective subset and stops for amendment when it drifts.
+
 When configured, planning may read an existing work item, related pull requests, Notion context, or Datadog evidence. It may prepare an external action, but it creates or updates a work item only after showing the exact payload and receiving explicit authorization. The resulting stable ID, revision, requirements digest, and verified receipt become part of the change record. Planning still creates no feature code, feature branch, or pull request.
 
 ## Approve and amend

@@ -195,7 +195,7 @@ function projectConfiguration(projectRoot, execution) {
   const commands = detectCommands(projectRoot);
   const lines = [
     "# ADW project configuration. Every executable command cites an observable source.",
-    "schema: 3",
+    "schema: 4",
     "",
     "git:",
     `  default_branch: ${yamlScalar(defaultBranch(projectRoot))}`,
@@ -222,6 +222,8 @@ function projectConfiguration(projectRoot, execution) {
       for (const item of component.commands) {
         lines.push(`        - command: ${yamlScalar(item.command)}`);
         lines.push(`          source: ${yamlScalar(item.source)}`);
+        lines.push(`          cwd: ${yamlScalar(component.path)}`);
+        lines.push("          timeout_ms: 120000");
         lines.push(`          required: ${item.required}`);
       }
     }
@@ -232,6 +234,8 @@ function projectConfiguration(projectRoot, execution) {
   for (const item of commands) {
     lines.push(`    - command: ${yamlScalar(item.command)}`);
     lines.push(`      source: ${yamlScalar(item.source)}`);
+    lines.push("      cwd: \".\"");
+    lines.push("      timeout_ms: 120000");
     lines.push(`      required: ${item.required}`);
   }
   return `${lines.join("\n")}\n`;

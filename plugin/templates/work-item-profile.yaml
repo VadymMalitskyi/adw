@@ -1,0 +1,14 @@
+schema: 1
+id: <profile-id>
+provider: <configured-work-tracker-provider>
+object_type: <provider object type>
+
+required_fields:
+  - <provider field name>
+
+allowed_fields: []
+
+defaults: {}
+
+requirement_fields:
+  - <requirement-bearing provider field name>
