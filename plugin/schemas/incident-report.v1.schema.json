@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adw.local/schemas/incident-report.v1.schema.json",
+  "title": "ADW incident report v1",
+  "type": "object",
+  "required": ["schema", "incident_key", "generated_at", "source", "repository", "severity", "summary", "impact", "timeline", "evidence", "hypotheses", "recommendations", "proposed_fix", "unknowns", "limitations"],
+  "properties": {
+    "schema": { "const": 1 },
+    "incident_key": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "source": {
+      "type": "object",
+      "required": ["capability", "provider", "external_id", "service", "environment", "window"],
+      "properties": {
+        "capability": { "const": "observability" },
+        "provider": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "external_id": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "url": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "service": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "environment": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "window": {
+          "type": "object",
+          "required": ["from", "to"],
+          "properties": {
+            "from": { "type": "string", "format": "date-time" },
+            "to": { "type": "string", "format": "date-time" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "repository": {
+      "type": "object",
+      "required": ["identity", "inspected_revision", "deployed_revision_verified"],
+      "properties": {
+        "identity": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "inspected_revision": { "anyOf": [{ "type": "string", "pattern": "^[0-9a-f]{40}$" }, { "type": "null" }] },
+        "deployed_revision_verified": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "severity": {
+      "type": "object",
+      "required": ["level", "confidence", "rationale"],
+      "properties": {
+        "level": { "enum": ["critical", "high", "medium", "low", "unknown"] },
+        "confidence": { "enum": ["high", "medium", "low"] },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 2000 }
+      },
+      "additionalProperties": false
+    },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "impact": {
+      "type": "object",
+      "required": ["status", "description"],
+      "properties": {
+        "status": { "enum": ["confirmed", "likely", "none", "unknown"] },
+        "description": { "type": "string", "minLength": 1, "maxLength": 2000 }
+      },
+      "additionalProperties": false
+    },
+    "timeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["at", "description"],
+        "properties": {
+          "at": { "type": "string", "format": "date-time" },
+          "description": { "type": "string", "minLength": 1, "maxLength": 1000 },
+          "evidence_ref": { "type": "string", "pattern": "^e[1-9][0-9]*$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "summary"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^e[1-9][0-9]*$" },
+          "kind": { "enum": ["monitor", "log", "metric", "trace", "incident", "deployment", "code", "other"] },
+          "summary": { "type": "string", "minLength": 1, "maxLength": 1000 },
+          "external_id": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "url": { "type": "string", "minLength": 1, "maxLength": 2048 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "hypotheses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["description", "confidence", "evidence_refs"],
+        "properties": {
+          "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "confidence": { "enum": ["high", "medium", "low"] },
+          "evidence_refs": { "type": "array", "items": { "type": "string", "pattern": "^e[1-9][0-9]*$" } }
+        },
+        "additionalProperties": false
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["priority", "kind", "action", "rationale"],
+        "properties": {
+          "priority": { "enum": ["immediate", "follow-up"] },
+          "kind": { "enum": ["investigation", "containment", "code", "monitoring"] },
+          "action": { "type": "string", "minLength": 1, "maxLength": 1000 },
+          "rationale": { "type": "string", "minLength": 1, "maxLength": 1000 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "proposed_fix": {
+      "type": "object",
+      "required": ["needed", "summary", "route", "affected_paths", "validation"],
+      "properties": {
+        "needed": { "enum": ["yes", "no", "unclear"] },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "route": { "enum": ["none", "adw:quick", "adw:plan"] },
+        "affected_paths": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 1024 } },
+        "validation": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 1000 } }
+      },
+      "additionalProperties": false
+    },
+    "unknowns": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 1000 } },
+    "limitations": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 1000 } }
+  },
+  "additionalProperties": false
+}

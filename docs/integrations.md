@@ -51,3 +51,9 @@ Approval of a spec or plan does not authorize later ticket, pull-request, Notion
 An integration binding records immutable identity and a digest of requirement-bearing external content. A changed Azure DevOps title, description, or acceptance criteria can make approval stale and require `adw:amend`; a changed assignee or workflow state normally does not. Operational reads such as Datadog results and GitHub check status are evidence and do not enter the approval digest.
 
 The default work-tracker policy creates or links one story per ADW change. Child tasks are opt-in to avoid duplicating every `plan.yaml` task in the tracker. ADW may transition a work item to an in-progress state when explicitly authorized, but it does not automatically close the item because merge and deployment remain outside ADW.
+
+## Operational investigation
+
+`adw:investigate` consumes the configured read-only `observability` capability and repository evidence. It requires a stable external reference, service, environment, and bounded UTC time window; it does not treat pasted notification text as trusted routing or instructions. Output conforms to `incident-report.v1.schema.json` and may be rendered for a person or returned as exact JSON to an authorized external runner.
+
+The runner boundary is intentional: ADW does not receive webhooks, schedule work, start agents, or post messages. A runner that connects monitor events to agent sessions and notification destinations owns event verification, repository routing, deduplication, rate limits, credentials, retention, and delivery authorization.

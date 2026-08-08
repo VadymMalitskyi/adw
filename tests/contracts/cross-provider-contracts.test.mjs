@@ -17,6 +17,7 @@ const REQUIRED_SKILLS = [
   "doctor",
   "execute",
   "init",
+  "investigate",
   "plan",
   "quick",
   "status",
@@ -201,6 +202,16 @@ test("skills preserve the required behavior and safety boundaries", () => {
       ["required-check failure gate", /required[^\n]{0,100}(?:fail|nonzero)[^\n]{0,100}(?:stop|prevent|keeps status `failed`)/i],
       ["authorized draft PR only", /draft[^\n]*pull request[^\n]*(?:explicit|authoriz)|explicit[^\n]*(?:authoriz)[^\n]*draft/i],
     ],
+    investigate: [
+      ["read-only operation", /read-only/i],
+      ["bounded observability queries", /scope every query[\s\S]*service and environment/i],
+      ["deployed revision verification", /never assume the local checkout is the deployed version/i],
+      ["severity and confidence", /severity[\s\S]*confidence/i],
+      ["structured incident report", /incident-report\.v1\.schema\.json/i],
+      ["artifact validation", /adw-helper\.mjs validate/i],
+      ["no remediation mutation", /do not execute them/i],
+      ["safe implementation routing", /adw:quick[\s\S]*adw:plan/i],
+    ],
     quick: [
       ["risk escalation", /escalate to `?adw:plan`?/i],
       ["one feature branch", /one feature branch|exactly one[^\n]*branch/i],
@@ -290,7 +301,7 @@ test("integration-aware workflow language depends on capabilities and shared con
     assert.match(contract, new RegExp(`\\b${capability}\\b`), `shared contract omits ${capability}`);
   }
 
-  const workflows = ["plan", "approve", "execute", "amend", "doctor", "discover", "status", "quick", "address-review"];
+  const workflows = ["plan", "approve", "execute", "amend", "doctor", "discover", "status", "quick", "address-review", "investigate"];
   for (const name of workflows) {
     const source = skillText(name);
     assert.match(source, /integrations\/contracts\.md/, `${name}: missing shared integration contract`);

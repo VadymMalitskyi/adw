@@ -20,7 +20,8 @@ export const ARTIFACT_SCHEMAS = Object.freeze({
   }),
   validation: Object.freeze({ 1: new URL("../schemas/validation.v1.schema.json", import.meta.url) }),
   integration: Object.freeze({ 1: new URL("../schemas/integration.v1.schema.json", import.meta.url) }),
-  "external-action": Object.freeze({ 1: new URL("../schemas/external-action.v1.schema.json", import.meta.url) })
+  "external-action": Object.freeze({ 1: new URL("../schemas/external-action.v1.schema.json", import.meta.url) }),
+  "incident-report": Object.freeze({ 1: new URL("../schemas/incident-report.v1.schema.json", import.meta.url) })
 });
 
 const DOMAIN = Buffer.from("ADW-APPROVAL-DIGEST-V1\0", "utf8");
@@ -227,6 +228,24 @@ export async function validateArtifact(artifact, data) {
     if (data.effect === "write" && (!data.authorized_by || !data.authorization_digest)) result.errors.push({ path: "/authorized_by", keyword: "authorization", message: "write actions require explicit authorization evidence" });
     if (data.status === "succeeded" && data.verified !== true) result.errors.push({ path: "/verified", keyword: "readback", message: "successful actions require verified readback" });
     if (data.status === "succeeded" && !data.readback_digest) result.errors.push({ path: "/readback_digest", keyword: "readback", message: "successful actions require a readback digest" });
+    result.valid = result.errors.length === 0;
+  }
+  if (result.valid && artifact === "incident-report") {
+    const evidenceIds = data.evidence.map(({ id }) => id);
+    const knownEvidenceIds = new Set(evidenceIds);
+    if (knownEvidenceIds.size !== evidenceIds.length) result.errors.push({ path: "/evidence", keyword: "unique", message: "evidence ids must be unique" });
+    if (Date.parse(data.source.window.from) > Date.parse(data.source.window.to)) result.errors.push({ path: "/source/window", keyword: "order", message: "from must not be later than to" });
+    if (data.repository.deployed_revision_verified && data.repository.inspected_revision === null) result.errors.push({ path: "/repository/inspected_revision", keyword: "deployment", message: "a verified deployed revision must identify the inspected commit" });
+    for (const [index, item] of data.timeline.entries()) {
+      if (item.evidence_ref && !knownEvidenceIds.has(item.evidence_ref)) result.errors.push({ path: `/timeline/${index}/evidence_ref`, keyword: "reference", message: "must reference an evidence id in this report" });
+    }
+    for (const [index, hypothesis] of data.hypotheses.entries()) {
+      for (const [referenceIndex, reference] of hypothesis.evidence_refs.entries()) {
+        if (!knownEvidenceIds.has(reference)) result.errors.push({ path: `/hypotheses/${index}/evidence_refs/${referenceIndex}`, keyword: "reference", message: "must reference an evidence id in this report" });
+      }
+    }
+    if (data.proposed_fix.needed === "no" && data.proposed_fix.route !== "none") result.errors.push({ path: "/proposed_fix/route", keyword: "routing", message: "must be none when no code fix is needed" });
+    if (data.proposed_fix.needed === "yes" && data.proposed_fix.route === "none") result.errors.push({ path: "/proposed_fix/route", keyword: "routing", message: "must select adw:quick or adw:plan when a code fix is needed" });
     result.valid = result.errors.length === 0;
   }
   return result;

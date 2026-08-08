@@ -30,6 +30,12 @@ Required checks preserve real exit status. Code-coupled documentation changes wi
 
 `adw:quick` is for a small local outcome with stated scope, exclusions, and validation. Public interfaces, schemas, migrations, dependencies, authorization behavior, infrastructure, security-sensitive behavior, or coordinated components force escalation to the planned workflow.
 
+## Investigate alerts
+
+`adw:investigate` is a read-only operational workflow. Given a stable alert, monitor, trace, or incident reference, it resolves the configured `observability` provider, bounds every query by service, environment, and UTC time window, compares the signal with repository code at the deployed revision when that revision can be verified, and produces a schema-validated incident report. The report separates observed facts from hypotheses, assigns severity and confidence, cites stable evidence links, records unknowns, and proposes immediate investigation plus an `adw:quick` or `adw:plan` route when a code correction appears necessary.
+
+The skill does not write the report to Git, change code, run remediation, mutate observability state, or send notifications. ADW still has no listener or agent runtime. An external runner may invoke the skill in machine-output mode and deliver its validated JSON under that runner's independently reviewed authorization and destination policy.
+
 ## Maintenance
 
 `adw:status` and `adw:doctor` are read-only. Both expose configured isolation and active-runtime evidence; a required mismatch blocks workflows that execute project commands. Doctor reports each configured capability's provider, requirement mode, available transport, supported operations, and read/write level without starting authentication. Optional unavailable capabilities do not block; required unavailable capabilities block only workflows that need them. `adw:sync-docs` reports drift by default and updates the docs branch only in explicitly authorized fix mode. `adw:update` migrates project artifact schemas only; provider plugin managers update plugin code.

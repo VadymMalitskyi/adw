@@ -183,3 +183,66 @@ test("validation status cannot conceal a required failure or required deferral",
   assert.equal(invalid.valid, false);
   assert(invalid.errors.some((error) => error.path === "/status"));
 });
+
+test("incident reports require bounded evidence, valid references, and coherent fix routing", async () => {
+  const report = {
+    schema: 1,
+    incident_key: "monitor:123:2026-08-08T10:00:00Z",
+    generated_at: "2026-08-08T10:20:00Z",
+    source: {
+      capability: "observability",
+      provider: "datadog",
+      external_id: "123",
+      url: "https://app.datadoghq.eu/monitors/123",
+      service: "payments-api",
+      environment: "production",
+      window: { from: "2026-08-08T09:45:00Z", to: "2026-08-08T10:20:00Z" },
+    },
+    repository: { identity: "example/payments", inspected_revision: sha, deployed_revision_verified: true },
+    severity: { level: "high", confidence: "medium", rationale: "Production errors affected a substantial portion of requests." },
+    summary: "Payment requests returned elevated server errors after a deployment.",
+    impact: { status: "confirmed", description: "Approximately 20 percent of payment attempts failed for twelve minutes." },
+    timeline: [{ at: "2026-08-08T10:00:00Z", description: "The error-rate threshold fired.", evidence_ref: "e1" }],
+    evidence: [
+      { id: "e1", kind: "monitor", summary: "The production error-rate monitor crossed its threshold.", external_id: "123", url: "https://app.datadoghq.eu/monitors/123" },
+      { id: "e2", kind: "code", summary: "The deployed handler does not classify the observed upstream timeout." },
+    ],
+    hypotheses: [{ description: "An unhandled upstream timeout likely produced the failures.", confidence: "medium", evidence_refs: ["e1", "e2"] }],
+    recommendations: [{ priority: "immediate", kind: "investigation", action: "Confirm the upstream timeout group in representative traces.", rationale: "This would test the leading hypothesis without changing production." }],
+    proposed_fix: { needed: "yes", summary: "Handle and classify the upstream timeout.", route: "adw:plan", affected_paths: ["src/payments/handler.ts"], validation: ["npm test"] },
+    unknowns: ["The upstream provider status was not available."],
+    limitations: ["Only the deployed commit and bounded observability window were inspected."],
+  };
+
+  assert.deepEqual(await validateArtifact("incident-report", report), { valid: true, errors: [] });
+
+  const badReference = structuredClone(report);
+  badReference.hypotheses[0].evidence_refs = ["e99"];
+  const invalidReference = await validateArtifact("incident-report", badReference);
+  assert.equal(invalidReference.valid, false);
+  assert.ok(invalidReference.errors.some(({ path, keyword }) => path === "/hypotheses/0/evidence_refs/0" && keyword === "reference"));
+
+  const duplicateEvidence = structuredClone(report);
+  duplicateEvidence.evidence[1].id = "e1";
+  const invalidDuplicate = await validateArtifact("incident-report", duplicateEvidence);
+  assert.equal(invalidDuplicate.valid, false);
+  assert.ok(invalidDuplicate.errors.some(({ path, keyword }) => path === "/evidence" && keyword === "unique"));
+
+  const unsafeRoute = structuredClone(report);
+  unsafeRoute.proposed_fix = { needed: "no", summary: "No code change is indicated.", route: "adw:quick", affected_paths: [], validation: [] };
+  const invalidRoute = await validateArtifact("incident-report", unsafeRoute);
+  assert.equal(invalidRoute.valid, false);
+  assert.ok(invalidRoute.errors.some(({ path, keyword }) => path === "/proposed_fix/route" && keyword === "routing"));
+
+  const reversedWindow = structuredClone(report);
+  reversedWindow.source.window = { from: "2026-08-08T10:20:00Z", to: "2026-08-08T09:45:00Z" };
+  const invalidWindow = await validateArtifact("incident-report", reversedWindow);
+  assert.equal(invalidWindow.valid, false);
+  assert.ok(invalidWindow.errors.some(({ path, keyword }) => path === "/source/window" && keyword === "order"));
+
+  const unverifiableRevision = structuredClone(report);
+  unverifiableRevision.repository.inspected_revision = null;
+  const invalidRevision = await validateArtifact("incident-report", unverifiableRevision);
+  assert.equal(invalidRevision.valid, false);
+  assert.ok(invalidRevision.errors.some(({ path, keyword }) => path === "/repository/inspected_revision" && keyword === "deployment"));
+});

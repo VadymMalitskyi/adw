@@ -4,6 +4,8 @@ All notable changes to this private plugin are documented here.
 
 ## Unreleased
 
+- Add read-only `adw:investigate` with bounded observability queries, deployed-code inspection, deterministic severity guidance, and schema-validated incident reports.
+- Keep webhook receipt, agent supervision, and notification delivery outside ADW while defining exact JSON output for an authorized external runner.
 - Derive managed Dev Container runtimes, dependency setup, native packages, forwarded ports, and package-registry domains from supported project manifests and lockfiles.
 - Record evidence and unresolved requirements in a reviewable project requirements artifact, run only curated setup commands after firewall activation, and verify generated-file digests in `adw:doctor`.
 

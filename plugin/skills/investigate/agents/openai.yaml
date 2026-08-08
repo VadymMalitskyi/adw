@@ -1,0 +1,4 @@
+interface:
+  display_name: "ADW Investigate"
+  short_description: "Investigate production alerts with ADW"
+  default_prompt: "Use $investigate to analyze this production alert and produce a concise evidence-backed incident report."

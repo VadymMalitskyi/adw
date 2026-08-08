@@ -35,11 +35,12 @@ Then start a new provider session in a target Git project and invoke `adw:init`.
 ## Skills
 
 - Foundation: `adw:init`, `adw:doctor`, `adw:status`, `adw:discover`
+- Operations: `adw:investigate`
 - Change loop: `adw:plan`, `adw:approve`, `adw:amend`, `adw:execute`
 - Delivery: `adw:quick`, `adw:address-review`
 - Maintenance: `adw:sync-docs`, `adw:update`
 
-The optional integration layer is configured per project; it is not a requirement for the core plan/approve/execute loop. The `brainstorm`, `review-plan`, and `add-mcp` skills remain deferred, and ADW uses only transports already configured by the user. See [integration architecture](docs/integrations.md) for capabilities, provider and transport resolution, external-action safety, and Azure DevOps transport limitations.
+The optional integration layer is configured per project; it is not a requirement for the core plan/approve/execute loop. `adw:investigate` uses configured read-only observability plus repository evidence to assess an alert without changing code or external systems. The `brainstorm`, `review-plan`, and `add-mcp` skills remain deferred, and ADW uses only transports already configured by the user. See [integration architecture](docs/integrations.md) for capabilities, provider and transport resolution, external-action safety, and Azure DevOps transport limitations.
 
 ## Development
 
