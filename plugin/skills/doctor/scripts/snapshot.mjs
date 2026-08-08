@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -73,7 +74,7 @@ function executionDeclaration(text) {
 function managedDevcontainerChecks(projectRoot, execution) {
   const checks = [];
   const directory = join(projectRoot, ".devcontainer");
-  const required = ["devcontainer.json", "Dockerfile", "allowed-domains.txt", "init-firewall.sh", "post-create.sh", "adw-managed.json"];
+  const required = ["devcontainer.json", "Dockerfile", "allowed-domains.txt", "init-firewall.sh", "post-create.sh", "project-requirements.json", "project-setup.sh", "adw-managed.json"];
   const missing = required.filter((name) => !existsSync(join(directory, name)));
   if (missing.length > 0) {
     checks.push(check("execution:managed-files", "fail", `managed devcontainer is missing: ${missing.join(", ")}`));
@@ -98,15 +99,25 @@ function managedDevcontainerChecks(projectRoot, execution) {
     && /^\d+\.\d+\.\d+$/.test(marker?.codex_version ?? "")
     && /^\d+\.\d+\.\d+$/.test(marker?.claude_code_version ?? "");
   const scopedVolumes = Array.isArray(configObject?.mounts) && configObject.mounts.length > 0 && configObject.mounts.every((mount) => typeof mount === "string" && /type=volume/.test(mount));
+  const postCreateCommand = configObject?.postCreateCommand ?? "";
   const hardening = configObject?.remoteUser === "vscode"
     && configObject?.containerEnv?.ADW_MANAGED_DEVCONTAINER === "1"
     && /adw-init-firewall/.test(configObject?.postStartCommand ?? "")
+    && postCreateCommand.indexOf("adw-init-firewall") !== -1
+    && postCreateCommand.indexOf("adw-init-firewall") < postCreateCommand.indexOf("adw-project-setup")
     && scopedVolumes
     && /bubblewrap/.test(dockerfile)
     && /gpasswd -d vscode sudo/.test(dockerfile)
+    && /chmod 0555 \/usr\/local\/bin\/adw-project-setup/.test(dockerfile)
     && /USER vscode/.test(dockerfile);
   const validMarker = marker?.schema === 1 && marker?.profile === "managed-devcontainer" && marker?.plugin_version === JSON.parse(readFileSync(join(pluginRoot, ".codex-plugin/plugin.json"), "utf8")).version;
-  const valid = hardening && validMarker && versionsMatch && !unsafeMount;
+  const requirementsDigest = createHash("sha256").update(readFileSync(join(directory, "project-requirements.json"))).digest("hex");
+  const setupDigest = createHash("sha256").update(readFileSync(join(directory, "project-setup.sh"))).digest("hex");
+  const generatedFilesMatch = marker?.requirements_schema === 1
+    && marker?.project_requirements_sha256 === requirementsDigest
+    && marker?.project_setup_sha256 === setupDigest
+    && /^[a-z0-9+.-]*(?: [a-z0-9+.-]+)*$/.test(configObject?.build?.args?.ADW_PROJECT_APT_PACKAGES ?? "");
+  const valid = hardening && validMarker && versionsMatch && generatedFilesMatch && !unsafeMount;
   checks.push(check("execution:managed-files", valid ? "pass" : "fail", valid ? "managed devcontainer hardening and pinned agents are present" : "managed devcontainer hardening, versions, mounts, or marker are invalid"));
   const active = process.env.ADW_MANAGED_DEVCONTAINER === "1";
   checks.push(check("execution:runtime", active ? "pass" : execution.enforcement === "required" ? "fail" : "warn", active ? "running inside the ADW managed devcontainer" : "ADW managed devcontainer is not the active execution environment"));

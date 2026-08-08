@@ -23,7 +23,7 @@ The plugin owns workflow instructions, deterministic mechanics, execution contra
 - `plugin/lib/adw-helper.mjs` performs schema, digest, evidence, compatibility, and migration mechanics. It is not a public CLI.
 - `src/helpers/` contains typed helper modules plus the canonical dependency-free runtime source; `npm run build:helper` reproduces the checked-in bundle exactly.
 - `worktrees/docs` is the only ADW worktree. Feature implementation uses the project's normal code checkout and one branch.
-- `plugin/execution/contracts.md` defines managed-container, project-container, and provider-sandbox preflights. Init creates managed infrastructure only when no project container exists.
+- `plugin/execution/contracts.md` defines managed-container, project-container, and provider-sandbox preflights. Init creates managed infrastructure only when no project container exists, deriving its project runtime and setup layer from supported repository evidence while preserving unresolved requirements for review.
 - Git and files are the workflow database. ADW has no daemon, server, telemetry, or agent runtime.
 
 ## Integration layer

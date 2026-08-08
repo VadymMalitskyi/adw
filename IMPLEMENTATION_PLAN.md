@@ -410,6 +410,8 @@ Work:
 - Ensure `.adw/` and root-level `/worktrees/` are ignored before creating local state.
 - Create or attach the `docs` branch and its `worktrees/docs` checkout without disturbing the code checkout.
 - Derive commands from observable repository sources and mark unresolved values.
+- Derive supported managed-container runtimes, locked dependency setup, curated native packages, ports, and registry domains from repository evidence; retain provenance and unresolved requirements in a generated artifact.
+- Activate the managed firewall before non-root project setup and bind generated requirements/setup digests into doctor verification.
 
 Acceptance:
 
@@ -418,6 +420,7 @@ Acceptance:
 - `doctor` and `status` are read-only.
 - Re-running init reuses the existing docs worktree and never duplicates `/worktrees/` ignore rules.
 - Init creates the managed `.devcontainer/` for a new project and never edits an existing project-owned one.
+- Managed init previews its exact development-environment evidence and emits only curated setup commands; doctor rejects generated-file drift.
 
 ### WP4 — Build plan, approval, and amendment skills
 

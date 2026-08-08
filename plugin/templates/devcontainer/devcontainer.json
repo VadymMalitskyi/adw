@@ -7,7 +7,8 @@
     "args": {
       "NODE_MAJOR": "22",
       "CODEX_VERSION": "0.146.1",
-      "CLAUDE_CODE_VERSION": "2.1.222"
+      "CLAUDE_CODE_VERSION": "2.1.222",
+      "ADW_PROJECT_APT_PACKAGES": ""
     }
   },
   "runArgs": [
@@ -36,7 +37,7 @@
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     "DISABLE_AUTOUPDATER": "1"
   },
-  "postCreateCommand": "sudo /usr/local/bin/adw-post-create",
+  "postCreateCommand": "sudo /usr/local/bin/adw-init-firewall && sudo /usr/local/bin/adw-post-create && /usr/local/bin/adw-project-setup",
   "postStartCommand": "sudo /usr/local/bin/adw-init-firewall",
   "waitFor": "postStartCommand",
   "customizations": {

@@ -81,6 +81,8 @@ test("empty repository initializes unresolved commands, docs records, and a mana
     ".devcontainer/devcontainer.json",
     ".devcontainer/init-firewall.sh",
     ".devcontainer/post-create.sh",
+    ".devcontainer/project-requirements.json",
+    ".devcontainer/project-setup.sh",
   ]);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /^schema: 3$/m);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /execution:\n  isolation: managed-devcontainer\n  enforcement: required/);

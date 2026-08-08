@@ -63,8 +63,9 @@ The developer installs the private ADW plugin using the normal plugin mechanism 
 5. Adds only small bounded ADW routing blocks to existing `AGENTS.md` and `CLAUDE.md` files.
 6. Creates concise project context on the docs branch and optional ignored machine-local configuration.
 7. Discovers and proposes non-secret integration configuration when the project uses external systems; it never installs a transport or starts authentication.
-8. Creates the reviewed managed devcontainer when none exists, or preserves an existing project-owned devcontainer byte-for-byte.
-9. Records the required execution profile and reports the rebuild, runtime verification, unresolved values, and manual authentication steps.
+8. For a new managed devcontainer, derives supported project runtimes, lockfile-backed setup, curated native packages, forwarded ports, and registry domains from repository evidence; previews every source and unresolved requirement before generating the container.
+9. Creates the reviewed managed devcontainer when none exists, or preserves an existing project-owned devcontainer byte-for-byte.
+10. Records the required execution profile and reports the rebuild, runtime verification, unresolved values, and manual authentication steps.
 
 After initialization, the repository contains only project-specific ADW artifacts. Skills, schemas, templates, and helper programs remain in the installed plugin and are never copied into the target project.
 
@@ -367,6 +368,8 @@ No background check may apply an update or change repository files.
 ## 10. Execution environment and security
 
 The default execution boundary for a new repository is an ADW-managed Dev Container plus the active agent's inner sandbox and permission model. `adw:init` creates the managed container only when `.devcontainer/` is absent. An existing project-owned devcontainer is preserved byte-for-byte and selected instead. `provider-sandbox` is an explicit portable fallback, and schema migrations adopt it conservatively when no container already exists.
+
+Managed-container generation is deterministic and evidence-driven. Supported manifests, lockfiles, runtime-version files, CI declarations, environment templates, and Compose port mappings may produce a reviewed project requirements artifact and curated setup script. Conflicts, unpinned runtimes, secrets, and unsupported multi-container topology remain unresolved rather than guessed. Dependency setup runs non-root only after the outbound firewall is active, and doctor verifies the generated-artifact digests.
 
 Required isolation is an execution preflight: project commands and edits stop unless the configured runtime marker is active. Init preview/apply is the sole bootstrap exception.
 

@@ -2,6 +2,11 @@
 
 All notable changes to this private plugin are documented here.
 
+## Unreleased
+
+- Derive managed Dev Container runtimes, dependency setup, native packages, forwarded ports, and package-registry domains from supported project manifests and lockfiles.
+- Record evidence and unresolved requirements in a reviewable project requirements artifact, run only curated setup commands after firewall activation, and verify generated-file digests in `adw:doctor`.
+
 ## 0.3.0 - 2026-08-05
 
 - Add a schema-3 execution contract with managed-devcontainer, project-devcontainer, and provider-sandbox profiles.

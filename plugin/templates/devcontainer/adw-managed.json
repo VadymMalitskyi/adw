@@ -3,5 +3,8 @@
   "profile": "managed-devcontainer",
   "codex_version": "0.146.1",
   "claude_code_version": "2.1.222",
-  "plugin_version": "0.3.0"
+  "plugin_version": "0.3.0",
+  "requirements_schema": 1,
+  "project_requirements_sha256": "8820ab9d19e397ae7531f65f43016dfc2a33472fd3d2c9c47d0266c5117b1dba",
+  "project_setup_sha256": "71123e22703b4f0b061b8051a8cff396ae310ab3ba2b6ce285041b1b53fe8c29"
 }

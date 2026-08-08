@@ -6,7 +6,7 @@ ADW is a private, dual-provider plugin that gives Codex and Claude Code the same
 discover -> plan -> approve -> execute -> validate -> draft PR
 ```
 
-The plugin contains the skills, schemas, templates, and deterministic helper. New projects also receive a managed Dev Container by default; projects with an existing Dev Container keep it unchanged. Initialized projects contain project-specific `adw.yaml`, bounded routing blocks, ignored local state, the selected execution profile, and a `docs` branch checked out at `worktrees/docs`.
+The plugin contains the skills, schemas, templates, and deterministic helper. New projects also receive a managed Dev Container by default; ADW derives supported project runtimes, locked dependency setup, native packages, ports, and registry domains from repository evidence and exposes unresolved requirements for review. Projects with an existing Dev Container keep it unchanged. Initialized projects contain project-specific `adw.yaml`, bounded routing blocks, ignored local state, the selected execution profile, and a `docs` branch checked out at `worktrees/docs`.
 
 Projects may also opt into provider-neutral integrations for work tracking, code hosting, observability, and knowledge. ADW targets Azure DevOps, GitHub, Datadog, and Notion first, but workflows depend on capabilities rather than provider-specific tools. A project with no integrations keeps the lightweight local workflow.
 

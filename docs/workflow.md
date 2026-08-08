@@ -2,7 +2,9 @@
 
 ## Initialize
 
-`adw:init` previews root `adw.yaml`, ignore rules, routing blocks, the execution profile, and the docs-branch worktree before writing. It derives commands only from manifests, task runners, CI, or existing documentation. With no existing container it creates the managed `.devcontainer/`; with an existing `devcontainer.json` it selects `project-devcontainer` and preserves every byte. Repeated initialization is idempotent. After managed setup, rebuild/reopen, authenticate tools in the scoped volumes, install ADW inside the container, and run `adw:doctor`.
+`adw:init` previews root `adw.yaml`, ignore rules, routing blocks, the execution profile, the inferred development environment, and the docs-branch worktree before writing. It derives validation commands only from supported manifests and task runners. For a new managed container it also detects declared Node, Python, Go, Rust, Java, and Ruby runtimes; lockfile-backed dependency setup; curated native packages; example-environment variable names; Compose or script ports; and required package-registry domains. Every decision retains its repository source in `.devcontainer/project-requirements.json`, while conflicts, missing pins, secrets, and unsupported service topology remain explicit `unresolved` entries. Repository prose and arbitrary script bodies are never copied into executable setup commands.
+
+With no existing container, init renders the managed `.devcontainer/` from that evidence and includes a root-owned, digest-bound `project-setup.sh`. The setup runs as the non-root project user only after the outbound firewall is active. With an existing `devcontainer.json`, init selects `project-devcontainer` and preserves every byte. Repeated initialization is idempotent. After managed setup, commit and rebuild/reopen, authenticate tools in the scoped volumes, install ADW inside the container, and run `adw:doctor`.
 
 ## Discover and plan
 

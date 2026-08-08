@@ -1,0 +1,470 @@
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  readdirSync,
+} from "node:fs";
+import { join, relative, resolve, sep } from "node:path";
+
+const MANIFESTS = new Set([
+  "package.json", "pyproject.toml", "requirements.txt", "Pipfile", "Pipfile.lock", "poetry.lock", "uv.lock",
+  "go.mod", "Cargo.toml", "Gemfile", "Gemfile.lock", "pom.xml", "build.gradle", "build.gradle.kts",
+]);
+const SOURCE_EXTENSIONS = new Map([
+  [".js", "node"], [".jsx", "node"], [".mjs", "node"], [".cjs", "node"], [".ts", "node"], [".tsx", "node"],
+  [".py", "python"], [".go", "go"], [".rs", "rust"], [".java", "java"], [".rb", "ruby"],
+]);
+const IGNORED_DIRECTORIES = new Set([".git", ".adw", ".devcontainer", ".next", ".venv", "node_modules", "vendor", "dist", "build", "coverage", "target", "venv", "worktrees"]);
+
+const OFFICIAL_FEATURES = {
+  python: "ghcr.io/devcontainers/features/python:1",
+  go: "ghcr.io/devcontainers/features/go:1",
+  rust: "ghcr.io/devcontainers/features/rust:1",
+  java: "ghcr.io/devcontainers/features/java:1",
+  ruby: "ghcr.io/devcontainers/features/ruby:1",
+};
+
+const ECOSYSTEM_DOMAINS = {
+  node: ["registry.npmjs.org"],
+  python: ["pypi.org", "files.pythonhosted.org"],
+  go: ["go.dev", "proxy.golang.org", "sum.golang.org", "storage.googleapis.com"],
+  rust: ["crates.io", "index.crates.io", "static.crates.io", "static.rust-lang.org"],
+  java: ["repo.maven.apache.org", "plugins.gradle.org", "services.gradle.org"],
+  ruby: ["rubygems.org", "index.rubygems.org"],
+};
+
+function readText(path) {
+  return existsSync(path) ? readFileSync(path, "utf8") : null;
+}
+
+function readJson(path, source) {
+  try { return JSON.parse(readFileSync(path, "utf8")); }
+  catch (error) { throw new Error(`cannot inspect ${source}: ${error.message}`); }
+}
+
+function sourcePath(projectRoot, path, fragment = "") {
+  const value = relative(projectRoot, path) || ".";
+  return `${value}${fragment}`;
+}
+
+function withinProject(projectRoot, path) {
+  return path === projectRoot || path.startsWith(`${projectRoot}${sep}`);
+}
+
+function componentRoots(projectRoot) {
+  const roots = new Set([projectRoot]);
+  const packagePath = join(projectRoot, "package.json");
+  if (existsSync(packagePath)) {
+    const manifest = readJson(packagePath, "package.json");
+    const workspaces = Array.isArray(manifest.workspaces) ? manifest.workspaces : manifest.workspaces?.packages;
+    for (const workspace of workspaces ?? []) {
+      if (typeof workspace !== "string" || /[*?\[\]{}]/.test(workspace)) continue;
+      const target = resolve(projectRoot, workspace);
+      if (withinProject(projectRoot, target) && target !== projectRoot && existsSync(target) && lstatSync(target).isDirectory() && !lstatSync(target).isSymbolicLink()) roots.add(target);
+    }
+  }
+  function visit(directory, depth) {
+    if (depth > 4) return;
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.isSymbolicLink() || IGNORED_DIRECTORIES.has(entry.name)) continue;
+      const target = join(directory, entry.name);
+      if ([...MANIFESTS].some((name) => existsSync(join(target, name)))) roots.add(target);
+      visit(target, depth + 1);
+    }
+  }
+  visit(projectRoot, 0);
+  return [...roots].sort((left, right) => relative(projectRoot, left).localeCompare(relative(projectRoot, right)));
+}
+
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", `'"'"'`)}'`;
+}
+
+function inComponent(projectRoot, componentRoot, command) {
+  const path = relative(projectRoot, componentRoot) || ".";
+  return path === "." ? command : `(cd ${shellQuote(path)} && ${command})`;
+}
+
+function numericVersion(value, fallback = null) {
+  const match = String(value ?? "").trim().match(/(?:^|[^0-9])(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
+  if (!match) return fallback;
+  return [match[1], match[2], match[3]].filter((part) => part !== undefined).join(".");
+}
+
+function pythonRequiresVersion(text) {
+  const match = text?.match(/^requires-python\s*=\s*["']([^"']+)["']/m);
+  return numericVersion(match?.[1], null);
+}
+
+function rustToolchainVersion(text) {
+  if (!text) return null;
+  const toml = text.match(/^channel\s*=\s*["']([^"']+)["']/m)?.[1];
+  const plain = text.trim().split(/\s+/)[0];
+  const candidate = toml ?? plain;
+  if (/^(stable|beta|nightly)$/.test(candidate)) return null;
+  return /^(stable|beta|nightly)-\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : numericVersion(candidate, null);
+}
+
+function javaVersion(text) {
+  if (!text) return null;
+  const patterns = [
+    /<maven\.compiler\.release>(\d+)<\/maven\.compiler\.release>/,
+    /<maven\.compiler\.source>(\d+)<\/maven\.compiler\.source>/,
+    /JavaLanguageVersion\.of\((\d+)\)/,
+    /sourceCompatibility\s*=\s*(?:JavaVersion\.VERSION_)?(\d+)/,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+function declaredRuntimeVersion(projectRoot, componentRoot, runtime) {
+  const toolKeys = { node: "nodejs", python: "python", go: "golang", rust: "rust", java: "java", ruby: "ruby" };
+  for (const root of componentRoot === projectRoot ? [componentRoot] : [componentRoot, projectRoot]) {
+    const path = join(root, ".tool-versions");
+    const text = readText(path);
+    if (text === null) continue;
+    const match = text.match(new RegExp(`^${toolKeys[runtime]}\\s+(\\S+)`, "m"));
+    if (match) return { raw: match[1], version: runtime === "rust" ? rustToolchainVersion(match[1]) : numericVersion(match[1], null), source: `${sourcePath(projectRoot, path)}#${toolKeys[runtime]}` };
+  }
+
+  const candidates = [];
+  const workflows = join(projectRoot, ".github/workflows");
+  if (existsSync(workflows) && lstatSync(workflows).isDirectory() && !lstatSync(workflows).isSymbolicLink()) {
+    for (const entry of readdirSync(workflows, { withFileTypes: true })) {
+      if (entry.isFile() && /\.ya?ml$/i.test(entry.name)) candidates.push(join(workflows, entry.name));
+    }
+  }
+  for (const name of [".gitlab-ci.yml", "Dockerfile"]) {
+    const path = join(projectRoot, name);
+    if (existsSync(path)) candidates.push(path);
+  }
+  const yamlKeys = { node: "node-version", python: "python-version", go: "go-version", rust: "toolchain", java: "java-version", ruby: "ruby-version" };
+  const imageNames = { node: "node", python: "python", go: "golang", rust: "rust", java: "(?:eclipse-temurin|openjdk)", ruby: "ruby" };
+  for (const path of candidates.sort()) {
+    const text = readFileSync(path, "utf8");
+    const yaml = text.match(new RegExp(`^\\s*${yamlKeys[runtime]}:\\s*["']?([0-9][0-9A-Za-z._-]*)`, "m"));
+    const image = text.match(new RegExp(`(?:FROM|image:)\\s+${imageNames[runtime]}:([0-9][0-9A-Za-z._-]*)`, "i"));
+    const raw = yaml?.[1] ?? image?.[1];
+    if (!raw) continue;
+    return { raw, version: runtime === "rust" ? rustToolchainVersion(raw) : numericVersion(raw, null), source: `${sourcePath(projectRoot, path)}#${yaml ? yamlKeys[runtime] : "image"}` };
+  }
+  return null;
+}
+
+function scanSourceKinds(projectRoot) {
+  const found = new Map();
+  let visited = 0;
+  function visit(directory, depth) {
+    if (depth > 5 || visited >= 2000) return;
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (visited >= 2000) return;
+      visited += 1;
+      if (entry.isSymbolicLink() || IGNORED_DIRECTORIES.has(entry.name)) continue;
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) visit(path, depth + 1);
+      else {
+        const extension = entry.name.includes(".") ? `.${entry.name.split(".").at(-1).toLowerCase()}` : "";
+        const runtime = SOURCE_EXTENSIONS.get(extension);
+        if (runtime && !found.has(runtime)) found.set(runtime, sourcePath(projectRoot, path));
+      }
+    }
+  }
+  visit(projectRoot, 0);
+  return found;
+}
+
+function addUnique(list, key, item) {
+  if (!list.some((candidate) => candidate[key] === item[key] && candidate.source === item.source)) list.push(item);
+}
+
+function dependencySystemPackages(projectRoot, files, packages) {
+  const mappings = [
+    { pattern: /["'\s](?:canvas)[@"'\s:<=>]/i, names: ["libcairo2-dev", "libpango1.0-dev", "libjpeg-dev", "libgif-dev", "librsvg2-dev"] },
+    { pattern: /\b(?:psycopg2|psycopg2-binary)\b/i, names: ["libpq-dev"] },
+    { pattern: /\bmysqlclient\b/i, names: ["default-libmysqlclient-dev"] },
+    { pattern: /\blxml\b/i, names: ["libxml2-dev", "libxslt1-dev"] },
+    { pattern: /\b(?:pillow|pil)\b/i, names: ["libjpeg-dev", "zlib1g-dev"] },
+    { pattern: /\bcryptography\b/i, names: ["libssl-dev", "libffi-dev"] },
+  ];
+  for (const path of files) {
+    const text = readText(path);
+    if (text === null) continue;
+    for (const mapping of mappings) {
+      if (!mapping.pattern.test(text)) continue;
+      for (const name of mapping.names) addUnique(packages, "name", { name, source: sourcePath(projectRoot, path) });
+    }
+  }
+}
+
+function environmentEvidence(projectRoot) {
+  const variables = [];
+  const ports = [];
+  for (const name of [".env.example", ".env.sample", ".env.template"]) {
+    const path = join(projectRoot, name);
+    const text = readText(path);
+    if (text === null) continue;
+    for (const line of text.split(/\r?\n/)) {
+      const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+      if (!match) continue;
+      addUnique(variables, "name", { name: match[1], source: sourcePath(projectRoot, path), status: "value-required" });
+      if (/(?:^|_)PORT$/.test(match[1]) && /^\d{2,5}$/.test(match[2].trim())) addUnique(ports, "port", { port: Number(match[2].trim()), source: `${sourcePath(projectRoot, path)}#${match[1]}` });
+    }
+  }
+  const packagePath = join(projectRoot, "package.json");
+  if (existsSync(packagePath)) {
+    const manifest = readJson(packagePath, "package.json");
+    for (const [name, command] of Object.entries(manifest.scripts ?? {})) {
+      if (typeof command !== "string") continue;
+      const match = command.match(/(?:--port(?:=|\s+)|\bPORT=)(\d{2,5})\b/);
+      if (match) addUnique(ports, "port", { port: Number(match[1]), source: `package.json#scripts.${name}` });
+    }
+  }
+  return { variables, ports };
+}
+
+function composeEvidence(projectRoot, unresolved, ports) {
+  const path = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"].map((name) => join(projectRoot, name)).find(existsSync);
+  if (!path) return;
+  const text = readFileSync(path, "utf8");
+  for (const match of text.matchAll(/["']?(\d{2,5}):\d{2,5}(?:\/(?:tcp|udp))?["']?/g)) {
+    addUnique(ports, "port", { port: Number(match[1]), source: sourcePath(projectRoot, path) });
+  }
+  unresolved.push({ requirement: "compose services", source: sourcePath(projectRoot, path), reason: "ADW does not mount the host Docker socket or infer a safe multi-container topology" });
+}
+
+function selectedRuntimeVersions(runtimes, unresolved) {
+  const selected = new Map();
+  for (const name of [...new Set(runtimes.map((runtime) => runtime.name))]) {
+    const candidates = runtimes.filter((runtime) => runtime.name === name && runtime.version).map((runtime) => runtime.version);
+    const versions = [...new Set(candidates)];
+    if (versions.length > 1) {
+      unresolved.push({ requirement: `${name} runtime version`, source: runtimes.filter((runtime) => runtime.name === name).map((runtime) => runtime.source).join(", "), reason: `conflicting detected versions: ${versions.join(", ")}` });
+      continue;
+    }
+    if (versions.length === 1) selected.set(name, versions[0]);
+  }
+  return selected;
+}
+
+export function discoverDevelopmentEnvironment(projectRoot) {
+  const runtimes = [];
+  const systemPackages = [];
+  const setupCommands = [];
+  const unresolved = [];
+  const dependencyFiles = [];
+  const roots = componentRoots(projectRoot);
+  const rootPackagePath = join(projectRoot, "package.json");
+  const rootPackage = existsSync(rootPackagePath) ? readJson(rootPackagePath, "package.json") : null;
+  const workspaceValues = Array.isArray(rootPackage?.workspaces) ? rootPackage.workspaces : rootPackage?.workspaces?.packages;
+  const exactWorkspaces = new Set((workspaceValues ?? []).filter((value) => typeof value === "string" && !/[*?\[\]{}]/.test(value)).map((value) => relative(projectRoot, resolve(projectRoot, value))));
+  const rootNodeVersionFile = [".nvmrc", ".node-version"].map((name) => join(projectRoot, name)).find(existsSync);
+  const rootNodeDeclared = rootPackage ? declaredRuntimeVersion(projectRoot, projectRoot, "node") : null;
+  const rootNodeRequested = rootNodeVersionFile ? readFileSync(rootNodeVersionFile, "utf8").trim() : rootPackage?.engines?.node ?? rootNodeDeclared?.raw;
+  const rootNodeSource = rootNodeVersionFile ? sourcePath(projectRoot, rootNodeVersionFile) : rootPackage?.engines?.node ? "package.json#engines.node" : rootNodeDeclared?.source;
+  const rootHasLockedInstall = ["package-lock.json", "pnpm-lock.yaml", "yarn.lock"].some((name) => existsSync(join(projectRoot, name)));
+
+  for (const componentRoot of roots) {
+    const component = relative(projectRoot, componentRoot) || ".";
+    const packagePath = join(componentRoot, "package.json");
+    if (existsSync(packagePath)) {
+      const manifest = readJson(packagePath, sourcePath(projectRoot, packagePath));
+      const versionFile = [".nvmrc", ".node-version"].map((name) => join(componentRoot, name)).find(existsSync);
+      const declared = declaredRuntimeVersion(projectRoot, componentRoot, "node");
+      const inheritedWorkspaceVersion = componentRoot !== projectRoot && exactWorkspaces.has(component) ? rootNodeRequested : null;
+      const rawVersion = versionFile ? readFileSync(versionFile, "utf8").trim() : manifest.engines?.node ?? inheritedWorkspaceVersion ?? declared?.raw;
+      const version = numericVersion(rawVersion, "22").split(".")[0];
+      const versionSource = versionFile ? sourcePath(projectRoot, versionFile) : manifest.engines?.node ? `${sourcePath(projectRoot, packagePath)}#engines.node` : inheritedWorkspaceVersion ? rootNodeSource : declared?.source ?? sourcePath(projectRoot, packagePath);
+      runtimes.push({ name: "node", version, requested: rawVersion ?? null, source: versionSource, component });
+      addUnique(systemPackages, "name", { name: "build-essential", source: sourcePath(projectRoot, packagePath) });
+      dependencyFiles.push(packagePath);
+      if (componentRoot !== projectRoot && exactWorkspaces.has(component) && rootHasLockedInstall) {
+        // The root lockfile-backed install covers this exact workspace.
+      } else if (existsSync(join(componentRoot, "pnpm-lock.yaml"))) setupCommands.push({ command: inComponent(projectRoot, componentRoot, "corepack pnpm install --frozen-lockfile"), source: sourcePath(projectRoot, join(componentRoot, "pnpm-lock.yaml")) });
+      else if (existsSync(join(componentRoot, "yarn.lock"))) setupCommands.push({ command: inComponent(projectRoot, componentRoot, "corepack yarn install --immutable"), source: sourcePath(projectRoot, join(componentRoot, "yarn.lock")) });
+      else if (existsSync(join(componentRoot, "package-lock.json"))) setupCommands.push({ command: inComponent(projectRoot, componentRoot, "npm ci"), source: sourcePath(projectRoot, join(componentRoot, "package-lock.json")) });
+      else if (existsSync(join(componentRoot, "bun.lock")) || existsSync(join(componentRoot, "bun.lockb"))) unresolved.push({ requirement: `install Node dependencies in ${component}`, source: sourcePath(projectRoot, packagePath), reason: "Bun projects require an explicitly pinned Bun runtime" });
+      else unresolved.push({ requirement: `install Node dependencies in ${component}`, source: sourcePath(projectRoot, packagePath), reason: "no lockfile proves a reproducible install command" });
+    }
+
+    const pyprojectPath = join(componentRoot, "pyproject.toml");
+    const pythonFiles = ["requirements.txt", "Pipfile", "Pipfile.lock", "poetry.lock", "uv.lock"].map((name) => join(componentRoot, name)).filter(existsSync);
+    if (existsSync(pyprojectPath) || pythonFiles.length > 0) {
+      const versionFile = join(componentRoot, ".python-version");
+      const pyproject = readText(pyprojectPath);
+      const declared = declaredRuntimeVersion(projectRoot, componentRoot, "python");
+      const version = existsSync(versionFile) ? numericVersion(readFileSync(versionFile, "utf8"), "3.12") : pythonRequiresVersion(pyproject) ?? declared?.version ?? "3.12";
+      const versionSource = existsSync(versionFile) ? sourcePath(projectRoot, versionFile) : pythonRequiresVersion(pyproject) ? `${sourcePath(projectRoot, pyprojectPath)}#requires-python` : declared?.source ?? sourcePath(projectRoot, existsSync(pyprojectPath) ? pyprojectPath : pythonFiles[0]);
+      runtimes.push({ name: "python", version, requested: version, source: versionSource, component });
+      for (const name of ["build-essential", "python-is-python3", "python3-dev", "python3-pip", "python3-venv"]) addUnique(systemPackages, "name", { name, source: existsSync(pyprojectPath) ? sourcePath(projectRoot, pyprojectPath) : sourcePath(projectRoot, pythonFiles[0]) });
+      dependencyFiles.push(...pythonFiles, ...(existsSync(pyprojectPath) ? [pyprojectPath] : []));
+      if (existsSync(join(componentRoot, "uv.lock"))) setupCommands.push({ command: inComponent(projectRoot, componentRoot, "python -m pip install --user uv && \"$HOME/.local/bin/uv\" sync --frozen"), source: sourcePath(projectRoot, join(componentRoot, "uv.lock")) });
+      else if (existsSync(join(componentRoot, "poetry.lock"))) setupCommands.push({ command: inComponent(projectRoot, componentRoot, "python -m pip install --user poetry && \"$HOME/.local/bin/poetry\" install --no-interaction --sync"), source: sourcePath(projectRoot, join(componentRoot, "poetry.lock")) });
+      else if (existsSync(join(componentRoot, "Pipfile.lock"))) setupCommands.push({ command: inComponent(projectRoot, componentRoot, "python -m pip install --user pipenv && \"$HOME/.local/bin/pipenv\" sync --dev"), source: sourcePath(projectRoot, join(componentRoot, "Pipfile.lock")) });
+      else if (existsSync(join(componentRoot, "requirements.txt"))) setupCommands.push({ command: inComponent(projectRoot, componentRoot, "python -m venv .venv && .venv/bin/python -m pip install -r requirements.txt"), source: sourcePath(projectRoot, join(componentRoot, "requirements.txt")) });
+      else if (existsSync(pyprojectPath)) {
+        setupCommands.push({ command: inComponent(projectRoot, componentRoot, "python -m venv .venv && .venv/bin/python -m pip install -e ."), source: sourcePath(projectRoot, pyprojectPath) });
+        unresolved.push({ requirement: `reproducible Python dependency resolution in ${component}`, source: sourcePath(projectRoot, pyprojectPath), reason: "pyproject.toml has no supported lockfile" });
+      }
+    }
+
+    const goPath = join(componentRoot, "go.mod");
+    if (existsSync(goPath)) {
+      const text = readFileSync(goPath, "utf8");
+      const toolchain = text.match(/^toolchain\s+go([0-9.]+)/m)?.[1];
+      const language = text.match(/^go\s+([0-9.]+)/m)?.[1];
+      const declared = declaredRuntimeVersion(projectRoot, componentRoot, "go");
+      const version = toolchain ?? language ?? declared?.version ?? null;
+      runtimes.push({ name: "go", version, requested: version, source: toolchain || language ? `${sourcePath(projectRoot, goPath)}#${toolchain ? "toolchain" : "go"}` : declared?.source ?? sourcePath(projectRoot, goPath), component });
+      setupCommands.push({ command: inComponent(projectRoot, componentRoot, "go mod download"), source: sourcePath(projectRoot, goPath) });
+    }
+
+    const cargoPath = join(componentRoot, "Cargo.toml");
+    if (existsSync(cargoPath)) {
+      const toolchainPath = ["rust-toolchain.toml", "rust-toolchain"].map((name) => join(componentRoot, name)).find(existsSync);
+      const declared = declaredRuntimeVersion(projectRoot, componentRoot, "rust");
+      const version = toolchainPath ? rustToolchainVersion(readFileSync(toolchainPath, "utf8")) : declared?.version ?? null;
+      runtimes.push({ name: "rust", version, requested: version, source: toolchainPath ? sourcePath(projectRoot, toolchainPath) : declared?.source ?? sourcePath(projectRoot, cargoPath), component });
+      for (const name of ["build-essential", "pkg-config", "libssl-dev"]) addUnique(systemPackages, "name", { name, source: sourcePath(projectRoot, cargoPath) });
+      if (version) setupCommands.push({ command: inComponent(projectRoot, componentRoot, existsSync(join(componentRoot, "Cargo.lock")) ? "cargo fetch --locked" : "cargo fetch"), source: sourcePath(projectRoot, existsSync(join(componentRoot, "Cargo.lock")) ? join(componentRoot, "Cargo.lock") : cargoPath) });
+      else unresolved.push({ requirement: `Rust runtime version in ${component}`, source: sourcePath(projectRoot, cargoPath), reason: "Cargo.toml does not pin a toolchain; add rust-toolchain.toml" });
+    }
+
+    const pomPath = join(componentRoot, "pom.xml");
+    const gradlePath = ["build.gradle", "build.gradle.kts"].map((name) => join(componentRoot, name)).find(existsSync);
+    if (existsSync(pomPath) || gradlePath) {
+      const manifestPath = existsSync(pomPath) ? pomPath : gradlePath;
+      const versionFile = join(componentRoot, ".java-version");
+      const declared = declaredRuntimeVersion(projectRoot, componentRoot, "java");
+      const version = existsSync(versionFile) ? numericVersion(readFileSync(versionFile, "utf8"), null) : javaVersion(readFileSync(manifestPath, "utf8")) ?? declared?.version ?? null;
+      runtimes.push({ name: "java", version, requested: version, source: existsSync(versionFile) ? sourcePath(projectRoot, versionFile) : javaVersion(readFileSync(manifestPath, "utf8")) ? sourcePath(projectRoot, manifestPath) : declared?.source ?? sourcePath(projectRoot, manifestPath), component });
+      if (version) {
+        if (existsSync(pomPath)) setupCommands.push({ command: inComponent(projectRoot, componentRoot, existsSync(join(componentRoot, "mvnw")) ? "sh ./mvnw -q dependency:go-offline" : "mvn -q dependency:go-offline"), source: sourcePath(projectRoot, pomPath) });
+        else setupCommands.push({ command: inComponent(projectRoot, componentRoot, existsSync(join(componentRoot, "gradlew")) ? "sh ./gradlew --no-daemon dependencies" : "gradle --no-daemon dependencies"), source: sourcePath(projectRoot, gradlePath) });
+      } else unresolved.push({ requirement: `Java runtime version in ${component}`, source: sourcePath(projectRoot, manifestPath), reason: "the build does not expose a supported Java toolchain declaration" });
+    }
+
+    const gemPath = join(componentRoot, "Gemfile");
+    if (existsSync(gemPath)) {
+      const versionFile = join(componentRoot, ".ruby-version");
+      const declared = declaredRuntimeVersion(projectRoot, componentRoot, "ruby");
+      const version = existsSync(versionFile) ? numericVersion(readFileSync(versionFile, "utf8"), null) : declared?.version ?? null;
+      runtimes.push({ name: "ruby", version, requested: version, source: existsSync(versionFile) ? sourcePath(projectRoot, versionFile) : declared?.source ?? sourcePath(projectRoot, gemPath), component });
+      if (version && existsSync(join(componentRoot, "Gemfile.lock"))) setupCommands.push({ command: inComponent(projectRoot, componentRoot, "bundle install"), source: sourcePath(projectRoot, join(componentRoot, "Gemfile.lock")) });
+      else unresolved.push({ requirement: `Ruby runtime and locked dependencies in ${component}`, source: sourcePath(projectRoot, gemPath), reason: "both .ruby-version and Gemfile.lock are required for autonomous setup" });
+    }
+  }
+
+  const sourceKinds = scanSourceKinds(projectRoot);
+  for (const [name, source] of sourceKinds) {
+    if (!runtimes.some((runtime) => runtime.name === name)) unresolved.push({ requirement: `${name} source runtime`, source, reason: "source code exists without a supported manifest or pinned runtime declaration" });
+  }
+
+  dependencySystemPackages(projectRoot, dependencyFiles, systemPackages);
+  const { variables, ports } = environmentEvidence(projectRoot);
+  composeEvidence(projectRoot, unresolved, ports);
+  for (const variable of variables) unresolved.push({ requirement: `environment variable ${variable.name}`, source: variable.source, reason: "values and secrets are never inferred or committed" });
+
+  const selected = selectedRuntimeVersions(runtimes, unresolved);
+  if (selected.has("node") && Number(selected.get("node").split(".")[0]) < 20) {
+    unresolved.push({ requirement: "Node runtime version", source: runtimes.find((runtime) => runtime.name === "node").source, reason: "ADW requires Node.js 20 or newer inside the managed container" });
+    selected.delete("node");
+  }
+  for (const runtime of runtimes) {
+    if (!runtime.version && !unresolved.some((item) => item.requirement.startsWith(`${runtime.name === "rust" ? "Rust" : runtime.name} runtime`))) {
+      unresolved.push({ requirement: `${runtime.name} runtime version`, source: runtime.source, reason: "no deterministic version could be inferred" });
+    }
+  }
+
+  const domains = [...new Set(runtimes.flatMap(({ name }) => ECOSYSTEM_DOMAINS[name] ?? []))].sort();
+  const features = {};
+  for (const [name, version] of selected) {
+    if (name === "node" || (name === "python" && version === "3.12")) continue;
+    if (OFFICIAL_FEATURES[name]) {
+      features[OFFICIAL_FEATURES[name]] = name === "java"
+        ? { version, installMaven: "true", installGradle: "true" }
+        : { version };
+    }
+  }
+
+  return {
+    schema: 1,
+    runtimes,
+    selected_versions: Object.fromEntries([...selected].sort(([left], [right]) => left.localeCompare(right))),
+    features,
+    system_packages: systemPackages.sort((left, right) => left.name.localeCompare(right.name) || left.source.localeCompare(right.source)),
+    setup_commands: setupCommands,
+    allowed_domains: domains,
+    forward_ports: ports.sort((left, right) => left.port - right.port),
+    environment_variables: variables,
+    unresolved,
+  };
+}
+
+function stableJson(value) {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function setupScript(requirements) {
+  const lines = [
+    "#!/usr/bin/env bash",
+    "set -euo pipefail",
+    "IFS=$'\\n\\t'",
+    "cd /workspace",
+    "",
+  ];
+  if (requirements.setup_commands.length === 0) lines.push("echo \"ADW found no lockfile-backed project dependency setup commands.\"");
+  else {
+    for (const item of requirements.setup_commands) {
+      lines.push(`# Evidence: ${item.source.replaceAll("\n", " ")}`);
+      lines.push(item.command);
+      lines.push("");
+    }
+    lines.push("echo \"ADW project dependencies are ready.\"");
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+export function managedDevelopmentFiles(projectRoot, templateRoot) {
+  const requirements = discoverDevelopmentEnvironment(projectRoot);
+  const requirementsText = stableJson(requirements);
+  const projectSetup = setupScript(requirements);
+  const config = readJson(join(templateRoot, "devcontainer.json"), "managed devcontainer template");
+  const nodeVersion = requirements.selected_versions.node;
+  if (nodeVersion) config.build.args.NODE_MAJOR = nodeVersion.split(".")[0];
+  const aptPackages = [...new Set(requirements.system_packages.map(({ name }) => name))].sort();
+  config.build.args.ADW_PROJECT_APT_PACKAGES = aptPackages.join(" ");
+  if (Object.keys(requirements.features).length > 0) config.features = requirements.features;
+  if (requirements.forward_ports.length > 0) config.forwardPorts = requirements.forward_ports.map(({ port }) => port);
+  config.postCreateCommand = "sudo /usr/local/bin/adw-init-firewall && sudo /usr/local/bin/adw-post-create && /usr/local/bin/adw-project-setup";
+
+  let dockerfile = readFileSync(join(templateRoot, "Dockerfile"), "utf8");
+  const allowedBase = readFileSync(join(templateRoot, "allowed-domains.txt"), "utf8").trimEnd();
+  const generatedDomains = requirements.allowed_domains.filter((domain) => !allowedBase.split(/\r?\n/).some((line) => line.trim() === domain));
+  const allowedDomains = `${allowedBase}${generatedDomains.length > 0 ? `\n\n# Project dependency sources detected by adw:init\n${generatedDomains.join("\n")}` : ""}\n`;
+  const marker = readJson(join(templateRoot, "adw-managed.json"), "managed devcontainer marker");
+  marker.requirements_schema = requirements.schema;
+  marker.project_requirements_sha256 = sha256(requirementsText);
+  marker.project_setup_sha256 = sha256(projectSetup);
+
+  return {
+    requirements,
+    files: new Map([
+      ["devcontainer.json", stableJson(config)],
+      ["Dockerfile", dockerfile],
+      ["allowed-domains.txt", allowedDomains],
+      ["init-firewall.sh", readFileSync(join(templateRoot, "init-firewall.sh"), "utf8")],
+      ["post-create.sh", readFileSync(join(templateRoot, "post-create.sh"), "utf8")],
+      ["project-requirements.json", requirementsText],
+      ["project-setup.sh", projectSetup],
+      ["adw-managed.json", stableJson(marker)],
+    ]),
+  };
+}

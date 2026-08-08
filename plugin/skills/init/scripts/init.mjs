@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { discoverDevelopmentEnvironment, managedDevelopmentFiles } from "./development-environment.mjs";
 
 const ROUTING_START = "<!-- ADW:START -->";
 const ROUTING_END = "<!-- ADW:END -->";
@@ -263,12 +264,13 @@ function resolveExecution(projectRoot, requested) {
   };
 }
 
-function managedDevcontainerFiles() {
+function managedDevcontainerFiles(projectRoot) {
   const templateRoot = join(pluginRoot, "templates/devcontainer");
-  return ["devcontainer.json", "Dockerfile", "allowed-domains.txt", "init-firewall.sh", "post-create.sh", "adw-managed.json"].map((name) => ({
+  const generated = managedDevelopmentFiles(projectRoot, templateRoot);
+  return [...generated.files].map(([name, content]) => ({
     path: `.devcontainer/${name}`,
     before: "",
-    after: readFileSync(join(templateRoot, name), "utf8"),
+    after: content,
     action: "create-managed-devcontainer",
   }));
 }
@@ -288,7 +290,7 @@ function plannedFiles(projectRoot, execution) {
   const configPath = join(projectRoot, "adw.yaml");
   if (!existsSync(configPath)) {
     files.push({ path: "adw.yaml", before: "", after: projectConfiguration(projectRoot, execution.isolation), action: "create" });
-    if (execution.isolation === "managed-devcontainer") files.push(...managedDevcontainerFiles());
+    if (execution.isolation === "managed-devcontainer") files.push(...managedDevcontainerFiles(projectRoot));
   }
   return files;
 }
@@ -356,7 +358,7 @@ function initializeDocs(projectRoot, plan) {
   git(projectRoot, ["commit", "-m", "Initialize ADW docs branch"], { cwd: docsPath });
 }
 
-function summarize(files, docs, execution) {
+function summarize(projectRoot, files, docs, execution) {
   return {
     ok: true,
     writes: files.filter((file) => file.before !== file.after).map((file) => ({ path: file.path, action: file.action })),
@@ -364,6 +366,7 @@ function summarize(files, docs, execution) {
     local_state: [".adw/local.yaml", ".adw/cache/"],
     docs,
     devcontainer: execution,
+    development_environment: execution.isolation === "managed-devcontainer" ? discoverDevelopmentEnvironment(projectRoot) : null,
     next_steps: execution.reopen_required
       ? ["commit the reviewed initialization files", "rebuild and reopen the repository in the devcontainer", "authenticate Codex, Claude Code, and required provider tools inside their project-scoped volumes", "install ADW inside the container and run adw:doctor"]
       : ["run adw:doctor to verify the selected provider sandbox"],
@@ -381,7 +384,7 @@ try {
   const files = plannedFiles(projectRoot, execution);
   const docs = docsPlan(projectRoot);
   if (args.action === "preview") {
-    process.stdout.write(`${JSON.stringify({ mode: "preview", ...summarize(files, docs, execution) }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ mode: "preview", ...summarize(projectRoot, files, docs, execution) }, null, 2)}\n`);
   } else {
     // Ignore rules must exist before any local state or worktree is created.
     writeChangedFiles(projectRoot, files.filter((file) => file.path === ".gitignore"));
@@ -397,7 +400,7 @@ try {
     ].join("\n"), "utf8");
     writeChangedFiles(projectRoot, files.filter((file) => file.path !== ".gitignore"));
     initializeDocs(projectRoot, docs);
-    process.stdout.write(`${JSON.stringify({ mode: "apply", ...summarize(files, { ...docs, action: docs.action === "reuse" ? "reuse" : "ready" }, execution) }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ mode: "apply", ...summarize(projectRoot, files, { ...docs, action: docs.action === "reuse" ? "reuse" : "ready" }, execution) }, null, 2)}\n`);
   }
 } catch (error) {
   fail(error.message);

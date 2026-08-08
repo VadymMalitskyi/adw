@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "runtimes": [],
+  "selected_versions": {},
+  "features": {},
+  "system_packages": [],
+  "setup_commands": [],
+  "allowed_domains": [],
+  "forward_ports": [],
+  "environment_variables": [],
+  "unresolved": []
+}
