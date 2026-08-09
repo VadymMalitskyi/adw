@@ -54,7 +54,7 @@ export function validateWorkItemPayload(profile: RecordValue, payload: RecordVal
 }
 
 export function resolveProjectPolicy({ project, affected_paths, profiles = {} }: { project: RecordValue; affected_paths: string[]; profiles?: Record<string, RecordValue> }): RecordValue {
-  if (!project || project.schema !== 4) throw new TypeError("effective policy resolution requires project schema 4");
+  if (!project || ![4, 5].includes(project.schema)) throw new TypeError("effective policy resolution requires project schema 4 or 5");
   if (!Array.isArray(affected_paths) || affected_paths.length === 0) throw new TypeError("affected_paths must be a non-empty array");
   const paths = [...new Set(affected_paths.map((path) => safePath(path, "affected path")))];
   const components = Object.entries(project.components ?? {}).map(([name, value]: [string, any]) => ({ name, ...value, path: safePath(value.path, `component ${name} path`) }));

@@ -4,7 +4,7 @@ Treat the configured execution environment as an enforceable preflight, not docu
 
 ## Resolve the profile
 
-Read schema-3-or-newer `adw.yaml` `execution.isolation` and `execution.enforcement` before any project or external mutation:
+Read schema-5 `adw.yaml` `execution.isolation`, `execution.enforcement`, and `execution.permissions.profile` before any project or external mutation. Schema 4 remains a historical input for `adw:update` and policy resolution:
 
 - `managed-devcontainer`: require `.devcontainer/adw-managed.json`, the managed files, and `ADW_MANAGED_DEVCONTAINER=1` in the active process.
 - `project-devcontainer`: preserve project-owned files; require `.devcontainer/devcontainer.json` and a runtime marker such as `ADW_PROJECT_DEVCONTAINER=1`.
@@ -16,7 +16,7 @@ For `required`, stop before reads that execute project code and before every mut
 
 ## Managed-container invariants
 
-Keep the agent CLIs pinned, run as a non-root user, keep Codex's inner Linux sandbox enabled, retain ordinary Claude Code permission review, and apply the fail-closed egress policy before agent work. Do not use bypass/danger-full-access modes as the normal ADW path.
+Keep the agent CLIs pinned, run as a non-root user, keep Codex's workspace sandbox enabled, enable Claude Code's inner Bash sandbox, and apply the fail-closed egress policy before agent work. The `managed-development` profile auto-approves routine local development, prompts for external writes, and forbids force-push/merge/release/deploy paths. Do not use bypass/danger-full-access modes as the normal ADW path.
 
 Never mount the Docker socket, host home, SSH directory, global cloud credentials, or global agent configuration. Use distinct named volumes for Codex, Claude, and provider authentication. Treat those volumes as sensitive and repository-scoped.
 

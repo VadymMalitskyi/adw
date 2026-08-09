@@ -15,7 +15,7 @@ Before project commands or edits, enforce `adw.yaml` execution isolation through
 
 Resolve only configured `work_tracker`, `code_host`, `observability`, and `knowledge` capabilities, keeping providers separate from `native|mcp|cli|api` transports. Honor `disabled`, `optional`, and `required`. Use scoped external reads only when they help bound or diagnose the correction. Escalate to `adw:plan` if the change needs a requirement-bearing binding or external requirement mutation. When integrations are absent, keep the local quick workflow unchanged.
 
-For project schema 4, resolve affected components and validation with `resolve-project-policy`. Escalate to `adw:plan` when tracker binding is required. Run the de-duplicated union of global, affected-component, and quick-contract validation; never omit a required component command.
+For project schema 4 or 5, resolve affected components and validation with `resolve-project-policy`. Escalate to `adw:plan` when tracker binding is required. Run the de-duplicated union of global, affected-component, and quick-contract validation; never omit a required component command.
 
 Before editing, write a compact change contract in the interaction: outcome, rationale, explicit project-relative paths, exclusions, acceptance behavior, exact sourced validation commands, and documentation impact. Use a stable quick change id such as `quick-<date>-<slug>`.
 

@@ -22,6 +22,8 @@ Version 0.2 adds optional integration configuration and change bindings. A proje
 
 Project schema 4 adds optional work-tracker workflow policy and work-item profile references. Migration from schema 3 changes only the schema number and adds no policy, profile, binding requirement, or external action. New planning bundles use plan schema 2 to snapshot resolved components, additive validation, and optional tracker policy; historical plan schema 1 artifacts remain unchanged.
 
+Project schema 5 adds the required `managed-development` permission profile. Migration previews every affected byte and atomically adds provider-native Codex and/or Claude settings according to the initialized routing/managed-agent selection. Managed devcontainers also receive root-owned Claude policy/hook files and Codex rules. Existing unrelated provider settings are preserved; malformed, unsafe, conflicting, symlinked, or drifted managed files stop migration without partial writes.
+
 Version 0.3 adds the schema-3 execution contract. Migration preserves an existing project devcontainer and marks it required. A project without one migrates to `provider-sandbox` with preferred enforcement so an update does not silently add infrastructure or strand an existing workflow. To adopt the managed container later, use a separately reviewed initialization/infrastructure change; do not relabel a provider sandbox without creating and entering the required container.
 
 ## Docs synchronization recovery

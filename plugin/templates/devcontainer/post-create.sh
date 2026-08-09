@@ -32,6 +32,12 @@ for path in "${credential_paths[@]}"; do
   chown -R vscode:vscode "$path"
 done
 
+if [[ "$agent_tools" == "codex" || "$agent_tools" == "both" ]]; then
+  mkdir -p /home/vscode/.codex/rules
+  install -m 0444 /etc/adw/codex.rules /home/vscode/.codex/rules/adw-managed-development.rules
+  chown -R vscode:vscode /home/vscode/.codex/rules
+fi
+
 for command in "${agent_commands[@]}"; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "ADW managed container is missing the selected pinned agent CLI: $command" >&2

@@ -29,13 +29,15 @@ ADW combines guidance and deterministic helpers with an enforceable execution-pr
 
 ## Execution environment
 
-Schema 3 records one execution profile and its enforcement level:
+Schema 5 records one execution profile, its enforcement level, and `execution.permissions.profile: managed-development`:
 
 - `managed-devcontainer` is the default for a new repository without `.devcontainer/`. Init creates a pinned, non-root image for Codex and Claude Code, project-scoped credential volumes, a root-owned outbound allowlist, and a required runtime marker.
 - `project-devcontainer` is selected when the project already owns `.devcontainer/devcontainer.json`. Init preserves every existing byte and requires a runtime marker; doctor reports material deviations from the managed baseline.
 - `provider-sandbox` is an explicit portable fallback recorded as preferred. The active agent must verify its real filesystem, network, and approval boundary and obtain fresh confirmation before a mutating workflow; repository text cannot attest it.
 
-Required isolation blocks project commands and edits when the configured runtime is not active. Init preview/apply is the sole bootstrap exception. Codex keeps its inner sandbox in the managed container and Claude Code keeps its normal permission controls; the container is an additional outer boundary, not permission bypass.
+Required isolation blocks project commands and edits when the configured runtime is not active. Init preview/apply is the sole bootstrap exception. The managed-development profile lets routine workspace edits, builds, tests, bounded provider reads, and local Git history proceed without repeated prompts. Pushes and other external writes prompt; force-push, merge, release, publish, deployment, credential export, and selected destructive local commands are denied in the normal workflow.
+
+Codex remains `workspace-write` with `on-request` approval, ADW exec rules, and writes-only approval for app tools. Claude Code uses `acceptEdits`, its inner Bash sandbox, static allow/ask/deny rules, and a root-owned managed-container hook that allows recognizably read-only MCP tools while asking for unknown or mutating tools. These are ergonomic guardrails and defense in depth, not perfect effect classification: aliases, scripts, generic API clients, and provider-specific tool names can obscure behavior. The container firewall, least-privilege credentials, branch protection, provider authorization, and ADW's exact external-write authorization remain the security boundaries.
 
 The managed firewall is defense in depth, not a perfect service-identity boundary: allowed services may host untrusted content and DNS/IP mappings can change. Its domain file is baked root-owned into the image, so additions require review, commit, and a rebuild. Never mount the host Docker socket, SSH directory, cloud credential directories, provider-wide config, or a home directory into the managed container. Authentication lives only in named project-scoped volumes.
 

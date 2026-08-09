@@ -26,7 +26,7 @@ Inspect first and propose a reviewable context diff. Write nothing until the use
    - validation commands with an exact source path and key, target, job, or heading;
    - links to authoritative project documentation instead of copied detail.
    - when the user requests integration discovery, capability-based `integrations` entries with provider, `disabled|optional|required` requirement, non-secret organization/project/repository or parent identifiers, and read/write policy.
-   - only from explicit project-owner requirements, optional schema-4 `workflows.work_tracker` policy and project-owned `adw/work-items/*.yaml` profiles defining provider, object type, required/allowed/default fields, and requirement-bearing fields.
+   - only from explicit project-owner requirements, optional schema-4-or-5 `workflows.work_tracker` policy and project-owned `adw/work-items/*.yaml` profiles defining provider, object type, required/allowed/default fields, and requirement-bearing fields.
 7. Separate verified facts, inferences requiring confirmation, and unresolved values. Never invent a command or mark an inferred command verified.
 8. Validate proposed work-item profiles as artifact `work-item-profile`. Show the exact proposed diff for `adw.yaml`, explicitly requested `adw/work-items/*.yaml` profiles, `worktrees/docs/architecture.md`, and only the necessary `worktrees/docs/components/<component>.md` files. Preserve unrelated config, historical `changes/`, `SYNC.yaml`, and repository-owned docs. Never infer binding, creation, cardinality, object type, or business-field requirements from repository layout or provider availability.
 9. Request explicit approval. If approval is absent, stop after the proposal.

@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { CODEX_RULES, PERMISSION_PROFILE, managedClaudeSettings, mergeClaudeSettings, mergeCodexConfig, permissionAgentsFromProject } from "../../../execution/managed-development.mjs";
 
 const skillDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pluginRoot = resolve(skillDirectory, "../..");
@@ -84,7 +85,40 @@ function executionDeclaration(text) {
     const field = /^  (isolation|enforcement):\s*(?:"([^"]*)"|'([^']*)'|([^#\n]+))/.exec(line);
     if (field) execution[field[1]] = (field[2] ?? field[3] ?? field[4]).trim();
   }
+  const profile = text.match(/^    profile:\s*(?:"([^"]*)"|'([^']*)'|([^#\n]+))/m);
+  if (profile) execution.permissions = { profile: (profile[1] ?? profile[2] ?? profile[3]).trim() };
   return execution;
+}
+
+function regularFile(path, projectRoot) {
+  if (!existsSync(path) || lstatSync(path).isSymbolicLink() || !lstatSync(path).isFile()) return false;
+  const rel = relative(realpathSync(projectRoot), realpathSync(path));
+  return rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel);
+}
+
+function permissionChecks(projectRoot, execution) {
+  const checks = [];
+  const profile = execution.permissions?.profile;
+  checks.push(check("permissions:configuration", profile === PERMISSION_PROFILE ? "pass" : "fail", profile === PERMISSION_PROFILE ? `${PERMISSION_PROFILE} is configured` : `missing or unsupported permission profile: ${profile ?? "missing"}`));
+  if (profile !== PERMISSION_PROFILE) return checks;
+  const agentTools = permissionAgentsFromProject(projectRoot, { existsSync, readFileSync, lstatSync, realpathSync, relative, isAbsolute, join });
+  if (agentTools === "codex" || agentTools === "both") {
+    const configPath = join(projectRoot, ".codex/config.toml");
+    const rulesPath = join(projectRoot, ".codex/rules/adw.rules");
+    let valid = regularFile(configPath, projectRoot) && regularFile(rulesPath, projectRoot) && readFileSync(rulesPath, "utf8") === CODEX_RULES;
+    try { valid = valid && mergeCodexConfig(readFileSync(configPath, "utf8")) === readFileSync(configPath, "utf8"); } catch { valid = false; }
+    checks.push(check("permissions:codex", valid ? "pass" : "fail", valid ? "Codex uses workspace-write, on-request, writes-only app approval, and ADW exec rules" : "Codex permission configuration is missing, unsafe, or drifted"));
+  }
+  if (agentTools === "claude" || agentTools === "both") {
+    const settingsPath = join(projectRoot, ".claude/settings.json");
+    let valid = regularFile(settingsPath, projectRoot);
+    try {
+      const current = JSON.parse(readFileSync(settingsPath, "utf8"));
+      valid = valid && JSON.stringify(current) === JSON.stringify(JSON.parse(mergeClaudeSettings(JSON.stringify(current))));
+    } catch { valid = false; }
+    checks.push(check("permissions:claude", valid ? "pass" : "fail", valid ? "Claude Code uses accept-edits, sandboxed Bash, and ADW allow/ask/deny rules" : "Claude Code permission configuration is missing, unsafe, or drifted"));
+  }
+  return checks;
 }
 
 function workTrackerWorkflow(text) {
@@ -152,7 +186,7 @@ function workTrackerPolicyChecks(projectRoot, config, integrations) {
 function managedDevcontainerChecks(projectRoot, execution) {
   const checks = [];
   const directory = join(projectRoot, ".devcontainer");
-  const required = ["devcontainer.json", "Dockerfile", "allowed-domains.txt", "init-firewall.sh", "post-create.sh", "project-requirements.json", "project-setup.sh", "adw-managed.json"];
+  const required = ["devcontainer.json", "Dockerfile", "allowed-domains.txt", "init-firewall.sh", "post-create.sh", "codex.rules", "claude-settings.json", "claude-permission-hook.mjs", "project-requirements.json", "project-setup.sh", "adw-managed.json"];
   const missing = required.filter((name) => !existsSync(join(directory, name)));
   if (missing.length > 0) {
     checks.push(check("execution:managed-files", "fail", `managed devcontainer is missing: ${missing.join(", ")}`));
@@ -223,14 +257,23 @@ function managedDevcontainerChecks(projectRoot, execution) {
     && /gpasswd -d vscode sudo/.test(dockerfile)
     && /chmod 0555 \/usr\/local\/bin\/adw-project-setup/.test(dockerfile)
     && /USER vscode/.test(dockerfile);
-  const validMarker = marker?.schema === 1 && marker?.profile === "managed-devcontainer" && validAgentProfile && marker?.plugin_version === JSON.parse(readFileSync(join(pluginRoot, ".codex-plugin/plugin.json"), "utf8")).version;
+  const validMarker = marker?.schema === 2 && marker?.profile === "managed-devcontainer" && marker?.permission_profile === PERMISSION_PROFILE && validAgentProfile && marker?.plugin_version === JSON.parse(readFileSync(join(pluginRoot, ".codex-plugin/plugin.json"), "utf8")).version;
   const requirementsDigest = createHash("sha256").update(readFileSync(join(directory, "project-requirements.json"))).digest("hex");
   const setupDigest = createHash("sha256").update(readFileSync(join(directory, "project-setup.sh"))).digest("hex");
   const generatedFilesMatch = marker?.requirements_schema === 1
     && marker?.project_requirements_sha256 === requirementsDigest
     && marker?.project_setup_sha256 === setupDigest
     && /^[a-z0-9+.-]*(?: [a-z0-9+.-]+)*$/.test(configObject?.build?.args?.ADW_PROJECT_APT_PACKAGES ?? "");
-  const valid = hardening && validMarker && versionsMatch && generatedFilesMatch && !unsafeMount;
+  const permissionFilesMatch = readFileSync(join(directory, "codex.rules"), "utf8") === CODEX_RULES
+    && readFileSync(join(directory, "claude-settings.json"), "utf8") === managedClaudeSettings({ allowedDomains: [...configuredDomains] })
+    && readFileSync(join(directory, "claude-permission-hook.mjs"), "utf8") === readFileSync(join(pluginRoot, "templates/devcontainer/claude-permission-hook.mjs"), "utf8")
+    && /COPY \.devcontainer\/codex\.rules/.test(dockerfile)
+    && /managed-settings\.d\/20-adw\.json/.test(dockerfile)
+    && /adw-claude-permission-hook/.test(dockerfile)
+    && marker?.codex_rules_sha256 === createHash("sha256").update(readFileSync(join(directory, "codex.rules"))).digest("hex")
+    && marker?.claude_settings_sha256 === createHash("sha256").update(readFileSync(join(directory, "claude-settings.json"))).digest("hex")
+    && marker?.claude_hook_sha256 === createHash("sha256").update(readFileSync(join(directory, "claude-permission-hook.mjs"))).digest("hex");
+  const valid = hardening && validMarker && versionsMatch && generatedFilesMatch && permissionFilesMatch && !unsafeMount;
   checks.push(check("execution:managed-files", valid ? "pass" : "fail", valid ? `managed devcontainer hardening and selected pinned agent tools (${marker.agent_tools}) are configured` : "managed devcontainer hardening, selected agent tools, versions, mounts, domains, or marker are invalid"));
   const active = process.env.ADW_MANAGED_DEVCONTAINER === "1";
   checks.push(check("execution:runtime", active ? "pass" : execution.enforcement === "required" ? "fail" : "warn", active ? "running inside the ADW managed devcontainer" : "ADW managed devcontainer is not the active execution environment"));
@@ -242,7 +285,7 @@ function executionChecks(projectRoot, config) {
   if (!execution.isolation || !["required", "preferred"].includes(execution.enforcement)) {
     return [check("execution:configuration", "fail", "execution isolation or enforcement is missing")];
   }
-  const checks = [check("execution:configuration", "pass", `${execution.isolation} is ${execution.enforcement}`, execution)];
+  const checks = [check("execution:configuration", "pass", `${execution.isolation} is ${execution.enforcement}`, execution), ...permissionChecks(projectRoot, execution)];
   if (execution.isolation === "managed-devcontainer") return [...checks, ...managedDevcontainerChecks(projectRoot, execution)];
   if (execution.isolation === "project-devcontainer") {
     const configured = existsSync(join(projectRoot, ".devcontainer/devcontainer.json"));
@@ -289,7 +332,7 @@ function projectChecks(projectRoot) {
     const config = readFileSync(configPath, "utf8");
     const schema = yamlValue(config, "schema");
     const worktree = yamlValue(config, "worktree");
-    checks.push(check("project-schema", schema === "4" ? "pass" : "fail", schema === "4" ? "project schema 4 is supported" : `unsupported or migration-required schema: ${schema ?? "missing"}`));
+    checks.push(check("project-schema", schema === "5" ? "pass" : "fail", schema === "5" ? "project schema 5 is supported" : `unsupported or migration-required schema: ${schema ?? "missing"}`));
     checks.push(check("docs-config", worktree === "worktrees/docs" ? "pass" : "fail", worktree === "worktrees/docs" ? "docs worktree uses worktrees/docs" : `unexpected docs worktree: ${worktree ?? "missing"}`));
     const componentPaths = componentDeclarations(config).map(({ path }) => path).filter(Boolean);
     const uniqueComponents = new Set(componentPaths).size === componentPaths.length;

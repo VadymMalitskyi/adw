@@ -83,6 +83,15 @@ test("effective policy selects the most-specific component and additive validati
   assert.equal(resolveProjectPolicy({ project: unrelated, affected_paths: ["services/payments/src/retry.ts"], profiles }).project_policy_digest, policy.project_policy_digest);
 });
 
+test("schema 5 preserves effective workflow policy resolution", async () => {
+  const schema5 = project();
+  schema5.schema = 5;
+  schema5.execution.permissions = { profile: "managed-development" };
+  assert.deepEqual(await validateArtifact("project", schema5), { valid: true, errors: [] });
+  const policy = resolveProjectPolicy({ project: schema5, affected_paths: ["services/payments/src/retry.ts"], profiles: { "adw/work-items/feature-story.yaml": profile() } });
+  assert.deepEqual(policy.components, ["payments"]);
+});
+
 test("effective policy rejects ambiguous ownership and profile/provider drift", () => {
   const ambiguous = project();
   ambiguous.components.duplicate = { path: "services/payments" };

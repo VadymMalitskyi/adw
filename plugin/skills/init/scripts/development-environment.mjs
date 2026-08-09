@@ -6,6 +6,7 @@ import {
   readdirSync,
 } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
+import { CODEX_RULES, managedClaudeSettings } from "../../../execution/managed-development.mjs";
 
 const MANIFESTS = new Set([
   "package.json", "pyproject.toml", "requirements.txt", "Pipfile", "Pipfile.lock", "poetry.lock", "uv.lock",
@@ -542,8 +543,15 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { agentTools 
   addDomainSection("Explicitly configured integrations", configuredIntegrationDomains);
   addDomainSection("Project dependency sources detected by adw:init", requirements.allowed_domains);
   const allowedDomains = `${allowedBase}${domainSections.length > 0 ? `\n\n${domainSections.join("\n\n")}` : ""}\n`;
+  const sandboxDomains = allowedDomains.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith("#"));
+  const claudeSettings = managedClaudeSettings({ allowedDomains: sandboxDomains });
   const marker = readJson(join(templateRoot, "adw-managed.json"), "managed devcontainer marker");
   marker.agent_tools = agentTools;
+  marker.schema = 2;
+  marker.permission_profile = "managed-development";
+  marker.codex_rules_sha256 = sha256(CODEX_RULES);
+  marker.claude_settings_sha256 = sha256(claudeSettings);
+  marker.claude_hook_sha256 = sha256(readFileSync(join(templateRoot, "claude-permission-hook.mjs"), "utf8"));
   marker.requirements_schema = requirements.schema;
   marker.project_requirements_sha256 = sha256(requirementsText);
   marker.project_setup_sha256 = sha256(projectSetup);
@@ -556,6 +564,9 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { agentTools 
       ["allowed-domains.txt", allowedDomains],
       ["init-firewall.sh", readFileSync(join(templateRoot, "init-firewall.sh"), "utf8")],
       ["post-create.sh", readFileSync(join(templateRoot, "post-create.sh"), "utf8")],
+      ["codex.rules", CODEX_RULES],
+      ["claude-settings.json", claudeSettings],
+      ["claude-permission-hook.mjs", readFileSync(join(templateRoot, "claude-permission-hook.mjs"), "utf8")],
       ["project-requirements.json", requirementsText],
       ["project-setup.sh", projectSetup],
       ["adw-managed.json", stableJson(marker)],

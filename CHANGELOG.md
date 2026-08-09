@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add project schema 5 and the `managed-development` agent permission profile.
+- Auto-approve routine workspace edits, builds, tests, and local Git work while prompting for external writes and forbidding force-push, merge, release, publish, and deployment commands.
+- Generate Codex exec-policy/config files and Claude Code sandbox/permission settings; bake root-owned Claude policy and MCP/Bash classification hooks into managed devcontainers.
+- Add schema-4-to-5 multi-file migration, doctor/status evidence, and adversarial cross-provider policy coverage.
 - Add project schema 4 with optional work-tracker workflow policy and committed payload-profile references.
 - Add plan schema 2 with digest-bound effective components, validation, and tracker policy.
 - Add deterministic project-policy resolution, work-item profile and payload validation, schema-3-to-4 migration, diagnostics, and contract coverage.

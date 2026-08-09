@@ -78,13 +78,20 @@ test("empty repository initializes unresolved commands, docs records, and a mana
     ".devcontainer/Dockerfile",
     ".devcontainer/adw-managed.json",
     ".devcontainer/allowed-domains.txt",
+    ".devcontainer/claude-permission-hook.mjs",
+    ".devcontainer/claude-settings.json",
+    ".devcontainer/codex.rules",
     ".devcontainer/devcontainer.json",
     ".devcontainer/init-firewall.sh",
     ".devcontainer/post-create.sh",
     ".devcontainer/project-requirements.json",
     ".devcontainer/project-setup.sh",
   ]);
-  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /^schema: 4$/m);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /^schema: 5$/m);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /permissions:\n    profile: managed-development/);
+  assert.equal(existsSync(join(root, ".codex/config.toml")), true);
+  assert.equal(existsSync(join(root, ".codex/rules/adw.rules")), true);
+  assert.equal(existsSync(join(root, ".claude/settings.json")), true);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /execution:\n  isolation: managed-devcontainer\n  enforcement: required/);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /command: "<unresolved>"[\s\S]*required: false/);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /source: "unresolved: no supported manifest or task-runner target proves a validation command"/);
@@ -130,7 +137,7 @@ test("existing project keeps instructions, documentation, ignores, and devcontai
 
   runInit(root, "apply", true);
   const config = readFileSync(join(root, "adw.yaml"), "utf8");
-  assert.match(config, /^schema: 4$/m);
+  assert.match(config, /^schema: 5$/m);
   assert.match(config, /execution:\n  isolation: project-devcontainer\n  enforcement: required/);
   for (const [command, source] of [
     ["npm run lint", "package.json#scripts.lint"],
@@ -164,7 +171,7 @@ test("monorepo initialization keeps component commands separate with observable 
 
   runInit(root, "apply", true);
   const config = readFileSync(join(root, "adw.yaml"), "utf8");
-  assert.match(config, /^schema: 4$/m);
+  assert.match(config, /^schema: 5$/m);
   assert.match(config, /path: "apps\/web"/);
   assert.match(config, /path: "services\/api"/);
   for (const source of [

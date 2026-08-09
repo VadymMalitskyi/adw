@@ -102,6 +102,8 @@ test("doctor and status reconstruct initialized state without writes", async () 
   assert.equal(doctor.checks.find(({ id }) => id === "docs-worktree").status, "pass");
   assert.equal(status.read_only, true);
   assert.equal(status.execution.isolation, "managed-devcontainer");
+  assert.equal(status.execution.permissions.profile, "managed-development");
+  assert.deepEqual(status.execution.permissions.provider_artifacts, { codex: true, claude: true });
   assert.equal(status.execution.active, true);
   assert.equal(status.docs.attached, true);
   assert.equal(status.changes.length, 1);

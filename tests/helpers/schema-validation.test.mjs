@@ -105,6 +105,27 @@ test("project schema v3 requires a coherent execution profile", async () => {
   assert.ok(invalid.errors.some(({ path, keyword }) => path === "/execution/enforcement" && keyword === "security"));
 });
 
+test("project schema v5 requires the managed-development permission profile", async () => {
+  const project = {
+    schema: 5,
+    git: { default_branch: "main" },
+    documentation: { mode: "branch", branch: "docs", worktree: "worktrees/docs", sync_marker: "SYNC.yaml", delivery: "direct-push" },
+    execution: { isolation: "managed-devcontainer", enforcement: "required", permissions: { profile: "managed-development" } },
+    components: {},
+    validation: { default: ["npm test"] },
+  };
+  assert.deepEqual(await validateArtifact("project", project), { valid: true, errors: [] });
+
+  const missing = structuredClone(project);
+  delete missing.execution.permissions;
+  assert.equal((await validateArtifact("project", missing)).valid, false);
+  const unknown = structuredClone(project);
+  unknown.execution.permissions.profile = "bypass-everything";
+  const invalid = await validateArtifact("project", unknown);
+  assert.equal(invalid.valid, false);
+  assert.ok(invalid.errors.some(({ path }) => path === "/execution/permissions/profile"));
+});
+
 test("integration and external-action v1 schemas accept durable, secret-free evidence", async () => {
   const integration = {
     schema: 1,

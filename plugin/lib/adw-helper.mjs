@@ -12,7 +12,8 @@ export const ARTIFACT_SCHEMAS = Object.freeze({
     1: new URL("../schemas/project.v1.schema.json", import.meta.url),
     2: new URL("../schemas/project.v2.schema.json", import.meta.url),
     3: new URL("../schemas/project.v3.schema.json", import.meta.url),
-    4: new URL("../schemas/project.v4.schema.json", import.meta.url)
+    4: new URL("../schemas/project.v4.schema.json", import.meta.url),
+    5: new URL("../schemas/project.v5.schema.json", import.meta.url)
   }),
   plan: Object.freeze({
     1: new URL("../schemas/plan.v1.schema.json", import.meta.url),
@@ -213,7 +214,7 @@ export async function validateArtifact(artifact, data) {
     }
     result.valid = result.errors.length === 0;
   }
-  if (result.valid && artifact === "project" && (data.schema === 2 || data.schema === 3 || data.schema === 4)) {
+  if (result.valid && artifact === "project" && (data.schema === 2 || data.schema === 3 || data.schema === 4 || data.schema === 5)) {
     const forbidden = /(?:password|passwd|token|api[_-]?key|secret|credential)/i;
     for (const [capability, integration] of Object.entries(data.integrations ?? {})) {
       for (const key of Object.keys(integration.settings ?? {})) {
@@ -222,11 +223,11 @@ export async function validateArtifact(artifact, data) {
     }
     result.valid = result.errors.length === 0;
   }
-  if (result.valid && artifact === "project" && (data.schema === 3 || data.schema === 4)) {
+  if (result.valid && artifact === "project" && (data.schema === 3 || data.schema === 4 || data.schema === 5)) {
     if (data.execution.isolation === "managed-devcontainer" && data.execution.enforcement !== "required") {
       result.errors.push({ path: "/execution/enforcement", keyword: "security", message: "managed-devcontainer isolation must be required" });
     }
-    if (data.schema === 4 && data.workflows?.work_tracker) {
+    if ((data.schema === 4 || data.schema === 5) && data.workflows?.work_tracker) {
       const tracker = data.workflows.work_tracker;
       if (!data.integrations?.work_tracker || data.integrations.work_tracker.requirement === "disabled") result.errors.push({ path: "/workflows/work_tracker", keyword: "capability", message: "requires an enabled integrations.work_tracker capability" });
       if (tracker.binding === "required" && data.integrations?.work_tracker?.requirement !== "required") result.errors.push({ path: "/workflows/work_tracker/binding", keyword: "capability", message: "required binding requires integrations.work_tracker.requirement to be required" });
@@ -349,7 +350,7 @@ export function validateWorkItemPayload(profile, payload) {
 }
 
 export function resolveProjectPolicy({ project, affected_paths, profiles = {} }) {
-  if (!project || project.schema !== 4) throw new InputError("effective policy resolution requires project schema 4");
+  if (!project || ![4, 5].includes(project.schema)) throw new InputError("effective policy resolution requires project schema 4 or 5");
   if (!Array.isArray(affected_paths) || affected_paths.length === 0) throw new InputError("affected_paths must be a non-empty array");
   const paths = [...new Set(affected_paths.map((path) => safePolicyPath(path, "affected path")))];
   const components = Object.entries(project.components ?? {}).map(([name, value]) => ({ name, ...value, path: safePolicyPath(value.path, `component ${name} path`) }));

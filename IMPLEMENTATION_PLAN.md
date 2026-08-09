@@ -249,7 +249,7 @@ updated_at: 2026-08-05T14:30:00Z
 
 | Skill | Contract |
 |---|---|
-| `adw:init` | Inspect the project, preview changes, create schema-3 `adw.yaml`, select and create the managed devcontainer when absent or preserve a project-owned one, ignore `/worktrees/` and `.adw/`, create or attach the docs worktree, and add bounded routing blocks. |
+| `adw:init` | Inspect the project, preview changes, create schema-5 `adw.yaml` plus selected-provider permission adapters, select and create the managed devcontainer when absent or preserve a project-owned one, ignore `/worktrees/` and `.adw/`, create or attach the docs worktree, and add bounded routing blocks. |
 | `adw:doctor` | Read-only check of plugin compatibility, project schema, local setup, and each configured capability's requirement, provider, transport, operations, and access level. |
 | `adw:status` | Read-only reconstruction of active changes, approval state, external bindings/receipts, branches, validation, and draft PRs. |
 | `adw:discover` | Analyze repository structure and propose project/component context plus non-secret integration settings; write only after approval. |

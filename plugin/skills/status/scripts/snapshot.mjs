@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { verifyApprovalBundle, verifyApprovalDigest, validateArtifact } from "../../../lib/adw-helper.mjs";
+import { permissionAgentsFromProject } from "../../../execution/managed-development.mjs";
 
 function parseArguments(argv) {
   const index = argv.indexOf("--project-root");
@@ -31,6 +32,12 @@ function executionSnapshot(projectRoot) {
   const block = source.match(/^execution:\s*\n((?:^[ \t]+.*(?:\n|$))*)/m)?.[1] ?? "";
   const isolation = block.match(/^\s+isolation:\s*["']?([^\s"']+)/m)?.[1] ?? null;
   const enforcement = block.match(/^\s+enforcement:\s*["']?([^\s"']+)/m)?.[1] ?? null;
+  const permissionProfile = block.match(/^\s+profile:\s*["']?([^\s"']+)/m)?.[1] ?? null;
+  const agentTools = permissionAgentsFromProject(projectRoot, { existsSync, readFileSync, lstatSync, realpathSync, relative, isAbsolute, join });
+  const providerArtifacts = {
+    codex: existsSync(join(projectRoot, ".codex/config.toml")) && existsSync(join(projectRoot, ".codex/rules/adw.rules")),
+    claude: existsSync(join(projectRoot, ".claude/settings.json")),
+  };
   const markers = {
     managed_devcontainer: process.env.ADW_MANAGED_DEVCONTAINER === "1",
     project_devcontainer: process.env.ADW_PROJECT_DEVCONTAINER === "1" || process.env.REMOTE_CONTAINERS === "true" || process.env.CODESPACES === "true",
@@ -42,7 +49,7 @@ function executionSnapshot(projectRoot) {
       : isolation === "provider-sandbox"
         ? null
         : false;
-  return { configured: Boolean(isolation && enforcement), isolation, enforcement, active, markers };
+  return { configured: Boolean(isolation && enforcement && permissionProfile), isolation, enforcement, permissions: { profile: permissionProfile, agent_tools: agentTools, provider_artifacts: providerArtifacts }, active, markers };
 }
 
 async function changeSnapshot(changePath, changeId) {

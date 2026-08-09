@@ -96,6 +96,9 @@ test("onboarding choices are preview-bound and split shared from personal config
   assert.equal(applied.status, 0, applied.stderr);
   assert.equal(existsSync(join(root, "AGENTS.md")), true);
   assert.equal(existsSync(join(root, "CLAUDE.md")), false);
+  assert.equal(existsSync(join(root, ".codex/config.toml")), true);
+  assert.equal(existsSync(join(root, ".codex/rules/adw.rules")), true);
+  assert.equal(existsSync(join(root, ".claude/settings.json")), false);
   const projectConfig = readFileSync(join(root, "adw.yaml"), "utf8");
   assert.match(projectConfig, /delivery: pull-request/);
   assert.match(projectConfig, /work_tracker:[\s\S]*provider: "github"[\s\S]*requirement: "required"/);

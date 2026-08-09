@@ -20,6 +20,7 @@ import {
   onboardingSummary,
   renderLocalConfiguration,
 } from "./onboarding.mjs";
+import { PERMISSION_PROFILE, permissionProjectFiles } from "../../../execution/managed-development.mjs";
 
 const ROUTING_START = "<!-- ADW:START -->";
 const ROUTING_END = "<!-- ADW:END -->";
@@ -254,7 +255,7 @@ function projectConfiguration(projectRoot, execution, onboarding) {
   const commands = detectCommands(projectRoot);
   const lines = [
     "# ADW project configuration. Every executable command cites an observable source.",
-    "schema: 4",
+    "schema: 5",
     "",
     "git:",
     `  default_branch: ${yamlScalar(defaultBranch(projectRoot))}`,
@@ -269,6 +270,8 @@ function projectConfiguration(projectRoot, execution, onboarding) {
     "execution:",
     `  isolation: ${execution}`,
     `  enforcement: ${execution === "provider-sandbox" ? "preferred" : "required"}`,
+    "  permissions:",
+    `    profile: ${PERMISSION_PROFILE}`,
     "",
     "components:",
   ];
@@ -304,6 +307,14 @@ function projectConfiguration(projectRoot, execution, onboarding) {
 
 function readOrEmpty(path) {
   return existsSync(path) ? readFileSync(path, "utf8") : "";
+}
+
+function assertWritableProjectPath(projectRoot, relativePath) {
+  let current = projectRoot;
+  for (const part of relativePath.split("/")) {
+    current = join(current, part);
+    if (existsSync(current) && lstatSync(current).isSymbolicLink()) throw new Error(`${relativePath} cannot be managed through a symbolic link`);
+  }
 }
 
 function resolveExecution(projectRoot, requested) {
@@ -367,6 +378,11 @@ function plannedFiles(projectRoot, execution, onboarding) {
   const configPath = join(projectRoot, "adw.yaml");
   if (!existsSync(configPath)) {
     files.push({ path: "adw.yaml", before: "", after: projectConfiguration(projectRoot, execution.isolation, onboarding), action: "create" });
+    for (const path of [".codex/config.toml", ".codex/rules/adw.rules", ".claude/settings.json"]) assertWritableProjectPath(projectRoot, path);
+    for (const providerFile of permissionProjectFiles(onboarding.agentTools, (name) => readOrEmpty(join(projectRoot, name)))) {
+      const before = readOrEmpty(join(projectRoot, providerFile.path));
+      files.push({ path: providerFile.path, before, after: providerFile.content, action: before ? "merge-permission-policy" : "create-permission-policy" });
+    }
     if (execution.isolation === "managed-devcontainer") files.push(...managedDevcontainerFiles(projectRoot, onboarding));
   }
   return files;

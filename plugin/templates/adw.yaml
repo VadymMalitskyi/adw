@@ -1,5 +1,5 @@
 # ADW project configuration. Commands must cite an observable project source.
-schema: 4
+schema: 5
 
 git:
   default_branch: main
@@ -14,6 +14,8 @@ documentation:
 execution:
   isolation: managed-devcontainer
   enforcement: required
+  permissions:
+    profile: managed-development
 
 components:
   app:

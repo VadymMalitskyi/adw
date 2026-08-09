@@ -54,7 +54,7 @@ An integration binding records immutable identity and a digest of requirement-be
 
 The default work-tracker policy creates or links one story per ADW change. Child tasks are opt-in to avoid duplicating every `plan.yaml` task in the tracker. ADW may transition a work item to an in-progress state when explicitly authorized, but it does not automatically close the item because merge and deployment remain outside ADW.
 
-Project schema 4 makes that policy explicit under `workflows.work_tracker`. It distinguishes capability availability from whether a binding is optional or required, whether ADW may propose creation or only linking, the planning or execution boundary, cardinality, and committed project-relative parent and optional child work-item profiles. Profiles declare provider, object type, required, allowed, default, and requirement-bearing fields. They contain no credentials or executable templating. A required policy blocks progress when its binding is absent; it never substitutes for exact mutation authorization.
+Project schemas 4 and 5 make that policy explicit under `workflows.work_tracker`. It distinguishes capability availability from whether a binding is optional or required, whether ADW may propose creation or only linking, the planning or execution boundary, cardinality, and committed project-relative parent and optional child work-item profiles. Profiles declare provider, object type, required, allowed, default, and requirement-bearing fields. They contain no credentials or executable templating. A required policy blocks progress when its binding is absent; it never substitutes for exact mutation authorization.
 
 ## Operational investigation
 

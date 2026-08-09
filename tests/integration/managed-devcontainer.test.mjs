@@ -27,12 +27,17 @@ test("managed template pins agents, runs non-root, scopes credentials, and denie
   assert.equal(config.containerEnv.ADW_MANAGED_DEVCONTAINER, "1");
   assert.equal(config.build.args.ADW_AGENT_TOOLS, "both");
   assert.equal(marker.agent_tools, "both");
+  assert.equal(marker.schema, 2);
+  assert.equal(marker.permission_profile, "managed-development");
   assert.match(config.build.args.CODEX_VERSION, /^\d+\.\d+\.\d+$/);
   assert.match(config.build.args.CLAUDE_CODE_VERSION, /^\d+\.\d+\.\d+$/);
   assert.equal(marker.codex_version, config.build.args.CODEX_VERSION);
   assert.equal(marker.claude_code_version, config.build.args.CLAUDE_CODE_VERSION);
   assert.equal(marker.project_requirements_sha256, createHash("sha256").update(readFileSync(join(templateRoot, "project-requirements.json"))).digest("hex"));
   assert.equal(marker.project_setup_sha256, createHash("sha256").update(readFileSync(join(templateRoot, "project-setup.sh"))).digest("hex"));
+  assert.match(marker.codex_rules_sha256, /^[0-9a-f]{64}$/);
+  assert.match(marker.claude_settings_sha256, /^[0-9a-f]{64}$/);
+  assert.match(marker.claude_hook_sha256, /^[0-9a-f]{64}$/);
   assert.match(dockerfile, /@openai\/codex@\$\{CODEX_VERSION\}/);
   assert.match(dockerfile, /@anthropic-ai\/claude-code@\$\{CLAUDE_CODE_VERSION\}/);
   assert.match(dockerfile, /case "\$ADW_AGENT_TOOLS" in/);
@@ -78,6 +83,9 @@ test("managed development files scope agent tools, credentials, extensions, envi
         .split(/\r?\n/)
         .map((line) => line.trim())
         .filter((line) => line && !line.startsWith("#")));
+      const claudeSandbox = JSON.parse(generated.files.get("claude-settings.json")).sandbox;
+      assert.deepEqual(new Set(claudeSandbox.network.allowedDomains), allowedDomains);
+      assert.equal(claudeSandbox.network.allowManagedDomainsOnly, true);
 
       assert.equal(config.build.args.ADW_AGENT_TOOLS, profile);
       assert.equal(marker.agent_tools, profile);
