@@ -48,6 +48,7 @@ The optional integration layer is configured per project; it is not a requiremen
 
 ```bash
 npm test
+npm run test:security
 claude plugin validate --strict plugin
 claude plugin validate --strict .claude-plugin/marketplace.json
 ```

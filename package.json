@@ -11,6 +11,7 @@
     "build:helper": "node src/helpers/build-bundle.mjs --write",
     "check:helper": "node src/helpers/build-bundle.mjs --check",
     "stage:managed-container": "node src/stage-managed-devcontainer.mjs",
+    "test:security": "bash scripts/test-security.sh",
     "test": "node --test",
     "test:contracts": "node --test tests/contracts/*.test.mjs",
     "test:helpers": "node --test tests/helpers/*.test.mjs",
