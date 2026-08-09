@@ -13,15 +13,12 @@
     }
   },
   "runArgs": [
-    "--cap-add=SYS_ADMIN",
-    "--cap-add=SYS_CHROOT",
+    "--cap-drop=ALL",
+    "--cap-add=CHOWN",
+    "--cap-add=KILL",
     "--cap-add=SETUID",
     "--cap-add=SETGID",
-    "--cap-add=SYS_PTRACE",
-    "--security-opt=seccomp=unconfined",
-    "--security-opt=apparmor=unconfined",
-    "--cap-add=NET_ADMIN",
-    "--cap-add=NET_RAW"
+    "--cap-add=NET_ADMIN"
   ],
   "init": true,
   "updateRemoteUserUID": true,
@@ -35,6 +32,12 @@
   ],
   "containerEnv": {
     "ADW_MANAGED_DEVCONTAINER": "1",
+    "HTTP_PROXY": "http://127.0.0.1:18080",
+    "HTTPS_PROXY": "http://127.0.0.1:18080",
+    "NO_PROXY": "localhost,127.0.0.1",
+    "http_proxy": "http://127.0.0.1:18080",
+    "https_proxy": "http://127.0.0.1:18080",
+    "no_proxy": "localhost,127.0.0.1",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     "DISABLE_AUTOUPDATER": "1"
   },

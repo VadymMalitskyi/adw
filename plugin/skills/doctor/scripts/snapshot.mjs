@@ -124,7 +124,7 @@ async function workTrackerPolicyChecks(projectRoot, project) {
 function managedDevcontainerChecks(projectRoot, execution) {
   const checks = [];
   const directory = join(projectRoot, ".devcontainer");
-  const required = ["devcontainer.json", "Dockerfile", "allowed-domains.txt", "init-firewall.sh", "post-create.sh", "codex.rules", "claude-settings.json", "claude-permission-hook.mjs", "project-requirements.json", "project-setup.sh", "adw-managed.json"];
+  const required = ["devcontainer.json", "Dockerfile", "allowed-domains.txt", "egress-proxy.mjs", "init-firewall.sh", "post-create.sh", "codex.rules", "claude-settings.json", "claude-permission-hook.mjs", "project-requirements.json", "project-setup.sh", "adw-managed.json"];
   const missing = required.filter((name) => !existsSync(join(directory, name)));
   if (missing.length > 0) {
     checks.push(check("execution:managed-files", "fail", `managed devcontainer is missing: ${missing.join(", ")}`));
@@ -166,6 +166,12 @@ function managedDevcontainerChecks(projectRoot, execution) {
   const agentExtensionsMatch = hasExtension("openai.chatgpt") === selectedAgentSet.has("codex")
     && hasExtension("anthropic.claude-code") === selectedAgentSet.has("claude");
   const environment = configObject?.containerEnv ?? {};
+  const expectedCapabilities = ["CHOWN", "KILL", "NET_ADMIN", "SETGID", "SETUID"];
+  const configuredCapabilities = Array.isArray(configObject?.runArgs)
+    ? configObject.runArgs.filter((argument) => argument.startsWith("--cap-add=")).map((argument) => argument.slice("--cap-add=".length)).sort()
+    : [];
+  const minimumCapabilities = configuredCapabilities.length === expectedCapabilities.length
+    && configuredCapabilities.every((capability, index) => capability === expectedCapabilities[index]);
   const claudeEnvironmentMatches = selectedAgentSet.has("claude")
     ? environment.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC === "1" && environment.DISABLE_AUTOUPDATER === "1"
     : !Object.prototype.hasOwnProperty.call(environment, "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC")
@@ -183,6 +189,14 @@ function managedDevcontainerChecks(projectRoot, execution) {
     && postCreateCommand.indexOf("adw-init-firewall") !== -1
     && postCreateCommand.indexOf("adw-init-firewall") < postCreateCommand.indexOf("adw-project-setup")
     && /bubblewrap/.test(dockerfile)
+    && Array.isArray(configObject?.runArgs)
+    && configObject.runArgs.includes("--cap-drop=ALL")
+    && minimumCapabilities
+    && !configObject.runArgs.some((argument) => /SYS_ADMIN|SYS_PTRACE|NET_RAW|seccomp=unconfined|apparmor=unconfined/.test(argument))
+    && environment.HTTP_PROXY === "http://127.0.0.1:18080"
+    && environment.HTTPS_PROXY === "http://127.0.0.1:18080"
+    && /COPY \.devcontainer\/egress-proxy\.mjs \/usr\/local\/bin\/adw-egress-proxy/.test(dockerfile)
+    && /useradd --system --no-create-home --shell \/usr\/sbin\/nologin adw-egress/.test(dockerfile)
     && /ARG ADW_AGENT_TOOLS=both/.test(dockerfile)
     && /case "\$ADW_AGENT_TOOLS" in/.test(dockerfile)
     && /> \/etc\/adw\/agent-tools/.test(dockerfile)
@@ -196,6 +210,7 @@ function managedDevcontainerChecks(projectRoot, execution) {
   const generatedFilesMatch = marker?.requirements_schema === 1
     && marker?.project_requirements_sha256 === requirementsDigest
     && marker?.project_setup_sha256 === setupDigest
+    && marker?.egress_proxy_sha256 === createHash("sha256").update(readFileSync(join(directory, "egress-proxy.mjs"))).digest("hex")
     && /^[a-z0-9+.-]*(?: [a-z0-9+.-]+)*$/.test(configObject?.build?.args?.ADW_PROJECT_APT_PACKAGES ?? "");
   const permissionFilesMatch = readFileSync(join(directory, "codex.rules"), "utf8") === CODEX_RULES
     && readFileSync(join(directory, "claude-settings.json"), "utf8") === managedClaudeSettings({ allowedDomains: [...configuredDomains] })

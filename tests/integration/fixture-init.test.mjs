@@ -91,6 +91,7 @@ test("empty repository initializes an empty validation set, docs records, and a 
     ".devcontainer/claude-settings.json",
     ".devcontainer/codex.rules",
     ".devcontainer/devcontainer.json",
+    ".devcontainer/egress-proxy.mjs",
     ".devcontainer/init-firewall.sh",
     ".devcontainer/post-create.sh",
     ".devcontainer/project-requirements.json",

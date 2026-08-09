@@ -43,7 +43,7 @@ function run(root, action, options = {}) {
   return spawnSync(process.execPath, args, { encoding: "utf8" });
 }
 
-test("schema 5 provider-sandbox preview and digest-bound apply are no-op compatibility checks", () => {
+test("provider-sandbox preview and digest-bound apply are no-op managed-file checks", () => {
   const root = fixture(5);
   const head = git(root, "rev-parse", "HEAD");
   const before = readFileSync(join(root, "adw.yaml"), "utf8");
@@ -53,10 +53,6 @@ test("schema 5 provider-sandbox preview and digest-bound apply are no-op compati
   for (const [action, result] of [["preview", previewResult], ["apply", run(root, "apply", { confirmed: true, previewDigest: preview.preview_digest })]]) {
     assert.equal(result.status, 0, result.stderr);
     const body = JSON.parse(result.stdout);
-    assert.equal(body.compatible, true);
-    assert.equal(body.project_schema, 5);
-    assert.equal(body.supported_project_schema, 5);
-    assert.equal(body.migration_required, undefined);
     assert.deepEqual(body.writes, []);
   }
   assert.equal(readFileSync(join(root, "adw.yaml"), "utf8"), before);
@@ -64,40 +60,18 @@ test("schema 5 provider-sandbox preview and digest-bound apply are no-op compati
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), "");
 });
 
-test("every previous project schema is rejected without writes", () => {
-  for (const schema of [1, 2, 3, 4]) {
-    const root = fixture(schema);
-    const before = readFileSync(join(root, "adw.yaml"), "utf8");
-    const history = readFileSync(join(root, "changes/historical/approval.json"), "utf8");
-    for (const action of ["preview", "apply"]) {
-      const result = run(root, action, action === "apply" ? { confirmed: true, previewDigest: "0".repeat(64) } : {});
-      assert.equal(result.status, 2, `schema ${schema}: ${result.stdout}`);
-      const body = JSON.parse(result.stderr);
-      assert.equal(body.compatible, false);
-      assert.equal(body.migration_required, undefined);
-      assert.deepEqual(body.writes, []);
-      assert.match(body.error, new RegExp(`project schema ${schema} is not supported`));
-      assert.match(body.error, /automatic migration.*not supported/);
-    }
-    assert.equal(readFileSync(join(root, "adw.yaml"), "utf8"), before);
-    assert.equal(readFileSync(join(root, "changes/historical/approval.json"), "utf8"), history);
-    assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), "");
-  }
-});
-
-test("a project newer than the plugin is rejected without downgrade", () => {
-  const root = fixture(6);
+test("invalid project configuration is rejected without writes or format-specific recovery", () => {
+  const root = fixture(999);
   const before = readFileSync(join(root, "adw.yaml"), "utf8");
   const result = run(root, "preview");
   assert.equal(result.status, 2);
   const body = JSON.parse(result.stderr);
-  assert.equal(body.compatible, false);
-  assert.deepEqual(body.writes, []);
+  assert.doesNotMatch(body.error, /compatib|migration|downgrade/i);
   assert.equal(readFileSync(join(root, "adw.yaml"), "utf8"), before);
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), "");
 });
 
-test("managed current-schema projects preview and atomically repair release-owned files", () => {
+test("managed projects preview and atomically repair release-owned files", () => {
   const root = mkdtempSync(join(tmpdir(), "adw-update-managed-"));
   git(root, "init", "-q", "-b", "main");
   git(root, "config", "user.name", "ADW Test");

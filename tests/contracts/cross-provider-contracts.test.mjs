@@ -165,11 +165,10 @@ test("skills preserve the required behavior and safety boundaries", () => {
       ["shared-policy preservation", /never rerun project initialization|never initialize or reconfigure/i],
     ],
     update: [
-      ["exact schema compatibility", /exact[ -]schema|current project schema/i],
+      ["installed-contract validation", /artifact validator|project validation/i],
       ["digest-bound managed repair", /preview digest|--preview-digest/i],
-      ["previous version rejection", /previous ADW versions|unsupported schema/i],
       ["plugin-manager ownership", /plugin manager/i],
-      ["no automatic schema migration", /does not carry automatic (?:schema )?migrations|do not attempt an automatic (?:schema )?migration/i],
+      ["no backward-compatibility lifecycle", /no backward-compatibility or migration lifecycle/i],
     ],
     doctor: [
       ["read-only operation", /read-only|without changing/i],

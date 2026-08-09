@@ -22,7 +22,7 @@ Schema-5 projects may also own `adw/work-items/*.yaml` payload profiles. The hel
 
 - Provider manifests contain packaging metadata only.
 - `plugin/skills/` is the shared user interface. `adw:init` owns one-time project policy and infrastructure; `adw:onboard` owns repeatable contributor-local setup and readiness without changing that policy.
-- `plugin/lib/adw-helper.mjs` performs current-schema validation, digest, evidence, compatibility, path-confinement, and atomic-write mechanics. It is not a public CLI.
+- `plugin/lib/adw-helper.mjs` performs artifact validation, digest, evidence, path-confinement, and atomic-write mechanics. It is not a public CLI.
 - `src/helpers/runtime-bundle.mjs` is the single canonical helper implementation. `npm run build:helper` uses esbuild to include its pinned YAML and JSON-Schema parsers in the checked-in, self-contained Node 20 bundle; `npm run check:helper` verifies exact reproducibility.
 - `worktrees/docs` is the only ADW worktree. Feature implementation uses the project's normal code checkout and one branch.
 - `plugin/execution/contracts.md` defines managed-container, project-container, and provider-sandbox preflights. Init creates managed infrastructure only when no project container exists, deriving its project runtime and setup layer from supported repository evidence while preserving unresolved requirements for review.

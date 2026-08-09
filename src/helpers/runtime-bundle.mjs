@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import { parseDocument } from "yaml";
 
-export const EXIT = Object.freeze({ OK: 0, INPUT: 2, SCHEMA_INVALID: 3, APPROVAL_INVALID: 4, VALIDATION_FAILED: 5, INCOMPATIBLE: 6, PATH_VIOLATION: 7, ATOMIC_WRITE_FAILED: 8, INTERNAL: 9 });
+export const EXIT = Object.freeze({ OK: 0, INPUT: 2, SCHEMA_INVALID: 3, APPROVAL_INVALID: 4, VALIDATION_FAILED: 5, PATH_VIOLATION: 7, ATOMIC_WRITE_FAILED: 8, INTERNAL: 9 });
 export const ARTIFACT_SCHEMAS = Object.freeze({
   project: Object.freeze({ 5: new URL("../schemas/project.v5.schema.json", import.meta.url) }),
   plan: Object.freeze({ 2: new URL("../schemas/plan.v2.schema.json", import.meta.url) }),
@@ -425,24 +425,6 @@ export async function runValidationCommand(input, cwd) {
   });
 }
 
-export const CURRENT_PROJECT_SCHEMA = 5;
-
-export function checkCompatibility({ project_schema, plugin_version, artifact_plugin_version }) {
-  const semverMajor = (version) => { const match = /^(\d+)\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.exec(version ?? ""); return match ? Number(match[1]) : undefined; };
-  const installedMajor = semverMajor(plugin_version);
-  if (installedMajor === undefined) return { compatible: false, reason: "plugin_version must be semantic version x.y.z" };
-  if (!Number.isInteger(project_schema) || project_schema < 1) return { compatible: false, reason: "project_schema must be a positive integer" };
-  if (project_schema !== CURRENT_PROJECT_SCHEMA) {
-    return { compatible: false, reason: `project schema ${project_schema} is not supported; this ADW release accepts only schema ${CURRENT_PROJECT_SCHEMA}` };
-  }
-  if (artifact_plugin_version !== undefined) {
-    const artifactMajor = semverMajor(artifact_plugin_version);
-    if (artifactMajor === undefined) return { compatible: false, reason: "artifact_plugin_version must be semantic version x.y.z" };
-    if (artifactMajor > installedMajor) return { compatible: false, reason: `artifact requires plugin major ${artifactMajor}, installed major is ${installedMajor}` };
-  }
-  return { compatible: true, reason: "project artifacts are compatible" };
-}
-
 export async function resolveProjectPath(projectRoot, explicitRelativePath) {
   if (typeof projectRoot !== "string" || typeof explicitRelativePath !== "string" || !projectRoot || !explicitRelativePath || isAbsolute(explicitRelativePath) || explicitRelativePath.includes("\0")) throw new PathError("paths must be explicit project-relative paths");
   const root = await realpath(projectRoot);
@@ -613,10 +595,6 @@ export async function dispatch(command, rawInput) {
       if (!profileValidation.valid) return { exitCode: EXIT.SCHEMA_INVALID, body: { ok: false, errors: profileValidation.errors } };
       const result = validateWorkItemPayload(input.profile, input.payload);
       return { exitCode: result.valid ? EXIT.OK : EXIT.SCHEMA_INVALID, body: { ok: result.valid, ...result } };
-    }
-    case "check-compatibility": {
-      const compatibility = checkCompatibility(input);
-      return { exitCode: compatibility.compatible ? EXIT.OK : EXIT.INCOMPATIBLE, body: { ok: compatibility.compatible, ...compatibility } };
     }
     case "apply-atomic-writes":
       await applyAtomicWrites(input.project_root, input.operations);

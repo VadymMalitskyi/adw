@@ -74,3 +74,29 @@ jobs:
               printf "%s\n" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git status\"}}" | /usr/local/bin/adw-claude-permission-hook | grep -q "\"permissionDecision\":\"allow\""
               codex execpolicy check --rules /etc/adw/codex.rules git push --force origin main | grep -Eq "\"decision\"[[:space:]]*:[[:space:]]*\"forbidden\""
             '
+
+      - name: Exercise the minimum-capability runtime and hostname boundary
+        run: |
+          docker run --detach --name adw-security-runtime \
+            --cap-drop=ALL \
+            --cap-add=CHOWN \
+            --cap-add=KILL \
+            --cap-add=SETUID \
+            --cap-add=SETGID \
+            --cap-add=NET_ADMIN \
+            -e HTTP_PROXY=http://127.0.0.1:18080 \
+            -e HTTPS_PROXY=http://127.0.0.1:18080 \
+            -e NO_PROXY=localhost,127.0.0.1 \
+            -e http_proxy=http://127.0.0.1:18080 \
+            -e https_proxy=http://127.0.0.1:18080 \
+            -e no_proxy=localhost,127.0.0.1 \
+            --entrypoint sleep \
+            adw-managed-security infinity
+          trap 'docker rm --force adw-security-runtime >/dev/null' EXIT
+          test "$(docker inspect --format '{{json .HostConfig.CapDrop}} {{json .HostConfig.CapAdd}}' adw-security-runtime)" = '["ALL"] ["CAP_CHOWN","CAP_KILL","CAP_NET_ADMIN","CAP_SETGID","CAP_SETUID"]'
+          test "$(docker exec adw-security-runtime stat -c '%U:%G %a' /usr/bin/bwrap)" = 'root:root 755'
+          docker exec adw-security-runtime sudo /usr/local/bin/adw-init-firewall
+          docker exec adw-security-runtime curl --connect-timeout 8 --silent --show-error https://api.openai.com >/dev/null
+          ! docker exec adw-security-runtime curl --noproxy '*' --connect-timeout 3 --silent --show-error https://api.openai.com >/dev/null
+          ! docker exec adw-security-runtime curl --connect-timeout 3 --silent --show-error https://example.com >/dev/null
+          ! docker exec adw-security-runtime sh -c "timeout 8 openssl s_client -quiet -proxy 127.0.0.1:18080 -connect api.openai.com:443 -servername example.com </dev/null >/dev/null 2>&1"

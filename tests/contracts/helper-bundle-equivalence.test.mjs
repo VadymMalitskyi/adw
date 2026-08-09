@@ -26,7 +26,7 @@ test("the canonical source and generated bundle expose every operational helper"
   const operations = [
     "computeApprovalBundle", "createApprovalBundle", "verifyApprovalBundle", "computeAuthorizationDigest",
     "computeRequirementsDigest", "recordExternalAction", "resolveProjectPath", "applyAtomicWrites",
-    "checkCompatibility", "computePolicyDigest", "resolveProjectPolicy", "resolveValidationSet",
+    "computePolicyDigest", "resolveProjectPolicy", "resolveValidationSet",
     "validateWorkItemPayload", "validateJsonSchema", "validateArtifact", "parseYaml", "loadArtifactFile",
     "recordValidation", "runValidationCommand",
   ];
@@ -40,7 +40,7 @@ test("security- and evidence-critical canonical invariants are represented in th
   const source = read("src/helpers/runtime-bundle.mjs");
   const markers = [
     "ADW-APPROVAL-BUNDLE-V2\\0", "ADW-EXTERNAL-AUTHORIZATION-V1\\0", "timingSafeEqual", "expected_content",
-    ".adw-atomic-write-", "CURRENT_PROJECT_SCHEMA", "ADW-EFFECTIVE-POLICY-V1\\0", "project_policy_digest",
+    ".adw-atomic-write-", "ADW-EFFECTIVE-POLICY-V1\\0", "project_policy_digest",
     "ADW-INTEGRATION-REQUIREMENTS-V1\\0", "[REDACTED]", "timed_out", "readback_digest",
   ];
   for (const marker of markers) {

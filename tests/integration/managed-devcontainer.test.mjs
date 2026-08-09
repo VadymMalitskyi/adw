@@ -33,7 +33,7 @@ test("managed template pins agents, runs non-root, scopes credentials, and denie
   assert.match(config.build.args.CLAUDE_CODE_VERSION, /^\d+\.\d+\.\d+$/);
   assert.equal(marker.codex_version, config.build.args.CODEX_VERSION);
   assert.equal(marker.claude_code_version, config.build.args.CLAUDE_CODE_VERSION);
-  for (const key of ["allowed_domains_sha256", "codex_rules_sha256", "claude_settings_sha256", "claude_hook_sha256", "project_requirements_sha256", "project_setup_sha256"]) {
+  for (const key of ["allowed_domains_sha256", "codex_rules_sha256", "claude_settings_sha256", "claude_hook_sha256", "egress_proxy_sha256", "project_requirements_sha256", "project_setup_sha256"]) {
     assert.equal(marker[key], undefined, `template must not carry stale generated digest ${key}`);
   }
   assert.match(dockerfile, /@openai\/codex@\$\{CODEX_VERSION\}/);
@@ -58,15 +58,17 @@ test("managed template pins agents, runs non-root, scopes credentials, and denie
   assert.equal(config.runArgs.includes("--privileged"), false);
   assert.equal(config.runArgs.includes("--network=host"), false);
   assert.equal(config.runArgs.includes("--pid=host"), false);
+  assert.equal(config.runArgs.includes("--cap-drop=ALL"), true);
   assert.deepEqual(config.runArgs.filter((argument) => argument.startsWith("--cap-add=")).sort(), [
+    "--cap-add=CHOWN",
+    "--cap-add=KILL",
     "--cap-add=NET_ADMIN",
-    "--cap-add=NET_RAW",
     "--cap-add=SETGID",
     "--cap-add=SETUID",
-    "--cap-add=SYS_ADMIN",
-    "--cap-add=SYS_CHROOT",
-    "--cap-add=SYS_PTRACE",
   ]);
+  assert.equal(config.containerEnv.HTTPS_PROXY, "http://127.0.0.1:18080");
+  assert.doesNotMatch(configText, /SYS_ADMIN|SYS_PTRACE|NET_RAW|seccomp=unconfined|apparmor=unconfined/);
+  assert.doesNotMatch(dockerfile, /chmod u\+s \/usr\/bin\/bwrap/);
 });
 
 test("managed development files scope agent tools, credentials, extensions, environment, and domains", async (t) => {
@@ -108,6 +110,7 @@ test("managed development files scope agent tools, credentials, extensions, envi
       assert.equal(marker.project_requirements_sha256, createHash("sha256").update(generated.files.get("project-requirements.json")).digest("hex"));
       assert.equal(marker.project_setup_sha256, createHash("sha256").update(generated.files.get("project-setup.sh")).digest("hex"));
       assert.equal(marker.allowed_domains_sha256, createHash("sha256").update(generated.files.get("allowed-domains.txt")).digest("hex"));
+      assert.equal(marker.egress_proxy_sha256, createHash("sha256").update(generated.files.get("egress-proxy.mjs")).digest("hex"));
       assert.deepEqual(marker.integration_domains, ["tracker.example.com"]);
       assert.ok(allowedDomains.has("tracker.example.com"));
       assert.equal([...allowedDomains].filter((domain) => domain === "tracker.example.com").length, 1);
@@ -145,8 +148,12 @@ test("managed firewall scripts are valid shell and establish deny-by-default bef
   assert.match(firewall, /codex\|both\) verification_domain="api\.openai\.com"/);
   assert.match(firewall, /awk '\$1 == "nameserver"/);
   assert.match(firewall, /dig \+short \+time="\$dns_timeout" \+tries=1 @"\$resolver"/);
-  assert.match(firewall, /iptables -A OUTPUT -p udp -d "\$resolver" --dport 53 -j ACCEPT/);
-  assert.match(firewall, /iptables -A OUTPUT -p tcp -d "\$resolver" --dport 53 -j ACCEPT/);
+  assert.match(firewall, /--uid-owner "\$uid" -p udp -d "\$resolver" --dport 53 -j ACCEPT/);
+  assert.match(firewall, /--uid-owner "\$uid" -p tcp -d "\$resolver" --dport 53 -j ACCEPT/);
+  assert.match(firewall, /--uid-owner "\$proxy_uid" -p tcp --dport 443 -j "\$dispatcher_chain"/);
+  assert.match(firewall, /iptables -I "\$dispatcher_chain" 1 -j "\$next_chain"/);
+  assert.doesNotMatch(firewall, /\bipset\b/);
+  assert.match(firewall, /--chuid "\$proxy_user" --exec \/usr\/local\/bin\/adw-egress-proxy/);
   assert.doesNotMatch(firewall, /^iptables -A OUTPUT -p (?:udp|tcp) --dport 53 -j ACCEPT$/m);
   assert.match(firewall, /failed to resolve required domain after \$\{dns_attempts\} attempts/);
   assert.match(firewall, /adw-firewall-refresh\.log/);

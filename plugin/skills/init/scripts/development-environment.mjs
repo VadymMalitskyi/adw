@@ -587,6 +587,7 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { agentTools 
   marker.codex_rules_sha256 = sha256(CODEX_RULES);
   marker.claude_settings_sha256 = sha256(claudeSettings);
   marker.claude_hook_sha256 = sha256(readFileSync(join(templateRoot, "claude-permission-hook.mjs"), "utf8"));
+  marker.egress_proxy_sha256 = sha256(readFileSync(join(templateRoot, "egress-proxy.mjs"), "utf8"));
   marker.requirements_schema = requirements.schema;
   marker.project_requirements_sha256 = sha256(requirementsText);
   marker.project_setup_sha256 = sha256(projectSetup);
@@ -597,6 +598,7 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { agentTools 
       ["devcontainer.json", stableJson(config)],
       ["Dockerfile", dockerfile],
       ["allowed-domains.txt", allowedDomains],
+      ["egress-proxy.mjs", readFileSync(join(templateRoot, "egress-proxy.mjs"), "utf8")],
       ["init-firewall.sh", readFileSync(join(templateRoot, "init-firewall.sh"), "utf8")],
       ["post-create.sh", readFileSync(join(templateRoot, "post-create.sh"), "utf8")],
       ["codex.rules", CODEX_RULES],

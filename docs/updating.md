@@ -6,19 +6,19 @@ Plugin managers distribute skill, schema, template, and helper changes. Pin priv
 
 Run `adw:doctor` before resuming active work. Roll back through the provider manager to the previous tag when needed.
 
-## Current-schema compatibility
+## Managed-file repair
 
-ADW supports only the project, plan, and approval schemas shipped by the current release: project schema 5, plan schema 2, and approval schema 2. Earlier ADW schemas and their migration paths are intentionally not bundled.
+ADW does not provide a backward-compatibility or migration lifecycle. The installed release's artifact validators define the accepted configuration. Invalid configuration stops update without writes.
 
-Run `adw:update` to check compatibility and preview managed-file repair:
+Run `adw:update` to validate the project and preview managed-file repair:
 
-1. It reads the installed plugin version and bundled project schema.
+1. It reads the installed plugin version.
 2. It parses and validates root `adw.yaml` through the bundled YAML 1.2 and schema validator without rewriting the file.
-3. For provider-sandbox and project-owned-container profiles it reports compatibility and normally an empty write set.
+3. For provider-sandbox and project-owned-container profiles it normally reports an empty write set.
 4. For a managed container it deterministically regenerates current release `.devcontainer/` and selected-agent permission bytes, showing changed paths and a preview digest. `apply --confirmed --preview-digest <digest>` atomically repairs exactly those reviewed files.
-5. It rejects every unsupported schema without modifying project or historical artifacts.
+5. It rejects invalid configuration without modifying project or historical artifacts.
 
-This repairs exact plugin-version marker drift and managed-template drift after ordinary plugin upgrades. For an unsupported project schema, perform a separately reviewed manual replacement of ADW-owned configuration. Preserve application code and repository-owned documentation, but do not copy old approvals or claim old workflow evidence remains valid under the current contracts.
+This repairs exact plugin-version marker drift and managed-template drift after ordinary plugin upgrades. If configuration from an older release is invalid, replace it through a separately reviewed initialization or manual configuration change. Preserve application code and repository-owned documentation; historical workflow evidence is not upgraded.
 
 ## Docs synchronization recovery
 
@@ -26,4 +26,4 @@ This repairs exact plugin-version marker drift and managed-template drift after 
 
 ## Active-change recovery
 
-Use `adw:status` in a new session. It reconstructs current-schema spec, plan, approval bundle, external bindings and receipts, docs commit, code branch, validation, and draft-PR state from durable artifacts. If local intent or bound requirement content no longer matches approval, amend or reapprove before execution. Provider state is read only when its capability is configured and available.
+Use `adw:status` in a new session. It reconstructs the spec, plan, approval bundle, external bindings and receipts, docs commit, code branch, validation, and draft-PR state from durable artifacts. If local intent or bound requirement content no longer matches approval, amend or reapprove before execution. Provider state is read only when its capability is configured and available.

@@ -10,7 +10,7 @@ The plugin contains the skills, schemas, templates, and deterministic helper. Du
 
 Projects may also opt into provider-neutral integrations for work tracking, code hosting, observability, and knowledge. ADW targets Azure DevOps, GitHub, Datadog, and Notion first, but workflows depend on capabilities rather than provider-specific tools. A project with no integrations keeps the lightweight local workflow.
 
-Schema-5 projects can specialize the shared workflow without copying skills: affected paths resolve to project-owned components and additive validation, while optional `workflows.work_tracker` policy references a validated committed payload profile. Plan schema 2 snapshots and digests only the effective policy so approval and execution detect relevant drift without reacting to unrelated configuration changes. Earlier project, plan, and approval schemas are intentionally unsupported.
+Projects can specialize the shared workflow without copying skills: affected paths resolve to project-owned components and additive validation, while optional `workflows.work_tracker` policy references a validated committed payload profile. Plans snapshot and digest only the effective policy so approval and execution detect relevant drift without reacting to unrelated configuration changes. ADW does not provide backward compatibility or artifact migrations; the installed release's validators define its accepted contract.
 
 ## Requirements
 

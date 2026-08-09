@@ -19,7 +19,7 @@ RUN agent_packages=() \
     && test -n "$NODE_MAJOR" \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
-        bubblewrap ca-certificates curl dnsutils git gnupg iproute2 ipset iptables jq \
+        bubblewrap ca-certificates curl dnsutils git gnupg iproute2 iptables jq \
         python3 ripgrep sudo \
         $ADW_PROJECT_APT_PACKAGES \
     && mkdir -p /etc/apt/keyrings \
@@ -27,13 +27,13 @@ RUN agent_packages=() \
     && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends nodejs \
-    && chmod u+s /usr/bin/bwrap \
     && npm install -g "${agent_packages[@]}" \
     && npm cache clean --force \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /root/.npm
 
 COPY .devcontainer/allowed-domains.txt /etc/adw/allowed-domains.txt
+COPY .devcontainer/egress-proxy.mjs /usr/local/bin/adw-egress-proxy
 COPY .devcontainer/init-firewall.sh /usr/local/bin/adw-init-firewall
 COPY .devcontainer/post-create.sh /usr/local/bin/adw-post-create
 COPY .devcontainer/codex.rules /etc/adw/codex.rules
@@ -42,11 +42,13 @@ COPY .devcontainer/claude-permission-hook.mjs /usr/local/bin/adw-claude-permissi
 COPY .devcontainer/project-setup.sh /usr/local/bin/adw-project-setup
 COPY .devcontainer/project-requirements.json /etc/adw/project-requirements.json
 
-RUN printf '%s\n' "$ADW_AGENT_TOOLS" > /etc/adw/agent-tools \
-    && chown root:root /etc/adw/agent-tools /etc/adw/allowed-domains.txt /etc/adw/codex.rules /etc/adw/project-requirements.json /etc/claude-code/managed-settings.d/20-adw.json /usr/local/bin/adw-claude-permission-hook /usr/local/bin/adw-init-firewall /usr/local/bin/adw-post-create /usr/local/bin/adw-project-setup \
+RUN useradd --system --no-create-home --shell /usr/sbin/nologin adw-egress \
+    && printf '%s\n' "$ADW_AGENT_TOOLS" > /etc/adw/agent-tools \
+    && chown root:root /etc/adw/agent-tools /etc/adw/allowed-domains.txt /etc/adw/codex.rules /etc/adw/project-requirements.json /etc/claude-code/managed-settings.d/20-adw.json /usr/local/bin/adw-egress-proxy /usr/local/bin/adw-claude-permission-hook /usr/local/bin/adw-init-firewall /usr/local/bin/adw-post-create /usr/local/bin/adw-project-setup \
     && chmod 0444 /etc/adw/agent-tools /etc/adw/allowed-domains.txt /etc/adw/codex.rules /etc/adw/project-requirements.json /etc/claude-code/managed-settings.d/20-adw.json \
     && chmod 0500 /usr/local/bin/adw-init-firewall /usr/local/bin/adw-post-create \
     && chmod 0555 /usr/local/bin/adw-project-setup \
+    && chmod 0555 /usr/local/bin/adw-egress-proxy \
     && chmod 0555 /usr/local/bin/adw-claude-permission-hook \
     && (gpasswd -d vscode sudo 2>/dev/null || true) \
     && rm -f /etc/sudoers.d/vscode \

@@ -3,17 +3,7 @@ import { mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { applyAtomicWrites, checkCompatibility, PathError } from "../../plugin/lib/adw-helper.mjs";
-
-test("compatibility accepts only the current project schema and rejects future plugin evidence", () => {
-  assert.equal(checkCompatibility({ project_schema: 5, plugin_version: "1.4.0", artifact_plugin_version: "1.0.0" }).compatible, true);
-  const old = checkCompatibility({ project_schema: 4, plugin_version: "2.0.0" });
-  assert.equal(old.compatible, false);
-  assert.equal(old.migration_required, undefined);
-  const future = checkCompatibility({ project_schema: 5, plugin_version: "1.9.0", artifact_plugin_version: "2.0.0" });
-  assert.equal(future.compatible, false);
-  assert.equal(future.migration_required, undefined);
-});
+import { applyAtomicWrites, PathError } from "../../plugin/lib/adw-helper.mjs";
 
 test("atomic writes use only explicit project-relative paths and reject traversal and symlinks", async () => {
   const root = await mkdtemp(join(tmpdir(), "adw-project-"));
@@ -34,7 +24,7 @@ test("failed multi-file atomic writes restore every previous artifact", async ()
   await writeFile(join(root, "config/two"), "old-two");
   await assert.rejects(applyAtomicWrites(root, [
     { path: "config/one", content: "new-one", expected_content: "old-one" },
-    { path: "config/two", content: "new-two", expected_content: "stale-value" }
+    { path: "config/two", content: "new-two", expected_content: "stale-value" },
   ]), /precondition failed/);
   assert.equal(await readFile(join(root, "config/one"), "utf8"), "old-one");
   assert.equal(await readFile(join(root, "config/two"), "utf8"), "old-two");

@@ -6,8 +6,6 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   applyAtomicWrites,
-  checkCompatibility,
-  CURRENT_PROJECT_SCHEMA,
   loadArtifactFile,
 } from "../../../lib/adw-helper.mjs";
 import { permissionProjectFiles } from "../../../execution/managed-development.mjs";
@@ -127,14 +125,6 @@ try {
   const loadedProject = await loadArtifactFile({ project_root: root, path: "adw.yaml", artifact: "project" });
   const project = loadedProject.data;
   const version = pluginVersion();
-  const compatibility = checkCompatibility({ project_schema: project?.schema, plugin_version: version });
-  if (!compatibility.compatible) fail(`${compatibility.reason}; automatic migration from previous ADW schemas is not supported`, {
-    plugin_version: version,
-    project_schema: project.schema,
-    supported_project_schema: CURRENT_PROJECT_SCHEMA,
-    compatible: false,
-    writes: [],
-  });
   const projectValidation = loadedProject.validation;
   if (!projectValidation.valid) fail("adw.yaml is invalid", { errors: projectValidation.errors, writes: [] });
   const files = repairPlan(root, project);
@@ -145,9 +135,6 @@ try {
     mode: args.action,
     plugin_root: pluginRoot,
     plugin_version: version,
-    project_schema: project.schema,
-    supported_project_schema: CURRENT_PROJECT_SCHEMA,
-    compatible: true,
     repair_required: changed.length > 0,
     preview_digest: digest,
     writes: changed.map(({ path, action }) => ({ path, action })),
