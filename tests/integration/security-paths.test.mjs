@@ -37,15 +37,16 @@ function repository(prefix = "adw-security-path-") {
 
 function planWith(overrides = {}) {
   return {
-    schema: 1,
+    schema: 2,
     change_id: "safe-change",
     summary: "Exercise the boundary",
+    effective_policy: { components: ["app"], unowned_paths: [], project_policy_digest: "a".repeat(64), required_validation: [] },
     tasks: [{
       id: 1,
       title: "Bounded task",
       description: "Touch one project file",
       affected_paths: ["src/index.js"],
-      validation: [{ command: "npm test", cwd: ".", timeout_ms: 1000, required: true }],
+      validation: [{ command: "npm test", cwd: ".", timeout_ms: 1000, required: true, source: "package.json#scripts.test" }],
     }],
     documentation: { impact: "none", files: [] },
     ...overrides,

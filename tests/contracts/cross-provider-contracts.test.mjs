@@ -154,11 +154,11 @@ test("skills preserve the required behavior and safety boundaries", () => {
       ["project devcontainer preservation", /project-devcontainer[\s\S]*preserve|preserve every byte of an existing project devcontainer/i],
     ],
     update: [
-      ["project artifact migration", /project artifact|workflow-schema|schema migration/i],
-      ["migration preview", /\bpreview\b/i],
-      ["explicit confirmation", /explicit (?:approval|authorization|confirmation)|--confirmed/i],
+      ["exact schema compatibility", /exact[ -]schema|current project schema/i],
+      ["read-only compatibility check", /read-only|without changing|never modifies/i],
+      ["previous version rejection", /previous ADW versions|unsupported schema/i],
       ["plugin-manager ownership", /plugin manager/i],
-      ["historical evidence preservation", /historical|history/i],
+      ["no automatic migration", /does not carry automatic migrations|do not attempt an automatic migration/i],
     ],
     doctor: [
       ["read-only operation", /read-only|without changing/i],

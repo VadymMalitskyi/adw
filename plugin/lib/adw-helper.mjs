@@ -8,21 +8,9 @@ import { fileURLToPath } from "node:url";
 
 export const EXIT = Object.freeze({ OK: 0, INPUT: 2, SCHEMA_INVALID: 3, APPROVAL_INVALID: 4, VALIDATION_FAILED: 5, INCOMPATIBLE: 6, PATH_VIOLATION: 7, MIGRATION_FAILED: 8, INTERNAL: 9 });
 export const ARTIFACT_SCHEMAS = Object.freeze({
-  project: Object.freeze({
-    1: new URL("../schemas/project.v1.schema.json", import.meta.url),
-    2: new URL("../schemas/project.v2.schema.json", import.meta.url),
-    3: new URL("../schemas/project.v3.schema.json", import.meta.url),
-    4: new URL("../schemas/project.v4.schema.json", import.meta.url),
-    5: new URL("../schemas/project.v5.schema.json", import.meta.url)
-  }),
-  plan: Object.freeze({
-    1: new URL("../schemas/plan.v1.schema.json", import.meta.url),
-    2: new URL("../schemas/plan.v2.schema.json", import.meta.url)
-  }),
-  approval: Object.freeze({
-    1: new URL("../schemas/approval.v1.schema.json", import.meta.url),
-    2: new URL("../schemas/approval.v2.schema.json", import.meta.url)
-  }),
+  project: Object.freeze({ 5: new URL("../schemas/project.v5.schema.json", import.meta.url) }),
+  plan: Object.freeze({ 2: new URL("../schemas/plan.v2.schema.json", import.meta.url) }),
+  approval: Object.freeze({ 2: new URL("../schemas/approval.v2.schema.json", import.meta.url) }),
   validation: Object.freeze({ 1: new URL("../schemas/validation.v1.schema.json", import.meta.url) }),
   integration: Object.freeze({ 1: new URL("../schemas/integration.v1.schema.json", import.meta.url) }),
   "external-action": Object.freeze({ 1: new URL("../schemas/external-action.v1.schema.json", import.meta.url) }),
@@ -30,7 +18,6 @@ export const ARTIFACT_SCHEMAS = Object.freeze({
   "work-item-profile": Object.freeze({ 1: new URL("../schemas/work-item-profile.v1.schema.json", import.meta.url) })
 });
 
-const DOMAIN = Buffer.from("ADW-APPROVAL-DIGEST-V1\0", "utf8");
 const BUNDLE_DOMAIN = Buffer.from("ADW-APPROVAL-BUNDLE-V2\0", "utf8");
 const REQUIREMENTS_DOMAIN = Buffer.from("ADW-INTEGRATION-REQUIREMENTS-V1\0", "utf8");
 const schemaCache = new Map();
@@ -38,20 +25,6 @@ const schemaCache = new Map();
 function framedField(label, content) {
   const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content, "utf8");
   return Buffer.concat([Buffer.from(`${label}:${bytes.length}\n`, "utf8"), bytes, Buffer.from("\n", "utf8")]);
-}
-
-export function computeApprovalDigest(spec, plan) {
-  if (!(typeof spec === "string" || Buffer.isBuffer(spec)) || !(typeof plan === "string" || Buffer.isBuffer(plan))) throw new TypeError("spec and plan must be strings or buffers");
-  return createHash("sha256").update(DOMAIN).update(framedField("spec", spec)).update(framedField("plan", plan)).digest("hex");
-}
-
-export function verifyApprovalDigest(spec, plan, approval) {
-  if (!approval || approval.digest_algorithm !== "sha256" || !/^[0-9a-f]{64}$/.test(approval.digest ?? "")) return false;
-  return timingSafeEqual(Buffer.from(computeApprovalDigest(spec, plan), "hex"), Buffer.from(approval.digest, "hex"));
-}
-
-export function createApproval({ approver, approved_at, plugin_version, docs_commit, spec, plan }) {
-  return { schema: 1, status: "active", approver, approved_at, plugin_version, docs_commit, digest_algorithm: "sha256", digest: computeApprovalDigest(spec, plan) };
 }
 
 function contentDigest(content) {
@@ -186,15 +159,13 @@ export async function validateArtifact(artifact, data) {
     data.tasks.forEach((task, index) => { if (task?.id !== index + 1) result.errors.push({ path: `/tasks/${index}/id`, keyword: "sequence", message: `must be ${index + 1} so tasks execute sequentially` }); });
     if (data.documentation?.impact !== "none" && Array.isArray(data.documentation?.files) && data.documentation.files.length === 0) result.errors.push({ path: "/documentation/files", keyword: "documentation", message: "must list files when documentation impact is update or new" });
     if (data.documentation?.impact === "none" && Array.isArray(data.documentation?.files) && data.documentation.files.length !== 0) result.errors.push({ path: "/documentation/files", keyword: "documentation", message: "must be empty when documentation impact is none" });
-    if (data.schema === 2) {
-      const components = data.effective_policy?.components ?? [];
-      if (new Set(components).size !== components.length) result.errors.push({ path: "/effective_policy/components", keyword: "unique", message: "components must be unique" });
-      const unownedPaths = data.effective_policy?.unowned_paths ?? [];
-      if (new Set(unownedPaths).size !== unownedPaths.length) result.errors.push({ path: "/effective_policy/unowned_paths", keyword: "unique", message: "unowned paths must be unique" });
-      const tracker = data.effective_policy?.work_tracker;
-      if (tracker && ((tracker.profile === undefined) !== (tracker.profile_digest === undefined))) result.errors.push({ path: "/effective_policy/work_tracker", keyword: "profile", message: "profile and profile_digest must appear together" });
-      if (tracker && ((tracker.child_profile === undefined) !== (tracker.child_profile_digest === undefined))) result.errors.push({ path: "/effective_policy/work_tracker", keyword: "profile", message: "child_profile and child_profile_digest must appear together" });
-    }
+    const components = data.effective_policy?.components ?? [];
+    if (new Set(components).size !== components.length) result.errors.push({ path: "/effective_policy/components", keyword: "unique", message: "components must be unique" });
+    const unownedPaths = data.effective_policy?.unowned_paths ?? [];
+    if (new Set(unownedPaths).size !== unownedPaths.length) result.errors.push({ path: "/effective_policy/unowned_paths", keyword: "unique", message: "unowned paths must be unique" });
+    const tracker = data.effective_policy?.work_tracker;
+    if (tracker && ((tracker.profile === undefined) !== (tracker.profile_digest === undefined))) result.errors.push({ path: "/effective_policy/work_tracker", keyword: "profile", message: "profile and profile_digest must appear together" });
+    if (tracker && ((tracker.child_profile === undefined) !== (tracker.child_profile_digest === undefined))) result.errors.push({ path: "/effective_policy/work_tracker", keyword: "profile", message: "child_profile and child_profile_digest must appear together" });
     result.valid = result.errors.length === 0;
   }
   if (result.valid && artifact === "validation") {
@@ -206,15 +177,13 @@ export async function validateArtifact(artifact, data) {
     const invalidationFields = [data.invalidated_at, data.invalidation_reason, data.replaced_by].filter((value) => value !== undefined);
     if (data.status === "active" && invalidationFields.length !== 0) result.errors.push({ path: "/status", keyword: "lifecycle", message: "active approvals cannot contain invalidation fields" });
     if (data.status === "superseded" && (!data.invalidated_at || !data.invalidation_reason)) result.errors.push({ path: "/status", keyword: "lifecycle", message: "superseded approvals require invalidated_at and invalidation_reason" });
-    if (data.schema === 2) {
-      const expectedPaths = ["spec.md", "plan.yaml", "integrations.yaml"];
-      const paths = data.inputs.map(({ path }) => path);
-      if (paths.some((path, index) => path !== expectedPaths[index])) result.errors.push({ path: "/inputs", keyword: "order", message: "must contain spec.md, plan.yaml, and optional integrations.yaml in canonical order" });
-      if (new Set(paths).size !== paths.length) result.errors.push({ path: "/inputs", keyword: "unique", message: "must not contain duplicate paths" });
-    }
+    const expectedPaths = ["spec.md", "plan.yaml", "integrations.yaml"];
+    const paths = data.inputs.map(({ path }) => path);
+    if (paths.some((path, index) => path !== expectedPaths[index])) result.errors.push({ path: "/inputs", keyword: "order", message: "must contain spec.md, plan.yaml, and optional integrations.yaml in canonical order" });
+    if (new Set(paths).size !== paths.length) result.errors.push({ path: "/inputs", keyword: "unique", message: "must not contain duplicate paths" });
     result.valid = result.errors.length === 0;
   }
-  if (result.valid && artifact === "project" && (data.schema === 2 || data.schema === 3 || data.schema === 4 || data.schema === 5)) {
+  if (result.valid && artifact === "project") {
     const forbidden = /(?:password|passwd|token|api[_-]?key|secret|credential)/i;
     for (const [capability, integration] of Object.entries(data.integrations ?? {})) {
       for (const key of Object.keys(integration.settings ?? {})) {
@@ -223,11 +192,11 @@ export async function validateArtifact(artifact, data) {
     }
     result.valid = result.errors.length === 0;
   }
-  if (result.valid && artifact === "project" && (data.schema === 3 || data.schema === 4 || data.schema === 5)) {
+  if (result.valid && artifact === "project") {
     if (data.execution.isolation === "managed-devcontainer" && data.execution.enforcement !== "required") {
       result.errors.push({ path: "/execution/enforcement", keyword: "security", message: "managed-devcontainer isolation must be required" });
     }
-    if ((data.schema === 4 || data.schema === 5) && data.workflows?.work_tracker) {
+    if (data.workflows?.work_tracker) {
       const tracker = data.workflows.work_tracker;
       if (!data.integrations?.work_tracker || data.integrations.work_tracker.requirement === "disabled") result.errors.push({ path: "/workflows/work_tracker", keyword: "capability", message: "requires an enabled integrations.work_tracker capability" });
       if (tracker.binding === "required" && data.integrations?.work_tracker?.requirement !== "required") result.errors.push({ path: "/workflows/work_tracker/binding", keyword: "capability", message: "required binding requires integrations.work_tracker.requirement to be required" });
@@ -350,7 +319,7 @@ export function validateWorkItemPayload(profile, payload) {
 }
 
 export function resolveProjectPolicy({ project, affected_paths, profiles = {} }) {
-  if (!project || ![4, 5].includes(project.schema)) throw new InputError("effective policy resolution requires project schema 4 or 5");
+  if (!project || project.schema !== 5) throw new InputError("effective policy resolution requires project schema 5");
   if (!Array.isArray(affected_paths) || affected_paths.length === 0) throw new InputError("affected_paths must be a non-empty array");
   const paths = [...new Set(affected_paths.map((path) => safePolicyPath(path, "affected path")))];
   const components = Object.entries(project.components ?? {}).map(([name, value]) => ({ name, ...value, path: safePolicyPath(value.path, `component ${name} path`) }));
@@ -466,15 +435,15 @@ export async function runValidationCommand(input, cwd) {
   });
 }
 
-export function checkCompatibility({ project_schema, supported_project_schemas, plugin_version, artifact_plugin_version }) {
+export const CURRENT_PROJECT_SCHEMA = 5;
+
+export function checkCompatibility({ project_schema, plugin_version, artifact_plugin_version }) {
   const semverMajor = (version) => { const match = /^(\d+)\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.exec(version ?? ""); return match ? Number(match[1]) : undefined; };
   const installedMajor = semverMajor(plugin_version);
   if (installedMajor === undefined) return { compatible: false, migration_required: false, reason: "plugin_version must be semantic version x.y.z" };
   if (!Number.isInteger(project_schema) || project_schema < 1) return { compatible: false, migration_required: false, reason: "project_schema must be a positive integer" };
-  if (!Array.isArray(supported_project_schemas) || !supported_project_schemas.every((item) => Number.isInteger(item) && item > 0)) return { compatible: false, migration_required: false, reason: "supported_project_schemas must contain positive integers" };
-  if (!supported_project_schemas.includes(project_schema)) {
-    const target = Math.max(...supported_project_schemas);
-    return { compatible: false, migration_required: Number.isFinite(target) && project_schema < target, reason: `project schema ${project_schema} is not supported; supported schemas: ${supported_project_schemas.join(", ") || "none"}` };
+  if (project_schema !== CURRENT_PROJECT_SCHEMA) {
+    return { compatible: false, migration_required: false, reason: `project schema ${project_schema} is not supported; this ADW release accepts only schema ${CURRENT_PROJECT_SCHEMA}` };
   }
   if (artifact_plugin_version !== undefined) {
     const artifactMajor = semverMajor(artifact_plugin_version);
@@ -587,28 +556,14 @@ export async function dispatch(command, rawInput) {
       const validation = await validateArtifact(input.artifact, input.data);
       return { exitCode: validation.valid ? EXIT.OK : EXIT.SCHEMA_INVALID, body: { ok: validation.valid, artifact: input.artifact, errors: validation.errors } };
     }
-    case "digest":
-      return { exitCode: EXIT.OK, body: { ok: true, algorithm: "sha256", digest: computeApprovalDigest(input.spec, input.plan) } };
     case "digest-bundle": {
       const bundle = computeApprovalBundle(input.inputs);
       return { exitCode: EXIT.OK, body: { ok: true, algorithm: "sha256", ...bundle } };
-    }
-    case "create-approval": {
-      const approval = createApproval(input);
-      const validation = await validateArtifact("approval", approval);
-      return { exitCode: validation.valid ? EXIT.OK : EXIT.SCHEMA_INVALID, body: validation.valid ? { ok: true, approval } : { ok: false, errors: validation.errors } };
     }
     case "create-approval-bundle": {
       const approval = createApprovalBundle(input);
       const validation = await validateArtifact("approval", approval);
       return { exitCode: validation.valid ? EXIT.OK : EXIT.SCHEMA_INVALID, body: validation.valid ? { ok: true, approval } : { ok: false, errors: validation.errors } };
-    }
-    case "verify-approval": {
-      const validation = await validateArtifact("approval", input.approval);
-      const commitMatches = input.docs_commit === undefined || input.docs_commit === input.approval?.docs_commit;
-      const verified = validation.valid && input.approval.status === "active" && commitMatches && verifyApprovalDigest(input.spec, input.plan, input.approval);
-      const reason = verified ? "approval matches exact spec, plan, and docs commit" : !validation.valid ? "approval artifact is invalid" : input.approval.status !== "active" ? "approval has been superseded" : !commitMatches ? "approval is bound to a different docs commit" : "approval digest does not match exact spec and plan content";
-      return { exitCode: verified ? EXIT.OK : EXIT.APPROVAL_INVALID, body: { ok: verified, verified, errors: validation.errors, reason } };
     }
     case "verify-approval-bundle": {
       const validation = await validateArtifact("approval", input.approval);

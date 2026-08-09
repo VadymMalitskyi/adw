@@ -4,7 +4,7 @@ Treat the configured execution environment as an enforceable preflight, not docu
 
 ## Resolve the profile
 
-Read schema-5 `adw.yaml` `execution.isolation`, `execution.enforcement`, and `execution.permissions.profile` before any project or external mutation. Schema 4 remains a historical input for `adw:update` and policy resolution:
+Read schema-5 `adw.yaml` `execution.isolation`, `execution.enforcement`, and `execution.permissions.profile` before any project or external mutation. Earlier project schemas are unsupported:
 
 - `managed-devcontainer`: require `.devcontainer/adw-managed.json`, the managed files, and `ADW_MANAGED_DEVCONTAINER=1` in the active process.
 - `project-devcontainer`: preserve project-owned files; require `.devcontainer/devcontainer.json` and a runtime marker such as `ADW_PROJECT_DEVCONTAINER=1`.

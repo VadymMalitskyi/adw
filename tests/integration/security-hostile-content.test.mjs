@@ -15,7 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import test from "node:test";
-import { createApproval } from "../../plugin/lib/adw-helper.mjs";
+import { createApprovalBundle } from "../../plugin/lib/adw-helper.mjs";
 
 const repositoryRoot = resolve(new URL("../..", import.meta.url).pathname);
 const initScript = join(repositoryRoot, "plugin/skills/init/scripts/init.mjs");
@@ -192,16 +192,15 @@ test("status treats line-ending drift as a stale exact-byte approval without mut
   const change = join(docs, "changes/crlf-drift");
   mkdirSync(change);
   const spec = Buffer.from("# Spec\r\n\r\nExact CRLF bytes.\r\n");
-  const plan = Buffer.from("schema: 1\r\nchange_id: crlf-drift\r\n");
+  const plan = Buffer.from("schema: 2\r\nchange_id: crlf-drift\r\n");
   writeFileSync(join(change, "spec.md"), spec);
   writeFileSync(join(change, "plan.yaml"), plan);
-  const approval = createApproval({
+  const approval = createApprovalBundle({
     approver: "security-test",
     approved_at: "2026-08-05T12:00:00Z",
-    plugin_version: "0.1.0",
+    plugin_version: "0.5.0",
     docs_commit: git(docs, "rev-parse", "HEAD"),
-    spec,
-    plan,
+    inputs: [{ path: "spec.md", content: spec }, { path: "plan.yaml", content: plan }],
   });
   writeFileSync(join(change, "approval.json"), `${JSON.stringify(approval, null, 2)}\n`);
   writeFileSync(join(change, "spec.md"), spec.toString("utf8").replaceAll("\r\n", "\n"));

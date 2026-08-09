@@ -10,7 +10,7 @@ function invoke(command, input) {
 }
 
 test("CLI always uses structured JSON and stable input/schema/approval exit codes", () => {
-  const badInput = spawnSync(process.execPath, [helper, "digest"], { input: "{", encoding: "utf8" });
+  const badInput = spawnSync(process.execPath, [helper, "digest-bundle"], { input: "{", encoding: "utf8" });
   assert.equal(badInput.status, 2);
   assert.equal(JSON.parse(badInput.stdout).error.code, 2);
 
@@ -19,7 +19,7 @@ test("CLI always uses structured JSON and stable input/schema/approval exit code
   assert.equal(invalid.output.ok, false);
   assert(invalid.output.errors.every((error) => error.path && error.message));
 
-  const mismatch = invoke("verify-approval", { spec: "x", plan: "y", approval: { schema: 1 } });
+  const mismatch = invoke("verify-approval-bundle", { inputs: [], approval: { schema: 1 } });
   assert.equal(mismatch.status, 4);
   assert.equal(mismatch.output.verified, false);
 });

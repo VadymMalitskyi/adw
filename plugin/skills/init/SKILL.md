@@ -49,7 +49,7 @@ The internal script must:
 - preserve all bytes outside `<!-- ADW:START -->` / `<!-- ADW:END -->` blocks in `AGENTS.md` and `CLAUDE.md`;
 - preserve all bytes outside `# ADW:START` / `# ADW:END` in `.gitignore` and avoid duplicate `.adw/` or `/worktrees/` rules;
 - ignore local paths before creating `.adw/local.yaml`, `.adw/cache/`, or `worktrees/docs`;
-- retain an existing `adw.yaml` for explicit migration instead of overwriting it;
+- retain an existing `adw.yaml` for separately reviewed manual replacement instead of overwriting it;
 - cite every detected validation command to a manifest or task-runner target and mark unknown commands unresolved and optional;
 - create an orphan `docs` branch only when absent, attach an existing branch, and reuse an existing correct worktree;
 - initialize only concise docs-branch context and commit that branch without disturbing the code checkout;

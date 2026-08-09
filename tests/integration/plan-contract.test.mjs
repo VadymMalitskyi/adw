@@ -51,9 +51,10 @@ test("plan skill requires strict IDs, sequential tasks, documentation impact, an
 
 test("frozen plan schema enforces ordering, IDs, documentation, and command descriptors", async () => {
   const plan = {
-    schema: 1,
+    schema: 2,
     change_id: "api.retry_2",
     summary: "Add bounded retries",
+    effective_policy: { components: ["app"], unowned_paths: [], project_policy_digest: "a".repeat(64), required_validation: [] },
     tasks: [{
       id: 1,
       title: "Implement retries",
@@ -61,7 +62,7 @@ test("frozen plan schema enforces ordering, IDs, documentation, and command desc
       affected_paths: ["src/client.mjs"],
       anchors: ["request"],
       restrictions: ["Do not retry unsafe writes"],
-      validation: [{ command: "npm test", cwd: ".", timeout_ms: 120000, required: true }],
+      validation: [{ command: "npm test", cwd: ".", timeout_ms: 120000, required: true, source: "package.json#scripts.test" }],
     }],
     documentation: { impact: "update", files: ["docs/client.md"] },
   };

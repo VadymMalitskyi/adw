@@ -332,7 +332,7 @@ function projectChecks(projectRoot) {
     const config = readFileSync(configPath, "utf8");
     const schema = yamlValue(config, "schema");
     const worktree = yamlValue(config, "worktree");
-    checks.push(check("project-schema", schema === "5" ? "pass" : "fail", schema === "5" ? "project schema 5 is supported" : `unsupported or migration-required schema: ${schema ?? "missing"}`));
+    checks.push(check("project-schema", schema === "5" ? "pass" : "fail", schema === "5" ? "project schema 5 is supported" : `unsupported project schema: ${schema ?? "missing"}`));
     checks.push(check("docs-config", worktree === "worktrees/docs" ? "pass" : "fail", worktree === "worktrees/docs" ? "docs worktree uses worktrees/docs" : `unexpected docs worktree: ${worktree ?? "missing"}`));
     const componentPaths = componentDeclarations(config).map(({ path }) => path).filter(Boolean);
     const uniqueComponents = new Set(componentPaths).size === componentPaths.length;

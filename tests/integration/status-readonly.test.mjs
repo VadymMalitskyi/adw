@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { createApproval, createApprovalBundle, recordValidation } from "../../plugin/lib/adw-helper.mjs";
+import { createApprovalBundle, recordValidation } from "../../plugin/lib/adw-helper.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const initScript = join(repositoryRoot, "plugin/skills/init/scripts/init.mjs");
@@ -60,7 +60,7 @@ test("doctor and status reconstruct initialized state without writes", async () 
   const change = join(docs, "changes/sample-change");
   mkdirSync(change, { recursive: true });
   const spec = "# Change: sample-change\n\nApproved behavior.\n";
-  const plan = "schema: 1\nchange_id: sample-change\nsummary: Test\ntasks: []\ndocumentation:\n  impact: none\n  files: []\n";
+  const plan = "schema: 2\nchange_id: sample-change\nsummary: Test\neffective_policy:\n  components: []\n  unowned_paths: []\n  project_policy_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n  required_validation: []\ntasks: []\ndocumentation:\n  impact: none\n  files: []\n";
   writeFileSync(join(change, "spec.md"), spec);
   writeFileSync(join(change, "plan.yaml"), plan);
   git(docs, "add", "changes/sample-change/spec.md", "changes/sample-change/plan.yaml");
@@ -69,7 +69,7 @@ test("doctor and status reconstruct initialized state without writes", async () 
   const approval = createApprovalBundle({
     approver: "test-user",
     approved_at: "2026-08-05T12:00:00Z",
-    plugin_version: "0.1.0",
+    plugin_version: "0.5.0",
     docs_commit: planCommit,
     inputs: [
       { path: "spec.md", content: spec },
@@ -126,7 +126,7 @@ test("status reports an approval stale when exact plan bytes change", () => {
   writeFileSync(join(change, "spec.md"), spec);
   writeFileSync(join(change, "plan.yaml"), plan);
   const docsCommit = git(root, "-C", join(root, "worktrees/docs"), "rev-parse", "HEAD");
-  const approval = createApproval({ approver: "test", approved_at: "2026-08-05T12:00:00Z", plugin_version: "0.1.0", docs_commit: docsCommit, spec, plan });
+  const approval = createApprovalBundle({ approver: "test", approved_at: "2026-08-05T12:00:00Z", plugin_version: "0.5.0", docs_commit: docsCommit, inputs: [{ path: "spec.md", content: spec }, { path: "plan.yaml", content: plan }] });
   writeFileSync(join(change, "approval.json"), JSON.stringify(approval));
   writeFileSync(join(change, "plan.yaml"), "changed plan bytes\n");
   const status = run(statusScript, root);

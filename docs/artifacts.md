@@ -3,7 +3,7 @@
 ## Code branch
 
 - `adw.yaml`: committed shared configuration and workflow schema.
-- `adw/work-items/*.yaml`: optional committed project-owned tracker payload profiles referenced by schema-4 workflow policy.
+- `adw/work-items/*.yaml`: optional committed project-owned tracker payload profiles referenced by schema-5 workflow policy.
 - `.codex/config.toml`, `.codex/rules/adw.rules`, and `.claude/settings.json`: selected-provider adapters for schema-5 `managed-development` permissions.
 - `.adw/local.yaml`: optional ignored machine-local values.
 - `AGENTS.md` and `CLAUDE.md`: existing content plus one bounded routing block.
@@ -25,7 +25,7 @@
 
 - Change IDs and configured paths are validated before filesystem access.
 - The approval bundle always covers the exact bytes of `spec.md` and `plan.yaml` and, when present, all of `integrations.yaml` in a deterministic order. The binding's requirements digest separately detects provider-side requirement drift.
-- Historical approvals and validation are not rewritten by migrations.
+- Previous project, plan, and approval schema versions are unsupported and are never rewritten automatically.
 - Failed required commands remain failed; deferral requires an explicit reason and authorization.
 - Captured output is bounded and secrets must be redacted.
 - A compatible plugin version change does not modify project artifacts.

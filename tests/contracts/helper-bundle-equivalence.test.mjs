@@ -23,7 +23,7 @@ test("the generated helper remains dependency-free and runnable on Node 20", () 
 
 test("the bundle covers every operational helper entry point maintained in source", () => {
   const operationalExports = new Map([
-    ["src/helpers/approval.ts", ["computeApprovalDigest", "verifyApprovalDigest", "createApproval", "computeApprovalBundle", "createApprovalBundle", "verifyApprovalBundle"]],
+    ["src/helpers/approval.ts", ["computeApprovalBundle", "createApprovalBundle", "verifyApprovalBundle"]],
     ["src/helpers/integrations.ts", ["computeRequirementsDigest", "recordExternalAction"]],
     ["src/helpers/migration.ts", ["resolveProjectPath", "applyAtomicMigration"]],
     ["src/helpers/project-version.ts", ["checkCompatibility"]],
@@ -43,9 +43,9 @@ test("the bundle covers every operational helper entry point maintained in sourc
 
 test("security- and evidence-critical source invariants are represented in the bundle", () => {
   const invariantMarkers = new Map([
-    ["src/helpers/approval.ts", ["ADW-APPROVAL-DIGEST-V1\\0", "sha256", "timingSafeEqual"]],
+    ["src/helpers/approval.ts", ["ADW-APPROVAL-BUNDLE-V2\\0", "sha256", "timingSafeEqual"]],
     ["src/helpers/migration.ts", ["realpath", "isAbsolute", "expected_content", ".adw-migration-"]],
-    ["src/helpers/project-version.ts", ["project_schema", "supported_project_schemas", "artifact_plugin_version", "migration_required"]],
+    ["src/helpers/project-version.ts", ["project_schema", "CURRENT_PROJECT_SCHEMA", "artifact_plugin_version", "migration_required"]],
     ["src/helpers/project-policy.ts", ["ADW-EFFECTIVE-POLICY-V1\\0", "affected_paths", "project_policy_digest", "required_validation"]],
     ["src/helpers/schemas.ts", ["additionalProperties", "date-time", "unresolvable schema reference"]],
     ["src/helpers/validation.ts", ["authorization", "[REDACTED]", "timed_out", "required"]],

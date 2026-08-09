@@ -494,7 +494,7 @@ try {
   validateOnboardingProjectReferences(projectRoot, onboarding);
   const existingConfig = existsSync(join(projectRoot, "adw.yaml"));
   if (existingConfig && args.onboardingPath) throw new Error("onboarding cannot replace an existing adw.yaml; use an explicit reviewed configuration change");
-  if (existingConfig && args.execution) throw new Error("--execution cannot replace an existing adw.yaml; use an explicit reviewed migration or infrastructure change");
+  if (existingConfig && args.execution) throw new Error("--execution cannot replace an existing adw.yaml; use a separately reviewed manual replacement or infrastructure change");
   if (args.execution && onboarding.execution && args.execution !== onboarding.execution.isolation) throw new Error("--execution conflicts with the onboarding execution choice");
   const execution = existingConfig
     ? { isolation: "existing-configuration", action: "preserve", required: false, reopen_required: false }

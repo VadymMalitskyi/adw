@@ -13,7 +13,7 @@ function readSkill(name) {
 }
 
 const spec = Buffer.from("# Change: api-retry\n\nExact spec bytes.\n", "utf8");
-const plan = Buffer.from("schema: 1\nchange_id: api-retry\n", "utf8");
+const plan = Buffer.from("schema: 2\nchange_id: api-retry\n", "utf8");
 const inputs = [
   { path: "spec.md", content: spec },
   { path: "plan.yaml", content: plan },

@@ -1,36 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { computeApprovalDigest, createApproval, dispatch, verifyApprovalDigest, EXIT, validateArtifact } from "../../plugin/lib/adw-helper.mjs";
+import { dispatch, EXIT, validateArtifact } from "../../plugin/lib/adw-helper.mjs";
 
 const meta = { approver: "Ada", approved_at: "2026-08-05T12:00:00Z", plugin_version: "0.1.0", docs_commit: "a".repeat(40) };
-
-test("approval digest is deterministic, exact-byte sensitive, and ordered spec then plan", () => {
-  const digest = computeApprovalDigest("spec\n", "plan\n");
-  assert.equal(digest, computeApprovalDigest(Buffer.from("spec\n"), Buffer.from("plan\n")));
-  assert.notEqual(digest, computeApprovalDigest("spec", "plan\n"));
-  assert.notEqual(digest, computeApprovalDigest("plan\n", "spec\n"));
-  assert.notEqual(digest, computeApprovalDigest("spec\r\n", "plan\n"));
-});
-
-test("content, lifecycle, and docs commit all invalidate approval verification", async () => {
-  const approval = createApproval({ ...meta, spec: "spec", plan: "plan" });
-  assert.equal(verifyApprovalDigest("spec", "plan", approval), true);
-  assert.equal(verifyApprovalDigest("changed", "plan", approval), false);
-
-  const stale = await dispatch("verify-approval", { spec: "spec", plan: "plan", docs_commit: "b".repeat(40), approval });
-  assert.equal(stale.exitCode, EXIT.APPROVAL_INVALID);
-  assert.match(stale.body.reason, /different docs commit/);
-
-  const superseded = { ...approval, status: "superseded", invalidated_at: "2026-08-05T13:00:00Z", invalidation_reason: "amended" };
-  const obsolete = await dispatch("verify-approval", { spec: "spec", plan: "plan", docs_commit: meta.docs_commit, approval: superseded });
-  assert.equal(obsolete.exitCode, EXIT.APPROVAL_INVALID);
-  assert.match(obsolete.body.reason, /superseded/);
-});
 
 test("approval bundle digest binds ordered paths and exact content", async () => {
   const inputs = [
     { path: "spec.md", content: "spec\n" },
-    { path: "plan.yaml", content: "schema: 1\n" },
+    { path: "plan.yaml", content: "schema: 2\n" },
     { path: "integrations.yaml", content: "schema: 1\n" },
   ];
   const first = await dispatch("digest-bundle", { inputs });
@@ -54,10 +31,10 @@ test("approval bundle digest binds ordered paths and exact content", async () =>
   assert.notEqual((await dispatch("digest-bundle", { inputs: changed })).body.digest, first.body.digest);
 });
 
-test("approval schema v2 records its ordered input manifest and v1 remains valid", async () => {
+test("approval schema v2 records its ordered input manifest and older schemas are rejected", async () => {
   const inputs = [
     { path: "spec.md", content: "spec\n" },
-    { path: "plan.yaml", content: "schema: 1\n" },
+    { path: "plan.yaml", content: "schema: 2\n" },
     { path: "integrations.yaml", content: "schema: 1\n" },
   ];
   const created = await dispatch("create-approval-bundle", { ...meta, inputs });
@@ -68,14 +45,15 @@ test("approval schema v2 records its ordered input manifest and v1 remains valid
   assert.match(created.body.approval.digest, /^[0-9a-f]{64}$/);
   assert.deepEqual(await validateArtifact("approval", created.body.approval), { valid: true, errors: [] });
 
-  const legacy = createApproval({ ...meta, spec: "spec", plan: "plan" });
-  assert.deepEqual(await validateArtifact("approval", legacy), { valid: true, errors: [] });
+  const previous = await validateArtifact("approval", { schema: 1 });
+  assert.equal(previous.valid, false);
+  assert.match(previous.errors[0].message, /unsupported approval schema 1/);
 });
 
 test("approval bundle verification rejects content, path, order, commit, and lifecycle drift", async () => {
   const inputs = [
     { path: "spec.md", content: "spec\n" },
-    { path: "plan.yaml", content: "schema: 1\n" },
+    { path: "plan.yaml", content: "schema: 2\n" },
     { path: "integrations.yaml", content: "schema: 1\n" },
   ];
   const created = await dispatch("create-approval-bundle", { ...meta, inputs });

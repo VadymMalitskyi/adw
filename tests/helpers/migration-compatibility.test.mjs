@@ -5,12 +5,12 @@ import { join } from "node:path";
 import test from "node:test";
 import { applyAtomicMigration, checkCompatibility, PathError } from "../../plugin/lib/adw-helper.mjs";
 
-test("compatibility matrix distinguishes compatible, migration, and too-new artifacts", () => {
-  assert.equal(checkCompatibility({ project_schema: 1, supported_project_schemas: [1, 2], plugin_version: "1.4.0", artifact_plugin_version: "1.0.0" }).compatible, true);
-  const old = checkCompatibility({ project_schema: 1, supported_project_schemas: [2], plugin_version: "2.0.0" });
+test("compatibility accepts only the current project schema and rejects future plugin evidence", () => {
+  assert.equal(checkCompatibility({ project_schema: 5, plugin_version: "1.4.0", artifact_plugin_version: "1.0.0" }).compatible, true);
+  const old = checkCompatibility({ project_schema: 4, plugin_version: "2.0.0" });
   assert.equal(old.compatible, false);
-  assert.equal(old.migration_required, true);
-  const future = checkCompatibility({ project_schema: 2, supported_project_schemas: [2], plugin_version: "1.9.0", artifact_plugin_version: "2.0.0" });
+  assert.equal(old.migration_required, false);
+  const future = checkCompatibility({ project_schema: 5, plugin_version: "1.9.0", artifact_plugin_version: "2.0.0" });
   assert.equal(future.compatible, false);
   assert.equal(future.migration_required, false);
 });

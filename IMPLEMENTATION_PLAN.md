@@ -33,7 +33,7 @@ There will be no public `adw` executable, no vendored copy of the skills in each
 4. **Project configuration:** committed root-level `adw.yaml`; machine-local values in ignored `.adw/local.yaml`.
 5. **Documentation:** code-coupled documentation remains on the code branch; ADW context and change records live on a separate `docs` branch.
 6. **Docs checkout:** the `docs` branch is checked out at root-level `worktrees/docs`; `/worktrees/` is Git-ignored.
-7. **Updates:** provider plugin managers distribute skill changes; `adw:update` migrates project artifacts only when their schema changes.
+7. **Updates:** provider plugin managers distribute skill changes; `adw:update` performs a read-only exact-schema compatibility check.
 8. **Execution environment:** use a required managed Dev Container by default for new repositories, preserve project-owned containers, and retain the agent's own sandbox and permissions as an inner boundary.
 9. **Delivery:** one branch and one draft pull request through `code_host`; GitHub is the initial provider, and ADW never merges or deploys.
 10. **Runtime:** Node.js 20+ for bundled internal helpers. Helpers are invoked by skills and are not a user-facing command API.
@@ -260,7 +260,7 @@ updated_at: 2026-08-05T14:30:00Z
 | `adw:amend` | Update an approved spec/plan, explain the change, and invalidate approval. |
 | `adw:address-review` | Apply in-scope review corrections; route behavior/design changes through `adw:amend`. |
 | `adw:sync-docs` | Compare code changes since `SYNC.yaml`, report drift by default, and update the docs branch by direct push only after explicit authorization. |
-| `adw:update` | Preview and apply project artifact migrations required by the installed plugin. Never update the plugin itself. |
+| `adw:update` | Check whether the project uses the exact schema supported by the installed plugin. Never write project files or update the plugin itself. |
 
 ### Deferred from the first executable slice
 
@@ -329,8 +329,8 @@ Completed change records remain under `changes/` on the docs branch. Git history
 4. Record the workflow schema in root-level `adw.yaml`.
 5. Record the actual plugin version in each `approval.json` and `validation.json`.
 6. For a compatible plugin update, modify no project files.
-7. For a workflow-schema update, `adw:update` previews a project migration and applies it only after confirmation.
-8. Never rewrite historical specifications, approvals, or validation evidence during migration.
+7. `adw:update` rejects unsupported workflow schemas without writing.
+8. Never reinterpret historical specifications, approvals, or validation evidence under a newer schema.
 
 ## 9. Implementation work packages
 
@@ -385,7 +385,7 @@ Work:
 
 - Define versioned schemas for project, plan, approval, and validation artifacts.
 - Add templates for config, context, spec, and plan.
-- Implement deterministic digest, schema validation, validation-result recording, compatibility checks, and migration primitives.
+- Implement deterministic digest, schema validation, validation-result recording, exact-schema compatibility checks, and path-confined atomic-write primitives.
 - Bundle runtime dependencies into one checked-in `plugin/lib/adw-helper.mjs`.
 - Give helpers structured JSON input/output and stable exit codes for skill use, without advertising them as a public CLI.
 
@@ -466,7 +466,7 @@ Acceptance:
 - Scope-changing discoveries stop for amendment.
 - No path can merge, release, deploy, or silently defer a required check.
 
-### WP6 — Build documentation maintenance and project migration
+### WP6 — Build documentation maintenance and project compatibility
 
 **Owner:** maintenance-skills agent
 **Depends on:** WP2 and WP3
@@ -476,9 +476,9 @@ Work:
 
 - Implement read-only documentation drift reporting with explicit fix mode.
 - Compare the code branch with `SYNC.yaml`, update `architecture.md` and `components/`, and support explicit direct push to the docs branch.
-- Implement project workflow-schema compatibility checks and migrations.
+- Implement exact current-schema compatibility checks without migrations.
 - Protect repository-owned docs and historical change records.
-- Document recovery when a migration or docs update is interrupted.
+- Document recovery when a docs update is interrupted and replacement guidance for unsupported schemas.
 
 Acceptance:
 
@@ -486,7 +486,7 @@ Acceptance:
 - Fix mode produces a reviewable docs-branch diff and direct-pushes only after authorization.
 - Sync never force-pushes and stops on a dirty worktree or non-fast-forward branch.
 - Compatible plugin updates require no project changes.
-- Failed migration leaves the previous project schema usable.
+- Unsupported schemas are rejected without changing the project.
 
 ### WP7 — Integrate, document, and release the private MVP
 
@@ -528,7 +528,7 @@ Work:
 
 Acceptance:
 
-- A schema v1/lightweight project behaves as before, and migration to schema v2 makes no provider calls.
+- The current project schema retains lightweight no-integration behavior without external calls.
 - Optional unavailable capabilities do not block; required unavailable operations stop only the relevant workflow step.
 - Approval binds `spec.md`, `plan.yaml`, and optional `integrations.yaml`; changed requirement-bearing external content requires amendment and reapproval.
 - Repeated create/update attempts reuse a matching idempotency marker or stop safely instead of duplicating an object.
@@ -565,7 +565,7 @@ Primary agent handles integration review and shared contract changes.
 
 ### Wave 3 — Maintenance and end-to-end integration
 
-- Agent A: WP6 documentation and migration skills.
+- Agent A: WP6 documentation and compatibility skills.
 - Agent B: cross-provider contract tests.
 - Agent C: fixture and security/adversarial tests.
 - Primary agent: WP7 integration, documentation, real-provider verification, and release preparation.
@@ -591,10 +591,10 @@ Sub-agents must not modify `PRD.md`, `IMPLEMENTATION_PLAN.md`, shared schemas, o
 - Create and attach the docs branch at root-level `worktrees/docs`, then verify repeat initialization is idempotent.
 - Approve a change, edit its spec, and confirm execution stops.
 - Run one passing and one failing validation sequence.
-- Interrupt and rerun initialization, execution evidence recording, and migration.
+- Interrupt and rerun initialization and execution evidence recording; verify compatibility checks remain read-only.
 - Synchronize documentation since a `SYNC.yaml` marker and test dirty-worktree and non-fast-forward stops.
 - Update plugin patch/minor version without touching project artifacts.
-- Migrate one fixture across a workflow-schema major version.
+- Reject fixtures from every previous workflow-schema version without writes.
 - Validate a project with no integrations, each requirement mode, and a required unavailable capability.
 - Validate approval invalidation for requirement drift but not ordinary operational-field drift.
 - Validate idempotent retry, provider readback mismatch, failed receipt recording, redaction, and hostile external content.
@@ -654,7 +654,7 @@ The private 0.2 release is complete only when:
 7. A new provider session can reconstruct the state from Git-native artifacts.
 8. `adw:sync-docs` can reconcile code changes into the docs branch using `SYNC.yaml` without a code PR or force push.
 9. Compatible ADW updates change only the installed plugin.
-10. Breaking artifact updates require an explicit, reviewable project migration.
+10. Breaking artifact updates require fresh initialization or a separately reviewed manual replacement; no legacy migration path is bundled.
 11. Devcontainers, external systems, hosted services, and multi-agent orchestration remain unnecessary for the core loop.
 12. Optional integrations resolve capabilities independently of provider and transport, with no committed credentials.
 13. Required external state is bound into approval; operational drift alone does not invalidate it.

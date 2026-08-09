@@ -27,8 +27,9 @@ function fixture({ remote = false } = {}) {
   writeFileSync(join(root, ".gitignore"), "/worktrees/\n");
   writeFileSync(join(root, "README.md"), "# Authoritative project docs\n");
   writeFileSync(join(root, "adw.yaml"), [
-    "schema: 1", "", "git:", "  default_branch: main", "", "documentation:",
+    "schema: 5", "", "git:", "  default_branch: main", "", "documentation:",
     "  mode: branch", "  branch: docs", "  worktree: worktrees/docs", "  sync_marker: SYNC.yaml", "  delivery: direct-push",
+    "", "execution:", "  isolation: provider-sandbox", "  enforcement: preferred", "  permissions:", "    profile: managed-development",
     "", "components:", "  app:", "    path: .", "", "validation:", "  default:", "    - npm test", "",
   ].join("\n"));
   writeFileSync(join(root, "app.js"), "export const value = 1;\n");

@@ -22,7 +22,7 @@ Invalidate the active approval before changing approved intent, preserve its evi
 ## Verify and invalidate first
 
 1. Read every current approval input as exact bytes and validate the parsed plan and optional integration artifact with the helper.
-2. Validate `approval.json` and require `status: "active"`. Invoke `verify-approval-bundle` with the exact ordered inputs for schema 2; invoke legacy `verify-approval` with exact spec and plan only for schema 1 when `integrations.yaml` is absent. In both cases use the approval's recorded pre-approval `docs_commit`.
+2. Validate schema-2 `approval.json` and require `status: "active"`. Invoke `verify-approval-bundle` with the exact ordered inputs and the approval's recorded pre-approval `docs_commit`.
 3. Confirm directly from Git that the recorded `docs_commit` contains every exact input and is an ancestor of the current docs-branch head. Stop on any mismatch; do not rewrite questionable evidence.
 4. Create a superseded approval object by preserving every original approval field and adding:
    - `status: "superseded"`
@@ -37,7 +37,7 @@ This ordering ensures interruption cannot leave changed intent paired with an ac
 
 1. Explore relevant code and authoritative documentation read-only as needed to ground the requested revision.
 2. Update only the required inputs among `changes/<change-id>/spec.md`, `plan.yaml`, and existing `integrations.yaml` in the docs worktree. Keep the original change ID. Read bound external requirements when needed, but perform no external mutation.
-3. For plan schema 2, recompute affected components and effective policy with `resolve-project-policy` after changing paths, validation, bindings, or project-relevant requirements. Copy the helper result unchanged, validate referenced profiles, and require a configured mandatory binding before replacement approval.
+3. Recompute affected components and effective policy with `resolve-project-policy` after changing paths, validation, bindings, or project-relevant requirements. Copy the helper result unchanged, validate referenced profiles, and require a configured mandatory binding before replacement approval.
 4. Keep the plan as one contiguous sequence numbered from 1. Update affected paths, anchors, restrictions, and each structured validation descriptor (`command`, `cwd`, `timeout_ms`, `required`, `source`) to match the amendment.
 5. Reconcile the specification and plan documentation declarations. Require files for `update` or `new` and an empty list for `none`.
 6. Preserve the amendment reason in the superseded approval evidence. Also summarize the changed scope and rationale in the specification's Decisions section so future readers do not need chat history.

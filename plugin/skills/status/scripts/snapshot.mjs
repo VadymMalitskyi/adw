@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { verifyApprovalBundle, verifyApprovalDigest, validateArtifact } from "../../../lib/adw-helper.mjs";
+import { verifyApprovalBundle, validateArtifact } from "../../../lib/adw-helper.mjs";
 import { permissionAgentsFromProject } from "../../../execution/managed-development.mjs";
 
 function parseArguments(argv) {
@@ -93,12 +93,10 @@ async function changeSnapshot(changePath, changeId) {
     else {
       const schema = await validateArtifact("approval", parsed.value);
       let digestMatches = false;
-      if (schema.valid && parsed.value.schema === 2) {
+      if (schema.valid) {
         const paths = parsed.value.inputs.map(({ path }) => path);
         const present = paths.every((path) => existsSync(join(changePath, path)));
         digestMatches = present && verifyApprovalBundle(paths.map((path) => ({ path, content: readFileSync(join(changePath, path)) })), parsed.value);
-      } else if (schema.valid && parsed.value.schema === 1) {
-        digestMatches = snapshot.artifacts.spec && snapshot.artifacts.plan && verifyApprovalDigest(readFileSync(specPath), readFileSync(planPath), parsed.value);
       }
       const active = schema.valid && parsed.value.status === "active" && digestMatches;
       snapshot.approval = {

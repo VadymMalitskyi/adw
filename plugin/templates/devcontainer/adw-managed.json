@@ -4,7 +4,7 @@
   "agent_tools": "both",
   "codex_version": "0.146.1",
   "claude_code_version": "2.1.222",
-  "plugin_version": "0.4.0",
+  "plugin_version": "0.5.0",
   "permission_profile": "managed-development",
   "codex_rules_sha256": "5dc04c308fc3612e1592e330c09de72ce809b9bc0704c17c73ad1f26ed5872cc",
   "claude_settings_sha256": "3cbf7378d4689d57e5b14d30b08b7ae0d10bc91bf6fcfe915825f09451df0f45",

@@ -16,13 +16,13 @@ Claude manifest ┘                    |
 
 The plugin owns workflow instructions, deterministic mechanics, execution contracts, and the managed-container template. A target project owns `adw.yaml`, its selected execution infrastructure, bounded routing blocks, local ignored state, authoritative code documentation, and docs-branch context/change records.
 
-Schema-4 projects may also own `adw/work-items/*.yaml` payload profiles. The helper resolves affected paths to their single most-specific component, adds global and affected-component validation, resolves optional tracker workflow policy, and digests only that effective subset into plan schema 2. This permits project specialization without copying or overriding core ADW skills.
+Schema-5 projects may also own `adw/work-items/*.yaml` payload profiles. The helper resolves affected paths to their single most-specific component, adds global and affected-component validation, resolves optional tracker workflow policy, and digests only that effective subset into plan schema 2. This permits project specialization without copying or overriding core ADW skills.
 
 ## Boundaries
 
 - Provider manifests contain packaging metadata only.
 - `plugin/skills/` is the shared user interface.
-- `plugin/lib/adw-helper.mjs` performs schema, digest, evidence, compatibility, and migration mechanics. It is not a public CLI.
+- `plugin/lib/adw-helper.mjs` performs current-schema validation, digest, evidence, compatibility, path-confinement, and atomic-write mechanics. It is not a public CLI.
 - `src/helpers/` contains typed helper modules plus the canonical dependency-free runtime source; `npm run build:helper` reproduces the checked-in bundle exactly.
 - `worktrees/docs` is the only ADW worktree. Feature implementation uses the project's normal code checkout and one branch.
 - `plugin/execution/contracts.md` defines managed-container, project-container, and provider-sandbox preflights. Init creates managed infrastructure only when no project container exists, deriving its project runtime and setup layer from supported repository evidence while preserving unresolved requirements for review.

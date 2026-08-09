@@ -1,6 +1,5 @@
 export interface CompatibilityInput {
   project_schema: number;
-  supported_project_schemas: number[];
   plugin_version: string;
   artifact_plugin_version?: string;
 }
@@ -16,13 +15,14 @@ function major(version: string): number | undefined {
   return match ? Number(match[1]) : undefined;
 }
 
+export const CURRENT_PROJECT_SCHEMA = 5;
+
 export function checkCompatibility(input: CompatibilityInput): CompatibilityResult {
   const installedMajor = major(input.plugin_version);
   if (installedMajor === undefined) return { compatible: false, migration_required: false, reason: "plugin_version must be semantic version x.y.z" };
   if (!Number.isInteger(input.project_schema) || input.project_schema < 1) return { compatible: false, migration_required: false, reason: "project_schema must be a positive integer" };
-  if (!input.supported_project_schemas.includes(input.project_schema)) {
-    const target = Math.max(...input.supported_project_schemas);
-    return { compatible: false, migration_required: Number.isFinite(target) && input.project_schema < target, reason: `project schema ${input.project_schema} is not supported; supported schemas: ${input.supported_project_schemas.join(", ") || "none"}` };
+  if (input.project_schema !== CURRENT_PROJECT_SCHEMA) {
+    return { compatible: false, migration_required: false, reason: `project schema ${input.project_schema} is not supported; this ADW release accepts only schema ${CURRENT_PROJECT_SCHEMA}` };
   }
   if (input.artifact_plugin_version !== undefined) {
     const artifactMajor = major(input.artifact_plugin_version);

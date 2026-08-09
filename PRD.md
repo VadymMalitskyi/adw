@@ -153,7 +153,7 @@ Skills may call small plugin-bundled helper programs for operations that should 
 - Computing and comparing approval digests.
 - Running configured validation commands and recording exit codes.
 - Checking workflow-schema compatibility.
-- Applying an artifact migration without leaving a partial result.
+- Applying path-confined atomic writes for current workflows such as docs synchronization.
 
 These helpers are implementation details used by the skills. They do not form a public CLI, have no user-facing command vocabulary, and must not become an orchestration platform.
 
@@ -253,7 +253,7 @@ The agent must stop for renewed approval if implementation requires a change to 
 | Skill | Responsibility | Writes by default? |
 |---|---|---:|
 | `adw:init` | Initialize project artifacts and the docs worktree | Yes, after preview |
-| `adw:update` | Preview and apply required project artifact migrations | Yes, after confirmation |
+| `adw:update` | Check exact current project-schema compatibility | No |
 | `adw:doctor` | Diagnose compatibility, context, safety, and configured capability availability | No |
 | `adw:status` | Reconstruct local work and optional external bindings from durable artifacts | No |
 | `adw:discover` | Propose concise project, component, and non-secret integration context | Only after approval |
@@ -361,13 +361,13 @@ ADW distinguishes three kinds of files:
 2. **Project-owned files:** `adw.yaml`, routing blocks, authoritative project docs, docs-branch context, and change records.
 3. **Machine-local files:** transport preferences, identity overrides, host paths, and caches under ignored `.adw/` paths; credentials and authentication state remain in provider clients or external credential stores.
 
-Plugin managers install, pin, update, and roll back plugin code. A compatible plugin update modifies no target-project files. `adw:update` handles only workflow-schema migrations: it previews a reviewable change, applies it after confirmation, and never rewrites historical specifications, approvals, or validation evidence. A failed migration must leave the previous project schema usable.
+Plugin managers install, pin, update, and roll back plugin code. `adw:update` checks whether a project uses the exact schema bundled with the installed release and never modifies target-project files. Previous project, plan, and approval schemas are unsupported; adopting the current contracts requires fresh initialization or a separately reviewed manual replacement.
 
 No background check may apply an update or change repository files.
 
 ## 10. Execution environment and security
 
-The default execution boundary for a new repository is an ADW-managed Dev Container plus the active agent's inner sandbox and permission model. `adw:init` creates the managed container only when `.devcontainer/` is absent. An existing project-owned devcontainer is preserved byte-for-byte and selected instead. `provider-sandbox` is an explicit portable fallback, and schema migrations adopt it conservatively when no container already exists.
+The default execution boundary for a new repository is an ADW-managed Dev Container plus the active agent's inner sandbox and permission model. `adw:init` creates the managed container only when `.devcontainer/` is absent. An existing project-owned devcontainer is preserved byte-for-byte and selected instead. `provider-sandbox` is an explicit portable fallback.
 
 Managed-container generation is deterministic and evidence-driven. Supported manifests, lockfiles, runtime-version files, CI declarations, environment templates, and Compose port mappings may produce a reviewed project requirements artifact and curated setup script. Conflicts, unpinned runtimes, secrets, and unsupported multi-container topology remain unresolved rather than guessed. Dependency setup runs non-root only after the outbound firewall is active, and doctor verifies the generated-artifact digests.
 
@@ -463,7 +463,7 @@ Version 0.2 is complete when all of the following work on at least two different
 12. A quick change that becomes risky or cross-cutting is routed to the planned workflow.
 13. A new session can reconstruct work using `adw:status` without the old chat transcript.
 14. Machine-local values and credentials remain outside committed files.
-15. Compatible plugin updates touch no project artifacts; a required migration is previewed and cannot leave a partially updated project schema.
+15. Compatibility checks touch no project artifacts; previous project, plan, and approval schemas are rejected without automatic migration.
 16. A project with no integrations completes the same workflow without provider tooling.
 17. An optional unavailable integration does not block, while a required unavailable operation stops the relevant workflow.
 18. An authorized external write is idempotent, read back, and represented by a redacted receipt; changed requirement-bearing content invalidates approval.

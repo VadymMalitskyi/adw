@@ -4,33 +4,18 @@ import { validateArtifact } from "../../plugin/lib/adw-helper.mjs";
 
 const sha = "a".repeat(40);
 
-test("legacy v1 artifact schemas remain valid", async () => {
-  const artifacts = {
-    project: {
-      schema: 1,
-      git: { default_branch: "main" },
-      documentation: { mode: "branch", branch: "docs", worktree: "worktrees/docs", sync_marker: "SYNC.yaml", delivery: "direct-push" },
-      components: { api: { path: "services/api", validation: { test: [{ command: "npm test", source: "services/api/package.json", required: true }] } } },
-      validation: { default: ["npm test"] }
-    },
-    plan: {
-      schema: 1,
-      change_id: "fix.api-v2",
-      summary: "Fix API behavior",
-      tasks: [{ id: 1, title: "Implement", description: "Update handler", affected_paths: ["src/api.mjs"], anchors: ["handle"], restrictions: ["no API break"], validation: [{ command: "npm test", cwd: ".", timeout_ms: 120000, required: true }] }],
-      documentation: { impact: "update", files: ["README.md"] }
-    },
-    approval: { schema: 1, status: "active", approver: "Ada", approved_at: "2026-08-05T12:00:00Z", plugin_version: "0.1.0", docs_commit: sha, digest_algorithm: "sha256", digest: "b".repeat(64) },
-    validation: { schema: 1, change_id: "fix-api", plugin_version: "0.1.0", code_commit: sha, docs_commit: sha, recorded_at: "2026-08-05T12:00:00Z", status: "passed", commands: [{ command: "npm test", cwd: ".", exit_code: 0, signal: null, timed_out: false, duration_ms: 5, summary: "ok", required: true }], deferred: [] }
-  };
-  for (const [kind, value] of Object.entries(artifacts)) assert.deepEqual(await validateArtifact(kind, value), { valid: true, errors: [] }, kind);
+test("previous project, plan, and approval schemas are rejected", async () => {
+  for (const version of [1, 2, 3, 4]) assert.equal((await validateArtifact("project", { schema: version })).valid, false, `project ${version}`);
+  assert.equal((await validateArtifact("plan", { schema: 1 })).valid, false);
+  assert.equal((await validateArtifact("approval", { schema: 1 })).valid, false);
 });
 
-test("project schema v2 supports optional provider-neutral capability configuration", async () => {
+test("project schema v5 supports optional provider-neutral capability configuration", async () => {
   const base = {
-    schema: 2,
+    schema: 5,
     git: { default_branch: "main" },
     documentation: { mode: "branch", branch: "docs", worktree: "worktrees/docs", sync_marker: "SYNC.yaml", delivery: "direct-push" },
+    execution: { isolation: "provider-sandbox", enforcement: "preferred", permissions: { profile: "managed-development" } },
     components: {},
     validation: { default: ["npm test"] },
   };
@@ -82,27 +67,6 @@ test("project schema v2 supports optional provider-neutral capability configurat
   assert.equal(invalidCapability.valid, false);
   assert.ok(invalidCapability.errors.some(({ path, keyword }) => path === "/integrations/release_manager" && keyword === "additionalProperties"));
 
-  const legacyWithIntegrations = { ...base, schema: 1, integrations: integrated.integrations };
-  const invalidLegacy = await validateArtifact("project", legacyWithIntegrations);
-  assert.equal(invalidLegacy.valid, false);
-  assert.ok(invalidLegacy.errors.some(({ path }) => path === "/integrations"));
-});
-
-test("project schema v3 requires a coherent execution profile", async () => {
-  const project = {
-    schema: 3,
-    git: { default_branch: "main" },
-    documentation: { mode: "branch", branch: "docs", worktree: "worktrees/docs", sync_marker: "SYNC.yaml", delivery: "direct-push" },
-    execution: { isolation: "managed-devcontainer", enforcement: "required" },
-    components: {},
-    validation: { default: ["npm test"] },
-  };
-  assert.deepEqual(await validateArtifact("project", project), { valid: true, errors: [] });
-
-  project.execution.enforcement = "preferred";
-  const invalid = await validateArtifact("project", project);
-  assert.equal(invalid.valid, false);
-  assert.ok(invalid.errors.some(({ path, keyword }) => path === "/execution/enforcement" && keyword === "security"));
 });
 
 test("project schema v5 requires the managed-development permission profile", async () => {
@@ -124,6 +88,11 @@ test("project schema v5 requires the managed-development permission profile", as
   const invalid = await validateArtifact("project", unknown);
   assert.equal(invalid.valid, false);
   assert.ok(invalid.errors.some(({ path }) => path === "/execution/permissions/profile"));
+
+  const weak = structuredClone(project);
+  weak.execution.enforcement = "preferred";
+  const invalidWeak = await validateArtifact("project", weak);
+  assert.ok(invalidWeak.errors.some(({ path, keyword }) => path === "/execution/enforcement" && keyword === "security"));
 });
 
 test("integration and external-action v1 schemas accept durable, secret-free evidence", async () => {
@@ -173,15 +142,16 @@ test("integration and external-action v1 schemas accept durable, secret-free evi
 });
 
 test("invalid values return actionable JSON pointers and contract-specific errors", async () => {
-  const project = await validateArtifact("project", { schema: 1 });
+  const project = await validateArtifact("project", { schema: 5 });
   assert.equal(project.valid, false);
   assert(project.errors.some((error) => error.path === "/git" && error.keyword === "required"));
 
   const plan = await validateArtifact("plan", {
-    schema: 1,
+    schema: 2,
     change_id: "../escape",
     summary: "bad",
-    tasks: [{ id: 2, title: "x", description: "x", affected_paths: ["../outside"], validation: [{ command: "test", cwd: "../outside", timeout_ms: 0, required: true }] }],
+    effective_policy: { components: [], unowned_paths: [], project_policy_digest: "c".repeat(64), required_validation: [] },
+    tasks: [{ id: 2, title: "x", description: "x", affected_paths: ["../outside"], validation: [{ command: "test", cwd: "../outside", timeout_ms: 0, required: true, source: "test" }] }],
     documentation: { impact: "update", files: [] }
   });
   assert.equal(plan.valid, false);
@@ -192,7 +162,7 @@ test("invalid values return actionable JSON pointers and contract-specific error
 });
 
 test("approval lifecycle preserves superseded evidence and rejects ambiguous state", async () => {
-  const base = { schema: 1, approver: "Ada", approved_at: "2026-08-05T12:00:00Z", plugin_version: "0.1.0", docs_commit: sha, digest_algorithm: "sha256", digest: "b".repeat(64) };
+  const base = { schema: 2, approver: "Ada", approved_at: "2026-08-05T12:00:00Z", plugin_version: "0.5.0", docs_commit: sha, digest_algorithm: "sha256", inputs: [{ path: "spec.md", digest: "c".repeat(64) }, { path: "plan.yaml", digest: "d".repeat(64) }], digest: "b".repeat(64) };
   assert.equal((await validateArtifact("approval", { ...base, status: "superseded", invalidated_at: "2026-08-05T13:00:00Z", invalidation_reason: "spec amended" })).valid, true);
   const ambiguous = await validateArtifact("approval", { ...base, status: "active", invalidated_at: "2026-08-05T13:00:00Z" });
   assert.equal(ambiguous.valid, false);
