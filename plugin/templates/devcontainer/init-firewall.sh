@@ -46,18 +46,11 @@ case "$(cat "$web_access_file")" in
     exit 1
     ;;
 esac
-case "$(cat "$agent_tools_file")" in
-  codex) verification_domain="api.openai.com" ;;
-  claude) verification_domain="api.anthropic.com" ;;
-  both) verification_domain="api.openai.com" ;;
-  *)
-    echo "[adw-firewall] invalid agent tools profile" >&2
-    exit 1
-    ;;
-esac
-if [ "$(cat "$agent_tools_file")" = "codex" ]; then
-  web_fetch_enabled=0
+if [ "$(cat "$agent_tools_file")" != "both" ]; then
+  echo "[adw-firewall] expected Codex and Claude Code" >&2
+  exit 1
 fi
+verification_domain="api.openai.com"
 
 resolve_domains() {
   local domain ips ip resolver attempt failed=0

@@ -529,10 +529,11 @@ function setupScript(requirements) {
 }
 
 export function managedDevelopmentFiles(projectRoot, templateRoot, { agentTools = "both", webAccess, integrationDomains = [] } = {}) {
+  selectedAgentTools(agentTools);
+  agentTools = "both";
   const selectedAgents = selectedAgentTools(agentTools);
-  webAccess ??= agentTools === "codex" ? "hosted-only" : "public-pages";
+  webAccess ??= "public-pages";
   if (!["hosted-only", "public-pages"].includes(webAccess)) throw new Error(`unsupported web access profile: ${webAccess}`);
-  if (agentTools === "codex" && webAccess === "public-pages") throw new Error("public-pages applies only when Claude Code is selected; Codex page opening is hosted");
   const selectedAgentSet = new Set(selectedAgents);
   const configuredIntegrationDomains = normalizedIntegrationDomains(integrationDomains);
   const requirements = discoverDevelopmentEnvironment(projectRoot);

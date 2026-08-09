@@ -203,7 +203,7 @@ function managedDevcontainerChecks(projectRoot, execution) {
     && /useradd --system --no-create-home --shell \/usr\/sbin\/nologin adw-egress/.test(dockerfile)
     && /ARG ADW_AGENT_TOOLS=both/.test(dockerfile)
     && /ARG ADW_WEB_ACCESS=public-pages/.test(dockerfile)
-    && /case "\$ADW_AGENT_TOOLS" in/.test(dockerfile)
+    && /npm install -g "@openai\/codex@\$\{CODEX_VERSION\}" "@anthropic-ai\/claude-code@\$\{CLAUDE_CODE_VERSION\}"/.test(dockerfile)
     && /> \/etc\/adw\/agent-tools/.test(dockerfile)
     && /> \/etc\/adw\/web-access/.test(dockerfile)
     && /chmod 0444 \/etc\/adw\/agent-tools \/etc\/adw\/web-access/.test(dockerfile)

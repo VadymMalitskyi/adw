@@ -38,16 +38,17 @@ test("managed template pins agents, runs non-root, scopes credentials, and denie
   }
   assert.match(dockerfile, /@openai\/codex@\$\{CODEX_VERSION\}/);
   assert.match(dockerfile, /@anthropic-ai\/claude-code@\$\{CLAUDE_CODE_VERSION\}/);
-  assert.match(dockerfile, /case "\$ADW_AGENT_TOOLS" in/);
-  assert.match(dockerfile, /npm install -g "\$\{agent_packages\[@\]\}"/);
+  assert.match(dockerfile, /npm install -g "@openai\/codex@\$\{CODEX_VERSION\}" "@anthropic-ai\/claude-code@\$\{CLAUDE_CODE_VERSION\}"/);
   assert.match(dockerfile, /> \/etc\/adw\/agent-tools/);
   assert.match(dockerfile, /chmod 0444 \/etc\/adw\/agent-tools/);
+  assert.match(dockerfile, /chmod 0751 \/home\/vscode/);
+  assert.match(dockerfile, /install -d -m 0755 -o root -g root \/home\/vscode\/\.codex \/home\/vscode\/\.claude \/home\/vscode\/\.config \/home\/vscode\/\.config\/gh/);
   assert.match(dockerfile, /chmod 0555 \/usr\/local\/bin\/adw-claude-permission-hook/);
   assert.doesNotMatch(dockerfile, /chmod 0500 [^\n]*adw-claude-permission-hook/);
-  assert.doesNotMatch(dockerfile, /npm install -g "@openai\/codex@\$\{CODEX_VERSION\}" "@anthropic-ai\/claude-code@\$\{CLAUDE_CODE_VERSION\}"/);
   const postCreate = readFileSync(join(templateRoot, "post-create.sh"), "utf8");
-  assert.match(postCreate, /cat \/etc\/adw\/agent-tools/);
+  assert.match(postCreate, /agent_commands=\(codex claude\)/);
   assert.match(postCreate, /command -v "\$command"/);
+  assert.ok(postCreate.indexOf("adw-managed-development.rules") < postCreate.indexOf('for path in "${credential_paths[@]}"'));
   assert.doesNotMatch(postCreate, /\/usr\/local\/bin\/(codex|claude)/);
   assert.match(dockerfile, /USER vscode/);
   assert.match(dockerfile, /gpasswd -d vscode sudo/);
@@ -71,11 +72,11 @@ test("managed template pins agents, runs non-root, scopes credentials, and denie
   assert.doesNotMatch(dockerfile, /chmod u\+s \/usr\/bin\/bwrap/);
 });
 
-test("managed development files scope agent tools, credentials, extensions, environment, and domains", async (t) => {
+test("managed development files always include both agent tools, credentials, extensions, environment, and domains", async (t) => {
   const cases = [
-    { profile: "codex", agents: ["codex"] },
-    { profile: "claude", agents: ["claude"] },
-    { profile: "both", agents: ["codex", "claude"] },
+    { profile: "codex" },
+    { profile: "claude" },
+    { profile: "both" },
   ];
   const domainsByAgent = {
     codex: ["api.openai.com", "auth.openai.com", "chatgpt.com"],
@@ -100,16 +101,16 @@ test("managed development files scope agent tools, credentials, extensions, envi
       const claudeSettings = JSON.parse(generated.files.get("claude-settings.json"));
       const claudeSandbox = claudeSettings.sandbox;
       assert.deepEqual(new Set(claudeSandbox.network.allowedDomains), allowedDomains);
-      assert.equal(claudeSandbox.network.allowManagedDomainsOnly, profile === "codex" ? true : undefined);
+      assert.equal(claudeSandbox.network.allowManagedDomainsOnly, undefined);
       assert.equal(claudeSandbox.network.strictAllowlist, true);
       assert.equal(claudeSandbox.autoAllowBashIfSandboxed, true);
       assert.deepEqual(claudeSettings.permissions.allow, ["WebSearch"]);
       assert.equal(claudeSettings.hooks.PreToolUse.length, 2);
 
-      assert.equal(config.build.args.ADW_AGENT_TOOLS, profile);
-      assert.equal(config.build.args.ADW_WEB_ACCESS, profile === "codex" ? "hosted-only" : "public-pages");
-      assert.equal(marker.agent_tools, profile);
-      assert.equal(marker.web_access, profile === "codex" ? "hosted-only" : "public-pages");
+      assert.equal(config.build.args.ADW_AGENT_TOOLS, "both");
+      assert.equal(config.build.args.ADW_WEB_ACCESS, "public-pages");
+      assert.equal(marker.agent_tools, "both");
+      assert.equal(marker.web_access, "public-pages");
       assert.equal(marker.project_requirements_sha256, createHash("sha256").update(generated.files.get("project-requirements.json")).digest("hex"));
       assert.equal(marker.project_setup_sha256, createHash("sha256").update(generated.files.get("project-setup.sh")).digest("hex"));
       assert.equal(marker.allowed_domains_sha256, createHash("sha256").update(generated.files.get("allowed-domains.txt")).digest("hex"));
@@ -119,13 +120,12 @@ test("managed development files scope agent tools, credentials, extensions, envi
       assert.equal([...allowedDomains].filter((domain) => domain === "tracker.example.com").length, 1);
 
       for (const agent of ["codex", "claude"]) {
-        const selected = agents.includes(agent);
-        assert.equal(config.mounts.some((mount) => mount.includes(`target=${mountByAgent[agent]},`)), selected);
-        assert.equal(config.customizations.vscode.extensions.includes(extensionByAgent[agent]), selected);
-        for (const domain of domainsByAgent[agent]) assert.equal(allowedDomains.has(domain), selected);
+        assert.equal(config.mounts.some((mount) => mount.includes(`target=${mountByAgent[agent]},`)), true);
+        assert.equal(config.customizations.vscode.extensions.includes(extensionByAgent[agent]), true);
+        for (const domain of domainsByAgent[agent]) assert.equal(allowedDomains.has(domain), true);
       }
-      assert.equal(config.containerEnv.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC === "1", agents.includes("claude"));
-      assert.equal(config.containerEnv.DISABLE_AUTOUPDATER === "1", agents.includes("claude"));
+      assert.equal(config.containerEnv.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, "1");
+      assert.equal(config.containerEnv.DISABLE_AUTOUPDATER, "1");
       assert.doesNotMatch(generated.files.get("allowed-domains.txt"), /\*|https?:\/\//);
     });
   }
@@ -135,7 +135,6 @@ test("managed development files reject invalid agent profiles and integration do
   const root = mkdtempSync(join(tmpdir(), "adw-agent-invalid-"));
   assert.throws(() => managedDevelopmentFiles(root, templateRoot, { agentTools: "other" }), /unsupported agent tools profile/);
   assert.throws(() => managedDevelopmentFiles(root, templateRoot, { webAccess: "unrestricted" }), /unsupported web access profile/);
-  assert.throws(() => managedDevelopmentFiles(root, templateRoot, { agentTools: "codex", webAccess: "public-pages" }), /applies only when Claude Code is selected/);
   assert.throws(() => managedDevelopmentFiles(root, templateRoot, { integrationDomains: "tracker.example.com" }), /must be an array/);
   assert.throws(() => managedDevelopmentFiles(root, templateRoot, { integrationDomains: ["https://tracker.example.com/path"] }), /invalid integration domain/);
   assert.throws(() => managedDevelopmentFiles(root, templateRoot, { integrationDomains: ["tracker.example.com\nmalicious.example.com"] }), /invalid integration domain/);
@@ -161,9 +160,8 @@ test("managed firewall scripts are valid shell and establish deny-by-default bef
   const firewall = readFileSync(join(templateRoot, "init-firewall.sh"), "utf8");
   assert.ok(firewall.indexOf("iptables -P OUTPUT DROP") < firewall.lastIndexOf("resolve_domains\n"));
   assert.match(firewall, /ip6tables -P OUTPUT DROP/);
-  assert.match(firewall, /claude\) verification_domain="api\.anthropic\.com"/);
-  assert.match(firewall, /codex\) verification_domain="api\.openai\.com"/);
-  assert.match(firewall, /both\) verification_domain="api\.openai\.com"/);
+  assert.match(firewall, /expected Codex and Claude Code/);
+  assert.match(firewall, /verification_domain="api\.openai\.com"/);
   assert.match(firewall, /public-pages\) web_fetch_enabled=1/);
   assert.match(firewall, /awk '\$1 == "nameserver"/);
   assert.match(firewall, /dig \+short \+time="\$dns_timeout" \+tries=1 @"\$resolver"/);
@@ -292,7 +290,7 @@ test("doctor blocks a required managed profile outside its runtime and passes it
   assert.equal(driftedChecks.find(({ id }) => id === "execution:hardening").status, "pass");
 });
 
-test("single-agent and dual-agent onboarding initialize only selected routing and pass doctor", async (t) => {
+test("legacy agent answers always initialize both provider routes and pass doctor", async (t) => {
   for (const profile of ["codex", "claude", "both"]) {
     await t.test(profile, () => {
       const root = mkdtempSync(join(tmpdir(), `adw-managed-doctor-${profile}-`));
@@ -321,33 +319,9 @@ test("single-agent and dual-agent onboarding initialize only selected routing an
       assert.equal(doctor.status, 0, doctor.stderr || doctor.stdout);
       const snapshot = JSON.parse(doctor.stdout);
       assert.equal(snapshot.checks.find(({ id }) => id === "execution:managed-files").status, "pass");
-      assert.deepEqual(snapshot.checks.filter(({ id }) => id.startsWith("routing:")).map(({ id }) => id), profile === "codex"
-        ? ["routing:AGENTS.md"]
-        : profile === "claude" ? ["routing:CLAUDE.md"] : ["routing:AGENTS.md", "routing:CLAUDE.md"]);
-      assert.equal(existsSync(join(root, "AGENTS.md")), profile !== "claude");
-      assert.equal(existsSync(join(root, "CLAUDE.md")), profile !== "codex");
-
-      if (profile === "codex") {
-        const configPath = join(root, ".devcontainer/devcontainer.json");
-        const config = JSON.parse(readFileSync(configPath, "utf8"));
-        config.mounts.push("source=unexpected-claude,target=/home/vscode/.claude,type=volume");
-        writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
-        const drifted = spawnSync(process.execPath, [doctorScript, "--project-root", root], {
-          encoding: "utf8",
-          env: { ...process.env, ADW_MANAGED_DEVCONTAINER: "1" },
-        });
-        const driftedChecks = JSON.parse(drifted.stdout).checks;
-        assert.equal(driftedChecks.find(({ id }) => id === "execution:mounts").status, "fail");
-        assert.equal(driftedChecks.find(({ id }) => id === "execution:agent-profile").status, "pass");
-        assert.equal(driftedChecks.find(({ id }) => id === "execution:domains").status, "pass");
-
-        writeFileSync(join(root, ".devcontainer/allowed-domains.txt"), `${readFileSync(join(root, ".devcontainer/allowed-domains.txt"), "utf8")}evil.example.com\n`);
-        const domainDrift = spawnSync(process.execPath, [doctorScript, "--project-root", root], {
-          encoding: "utf8",
-          env: { ...process.env, ADW_MANAGED_DEVCONTAINER: "1" },
-        });
-        assert.equal(JSON.parse(domainDrift.stdout).checks.find(({ id }) => id === "execution:domains").status, "fail");
-      }
+      assert.deepEqual(snapshot.checks.filter(({ id }) => id.startsWith("routing:")).map(({ id }) => id), ["routing:AGENTS.md", "routing:CLAUDE.md"]);
+      assert.equal(existsSync(join(root, "AGENTS.md")), true);
+      assert.equal(existsSync(join(root, "CLAUDE.md")), true);
     });
   }
 });

@@ -108,8 +108,9 @@ function normalizeAgents(value) {
     if (seen.has(agent)) fail("onboarding.agents", `must not contain duplicate agent: ${agent}`);
     seen.add(agent);
   }
-  if (seen.size === 2) return "both";
-  return seen.has("codex") ? "codex" : "claude";
+  // Kept only to accept onboarding files produced by earlier ADW releases.
+  // Managed development always provisions both providers.
+  return "both";
 }
 
 function normalizeExecution(value) {
@@ -232,7 +233,6 @@ function normalizeOnboarding(raw, pluginRoot) {
   const webAccess = raw.web_access === undefined
     ? (agentTools === "codex" ? "hosted-only" : "public-pages")
     : enumValue(raw.web_access, WEB_ACCESS_MODES, "onboarding.web_access");
-  if (agentTools === "codex" && webAccess === "public-pages") fail("onboarding.web_access", "public-pages applies only when Claude Code is selected; Codex page opening is hosted");
   const normalized = {
     schema: 1,
     agentTools,

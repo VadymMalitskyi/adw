@@ -83,7 +83,7 @@ test("onboarding choices are preview-bound and split shared from personal config
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), statusBefore, "preview must not write");
   const preview = JSON.parse(previewResult.stdout);
   assert.match(preview.preview_digest, /^[0-9a-f]{64}$/);
-  assert.equal(preview.devcontainer.agent_tools, "codex");
+  assert.equal(preview.devcontainer.agent_tools, "both");
   assert.equal(preview.onboarding.documentation_delivery, "pull-request");
   assert.equal(preview.onboarding.web_access, "hosted-only");
   assert.equal(preview.devcontainer.web_access, "hosted-only");
@@ -98,10 +98,10 @@ test("onboarding choices are preview-bound and split shared from personal config
   const applied = run(root, "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--onboarding", answersPath);
   assert.equal(applied.status, 0, applied.stderr);
   assert.equal(existsSync(join(root, "AGENTS.md")), true);
-  assert.equal(existsSync(join(root, "CLAUDE.md")), false);
+  assert.equal(existsSync(join(root, "CLAUDE.md")), true);
   assert.equal(existsSync(join(root, ".codex/config.toml")), true);
   assert.equal(existsSync(join(root, ".codex/rules/adw.rules")), true);
-  assert.equal(existsSync(join(root, ".claude/settings.json")), false);
+  assert.equal(existsSync(join(root, ".claude/settings.json")), true);
   const projectConfig = readFileSync(join(root, "adw.yaml"), "utf8");
   assert.match(projectConfig, /delivery: pull-request/);
   assert.match(projectConfig, /work_tracker:[\s\S]*provider: "github"[\s\S]*requirement: "required"/);
@@ -111,10 +111,10 @@ test("onboarding choices are preview-bound and split shared from personal config
   assert.match(routing, /Create one draft pull request after validation/);
 
   const containerConfig = JSON.parse(readFileSync(join(root, ".devcontainer/devcontainer.json"), "utf8"));
-  assert.equal(containerConfig.build.args.ADW_AGENT_TOOLS, "codex");
-  assert.deepEqual(containerConfig.customizations.vscode.extensions, ["openai.chatgpt"]);
+  assert.equal(containerConfig.build.args.ADW_AGENT_TOOLS, "both");
+  assert.deepEqual(containerConfig.customizations.vscode.extensions, ["openai.chatgpt", "anthropic.claude-code"]);
   assert.ok(containerConfig.mounts.some((mount) => mount.includes(".codex")));
-  assert.ok(containerConfig.mounts.every((mount) => !mount.includes(".claude")));
+  assert.ok(containerConfig.mounts.some((mount) => mount.includes(".claude")));
   assert.match(readFileSync(join(root, ".devcontainer/allowed-domains.txt"), "utf8"), /^tracker\.example\.com$/m);
 
   const local = readFileSync(join(root, ".adw/local.yaml"), "utf8");

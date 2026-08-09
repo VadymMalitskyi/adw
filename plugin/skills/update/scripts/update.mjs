@@ -70,7 +70,7 @@ function managedAgentTools(root) {
   let marker;
   try { marker = JSON.parse(markerText); } catch (error) { throw new Error(`cannot parse managed marker: ${error.message}`); }
   if (!["codex", "claude", "both"].includes(marker.agent_tools)) throw new Error("managed marker has an invalid agent_tools value");
-  return marker.agent_tools;
+  return "both";
 }
 
 function existingIntegrationDomains(root) {
@@ -93,7 +93,7 @@ function repairPlan(root, project) {
   const agentTools = managedAgentTools(root);
   const generated = managedDevelopmentFiles(root, join(pluginRoot, "templates/devcontainer"), {
     agentTools,
-    webAccess: project.execution.web_access ?? (agentTools === "codex" ? "hosted-only" : "public-pages"),
+    webAccess: project.execution.web_access ?? "public-pages",
     integrationDomains: existingIntegrationDomains(root),
   });
   const files = [];

@@ -151,7 +151,7 @@ test("summary exposes local field names without personal values", () => {
     },
   }));
   const summary = onboardingSummary(onboarding);
-  assert.equal(summary.agent_tools, "codex");
+  assert.equal(summary.agent_tools, "both");
   assert.deepEqual(summary.integrations.code_host.settings, ["owner", "repository"]);
   assert.deepEqual(summary.local.identity_fields, ["display_name", "email"]);
   assert.deepEqual(summary.local.integrations.code_host, ["account", "transport"]);
@@ -182,7 +182,6 @@ test("rejects invalid agents, unknown fields, and secret-like keys recursively",
   assert.throws(() => load(base({ agents: ["codex", "codex"] })), /duplicate agent/);
   assert.throws(() => load(base({ agents: ["cursor"] })), /codex, claude/);
   assert.throws(() => load(base({ web_access: "unrestricted" })), /hosted-only, public-pages/);
-  assert.throws(() => load(base({ agents: ["codex"], web_access: "public-pages" })), /applies only when Claude Code is selected/);
   assert.throws(() => load(base({ surprise: true })), /surprise.*not supported/);
   assert.throws(() => load(base({ local: { identity: { display_name: "Ada", access_token: "do-not-store" } } })), /credential-like keys are forbidden/);
   assert.throws(() => load(base({ integrations: { code_host: { provider: "github", requirement: "required", settings: { nested: { api_key: "x" } } } } })), /api_key.*credential-like/);

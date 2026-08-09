@@ -79,6 +79,10 @@ test("empty repository initializes an empty validation set, docs records, and a 
   assert.equal(preview.mode, "preview");
   assert.equal(preview.docs.action, "create");
   assert.deepEqual(preview.devcontainer, { isolation: "managed-devcontainer", action: "create", required: true, reopen_required: true, agent_tools: "both", web_access: "public-pages" });
+  assert.match(preview.setup_guidance.what_adw_is, /plan, review, and safely carry out/i);
+  assert.match(preview.setup_guidance.preview_safety, /not changed the repository/i);
+  assert.match(preview.setup_guidance.why_information_is_needed, /cannot safely infer/i);
+  assert.equal(preview.next_steps.length, 4);
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), statusBefore);
 
   runInit(root, "apply", true);

@@ -468,13 +468,15 @@ function previewDigest(projectRoot, files, docs, execution, onboarding) {
   return createHash("sha256").update("ADW-INIT-PREVIEW-V1\0").update(JSON.stringify(payload)).digest("hex");
 }
 
-function selectedAgentNames(agentTools) {
-  if (agentTools === "codex") return "Codex";
-  if (agentTools === "claude") return "Claude Code";
-  return "Codex and Claude Code";
-}
-
 function summarize(projectRoot, files, docs, execution, onboarding) {
+  const nextSteps = execution.reopen_required
+    ? [
+      "Review the preview, then commit the generated project files after approval.",
+      "Rebuild and reopen the repository in its devcontainer so the isolated workspace can be created.",
+      "Inside that container, authenticate Codex, Claude Code, and any provider tools your project uses. Credentials stay in their project-scoped volumes.",
+      "Install ADW inside the container and run adw:onboard. It verifies that the environment is ready before project work begins.",
+    ]
+    : ["Run adw:onboard to prepare and verify the selected provider sandbox before project work begins."];
   return {
     ok: true,
     writes: files.filter((file) => file.before !== file.after).map((file) => ({ path: file.path, action: file.action })),
@@ -484,9 +486,13 @@ function summarize(projectRoot, files, docs, execution, onboarding) {
     devcontainer: { ...execution, agent_tools: onboarding.agentTools, web_access: onboarding.webAccess },
     onboarding: onboardingSummary(onboarding),
     development_environment: execution.isolation === "managed-devcontainer" ? discoverDevelopmentEnvironment(projectRoot) : null,
-    next_steps: execution.reopen_required
-      ? ["commit the reviewed initialization files", "rebuild and reopen the repository in the devcontainer", `authenticate ${selectedAgentNames(onboarding.agentTools)} and required provider tools inside their project-scoped volumes`, "install ADW inside the container and run adw:onboard"]
-      : ["run adw:onboard to prepare and verify the selected provider sandbox"],
+    setup_guidance: {
+      what_adw_is: "ADW helps a team plan, review, and safely carry out software changes with Codex and Claude Code.",
+      preview_safety: "This preview has not changed the repository. Files are written only after explicit approval of its exact digest.",
+      why_information_is_needed: "ADW asks only for choices it cannot safely infer: the workspace security profile, optional team services, and project conventions. Do not provide credentials in setup answers.",
+      after_initialization: "Initialization creates project configuration and, when selected, an isolated development container. It does not authenticate tools or contact external services.",
+    },
+    next_steps: nextSteps,
   };
 }
 
