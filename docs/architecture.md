@@ -21,7 +21,7 @@ Schema-5 projects may also own `adw/work-items/*.yaml` payload profiles. The hel
 ## Boundaries
 
 - Provider manifests contain packaging metadata only.
-- `plugin/skills/` is the shared user interface.
+- `plugin/skills/` is the shared user interface. `adw:init` owns one-time project policy and infrastructure; `adw:onboard` owns repeatable contributor-local setup and readiness without changing that policy.
 - `plugin/lib/adw-helper.mjs` performs current-schema validation, digest, evidence, compatibility, path-confinement, and atomic-write mechanics. It is not a public CLI.
 - `src/helpers/` contains typed helper modules plus the canonical dependency-free runtime source; `npm run build:helper` reproduces the checked-in bundle exactly.
 - `worktrees/docs` is the only ADW worktree. Feature implementation uses the project's normal code checkout and one branch.

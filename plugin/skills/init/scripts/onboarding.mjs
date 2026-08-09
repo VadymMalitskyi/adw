@@ -1,9 +1,14 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  CAPABILITIES,
+  localConfigurationSummary,
+  normalizeLocalConfiguration,
+  renderLocalConfiguration as renderMachineLocalConfiguration,
+} from "../../../lib/local-configuration.mjs";
 
 const AGENTS = new Set(["codex", "claude"]);
-const CAPABILITIES = ["work_tracker", "code_host", "observability", "knowledge"];
 const CAPABILITY_SET = new Set(CAPABILITIES);
 const EXECUTION_MODES = new Set(["managed-devcontainer", "project-devcontainer", "provider-sandbox"]);
 const DOCUMENTATION_DELIVERIES = new Set(["direct-push", "pull-request"]);
@@ -215,42 +220,6 @@ function normalizeConventions(value) {
   return result;
 }
 
-function normalizeLocal(value, integrations, providers) {
-  const normalized = { identity: {}, integrations: {} };
-  if (value === undefined) return normalized;
-  value = object(value, "onboarding.local");
-  rejectUnknown(value, new Set(["identity", "integrations"]), "onboarding.local");
-  if (value.identity !== undefined) {
-    const identity = object(value.identity, "onboarding.local.identity");
-    rejectUnknown(identity, new Set(["display_name", "email", "work_tracker_account"]), "onboarding.local.identity");
-    for (const field of ["display_name", "email", "work_tracker_account"]) {
-      if (identity[field] !== undefined) normalized.identity[field] = singleLine(identity[field], `onboarding.local.identity.${field}`, 320);
-    }
-  }
-  if (value.integrations !== undefined) {
-    const localIntegrations = object(value.integrations, "onboarding.local.integrations");
-    for (const [capability, raw] of Object.entries(localIntegrations)) {
-      if (!CAPABILITY_SET.has(capability)) fail(`onboarding.local.integrations.${capability}`, "is not a known capability");
-      const path = `onboarding.local.integrations.${capability}`;
-      const local = object(raw, path);
-      rejectUnknown(local, new Set(["transport", "account"]), path);
-      const shared = integrations[capability];
-      if (!shared || shared.requirement === "disabled") fail(path, `requires an enabled ${capability} integration`);
-      const item = {};
-      if (local.transport !== undefined) {
-        item.transport = enumValue(local.transport, TRANSPORTS, `${path}.transport`);
-        const supported = providers.get(shared.provider).transports;
-        if (item.transport !== "auto" && !supported.has(item.transport)) fail(`${path}.transport`, `${shared.provider} does not support ${item.transport}`);
-      }
-      if (local.account !== undefined) item.account = singleLine(local.account, `${path}.account`, 320);
-      if (Object.keys(item).length === 0) fail(path, "must select a transport or account");
-      normalized.integrations[capability] = item;
-    }
-    normalized.integrations = sortedObject(normalized.integrations);
-  }
-  return normalized;
-}
-
 function normalizeOnboarding(raw, pluginRoot) {
   raw = object(raw, "onboarding");
   rejectSecretLikeKeys(raw);
@@ -266,7 +235,7 @@ function normalizeOnboarding(raw, pluginRoot) {
     networkDomains,
     workflows: normalizeWorkflow(raw.workflows, integrations),
     conventions: normalizeConventions(raw.conventions),
-    local: normalizeLocal(raw.local, integrations, providers),
+    local: normalizeLocalConfiguration(raw.local, integrations, pluginRoot, "onboarding.local"),
   };
   const execution = normalizeExecution(raw.execution);
   if (execution) normalized.execution = execution;
@@ -300,35 +269,6 @@ export function loadOnboarding(path, pluginRoot) {
   return normalizeOnboarding(raw, pluginRoot);
 }
 
-function yamlScalar(value) {
-  return JSON.stringify(String(value));
-}
-
-export function renderLocalConfiguration(onboarding) {
-  const identity = onboarding?.local?.identity ?? {};
-  const integrations = onboarding?.local?.integrations ?? {};
-  const lines = [
-    "# Machine-local ADW settings. This file is ignored by Git.",
-    "# Credentials belong in provider clients or credential stores, never here.",
-    "schema: 1",
-  ];
-  const identityFields = ["display_name", "email", "work_tracker_account"].filter((field) => identity[field] !== undefined);
-  if (identityFields.length > 0) {
-    lines.push("", "identity:");
-    for (const field of identityFields) lines.push(`  ${field}: ${yamlScalar(identity[field])}`);
-  }
-  const capabilities = CAPABILITIES.filter((capability) => integrations[capability] !== undefined);
-  if (capabilities.length > 0) {
-    lines.push("", "integrations:");
-    for (const capability of capabilities) {
-      lines.push(`  ${capability}:`);
-      if (integrations[capability].transport !== undefined) lines.push(`    transport: ${yamlScalar(integrations[capability].transport)}`);
-      if (integrations[capability].account !== undefined) lines.push(`    account: ${yamlScalar(integrations[capability].account)}`);
-    }
-  }
-  return `${lines.join("\n")}\n`;
-}
-
 export function onboardingSummary(onboarding) {
   const integrations = {};
   for (const capability of CAPABILITIES) {
@@ -342,11 +282,6 @@ export function onboardingSummary(onboarding) {
       settings: Object.keys(integration.settings ?? {}).sort(),
     };
   }
-  const localIntegrations = {};
-  for (const capability of CAPABILITIES) {
-    const local = onboarding.local?.integrations?.[capability];
-    if (local) localIntegrations[capability] = Object.keys(local).sort();
-  }
   return {
     schema: 1,
     agent_tools: onboarding.agentTools,
@@ -356,11 +291,12 @@ export function onboardingSummary(onboarding) {
     network_domains: [...(onboarding.networkDomains ?? [])],
     workflows: onboarding.workflows ?? {},
     conventions: onboarding.conventions ?? {},
-    local: {
-      identity_fields: Object.keys(onboarding.local?.identity ?? {}).sort(),
-      integrations: localIntegrations,
-    },
+    local: localConfigurationSummary(onboarding.local),
   };
+}
+
+export function renderLocalConfiguration(onboarding) {
+  return renderMachineLocalConfiguration(onboarding?.local);
 }
 
 function canonicalJson(value) {

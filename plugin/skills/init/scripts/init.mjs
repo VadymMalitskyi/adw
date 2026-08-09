@@ -18,8 +18,8 @@ import {
   loadOnboarding,
   onboardingDigest,
   onboardingSummary,
-  renderLocalConfiguration,
 } from "./onboarding.mjs";
+import { renderLocalConfiguration } from "../../../lib/local-configuration.mjs";
 import { PERMISSION_PROFILE, permissionProjectFiles } from "../../../execution/managed-development.mjs";
 
 const ROUTING_START = "<!-- ADW:START -->";
@@ -373,7 +373,7 @@ function plannedFiles(projectRoot, execution, onboarding) {
   const localBefore = readOrEmpty(localPath);
   const hasLocalAnswers = Object.keys(onboarding.local.identity).length > 0 || Object.keys(onboarding.local.integrations).length > 0;
   if (existsSync(localPath) && hasLocalAnswers) throw new Error("onboarding local settings cannot replace an existing .adw/local.yaml; preserve or update it through a separate reviewed local change");
-  const localAfter = existsSync(localPath) ? localBefore : renderLocalConfiguration(onboarding);
+  const localAfter = existsSync(localPath) ? localBefore : renderLocalConfiguration(onboarding.local);
   files.push({ path: ".adw/local.yaml", before: localBefore, after: localAfter, action: existsSync(localPath) ? "preserve-local" : "create-local" });
   const configPath = join(projectRoot, "adw.yaml");
   if (!existsSync(configPath)) {
@@ -482,8 +482,8 @@ function summarize(projectRoot, files, docs, execution, onboarding) {
     onboarding: onboardingSummary(onboarding),
     development_environment: execution.isolation === "managed-devcontainer" ? discoverDevelopmentEnvironment(projectRoot) : null,
     next_steps: execution.reopen_required
-      ? ["commit the reviewed initialization files", "rebuild and reopen the repository in the devcontainer", `authenticate ${selectedAgentNames(onboarding.agentTools)} and required provider tools inside their project-scoped volumes`, "install ADW inside the container and run adw:doctor"]
-      : ["run adw:doctor to verify the selected provider sandbox"],
+      ? ["commit the reviewed initialization files", "rebuild and reopen the repository in the devcontainer", `authenticate ${selectedAgentNames(onboarding.agentTools)} and required provider tools inside their project-scoped volumes`, "install ADW inside the container and run adw:onboard"]
+      : ["run adw:onboard to prepare and verify the selected provider sandbox"],
   };
 }
 

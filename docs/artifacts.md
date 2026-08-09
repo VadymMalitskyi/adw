@@ -5,7 +5,7 @@
 - `adw.yaml`: committed shared configuration and workflow schema.
 - `adw/work-items/*.yaml`: optional committed project-owned tracker payload profiles referenced by schema-5 workflow policy.
 - `.codex/config.toml`, `.codex/rules/adw.rules`, and `.claude/settings.json`: selected-provider adapters for schema-5 `managed-development` permissions.
-- `.adw/local.yaml`: optional ignored machine-local values.
+- `.adw/local.yaml`: optional ignored machine-local values created during project initialization or through a contributor's digest-bound `adw:onboard` preview.
 - `AGENTS.md` and `CLAUDE.md`: existing content plus one bounded routing block.
 - `worktrees/docs`: ignored checkout of the configured docs branch.
 - Project `README.md`, `docs/`, ADRs, APIs, and runbooks remain authoritative and project-owned.

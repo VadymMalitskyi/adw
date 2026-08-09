@@ -44,7 +44,7 @@ ADW makes the workflow durable, reviewable, and consistent while leaving coding 
 
 ## 3. Product goal
 
-A developer can privately install ADW for Codex and Claude Code, initialize a Git repository with only project-specific artifacts, and take a meaningful change from idea to validated draft pull request without learning or installing another command-line tool.
+A developer can privately install ADW for Codex and Claude Code, initialize a Git repository with only project-specific artifacts, onboard additional contributors without reinitializing shared policy, and take a meaningful change from idea to validated draft pull request without learning or installing another command-line tool.
 
 The 0.2 release is successful when the same workflow remains lightweight without integrations and can safely use project-selected work tracking, code hosting, observability, and knowledge systems without coupling workflow logic to one provider or transport.
 
@@ -68,6 +68,8 @@ The developer installs the private ADW plugin using the normal plugin mechanism 
 10. Records the required execution profile and reports the rebuild, runtime verification, unresolved values, and manual authentication steps.
 
 After initialization, the repository contains only project-specific ADW artifacts. Skills, schemas, templates, and helper programs remain in the installed plugin and are never copied into the target project.
+
+Each contributor invokes `adw:onboard` from an already initialized checkout. The skill reads committed project choices, previews personal ignored settings, attaches the existing docs branch in a fresh clone, runs doctor and status checks, and reports readiness. It cannot recreate shared policy, create the docs branch, authenticate tools, or begin implementation.
 
 ### 4.2 Planned feature
 
@@ -253,6 +255,7 @@ The agent must stop for renewed approval if implementation requires a change to 
 | Skill | Responsibility | Writes by default? |
 |---|---|---:|
 | `adw:init` | Initialize project artifacts and the docs worktree | Yes, after preview |
+| `adw:onboard` | Prepare one contributor's ignored local state, attach the existing docs branch, and report readiness | Yes, after preview |
 | `adw:update` | Check exact current project-schema compatibility | No |
 | `adw:doctor` | Diagnose compatibility, context, safety, and configured capability availability | No |
 | `adw:status` | Reconstruct local work and optional external bindings from durable artifacts | No |
@@ -451,22 +454,23 @@ Version 0.2 is complete when all of the following work on at least two different
 
 1. A developer privately installs the ADW plugin and invokes `adw:init` without installing or running an ADW CLI.
 2. Initialization preserves existing project instructions and devcontainer behavior.
-3. Codex and Claude Code expose equivalent required skills and produce the same artifact formats.
-4. Project discovery identifies accurate component paths and validation commands.
-5. A developer creates and reviews a specification and sequential plan.
-6. `adw:approve` records explicit human approval bound to the current contents and docs commit.
-7. Editing the approved specification or plan causes execution to stop until reapproval.
-8. Either agent implements the plan on one feature branch.
-9. Required checks are actually executed and their exit codes are recorded.
-10. A failed required check prevents a successful completion claim.
-11. The agent can prepare a draft GitHub pull request but cannot merge it.
-12. A quick change that becomes risky or cross-cutting is routed to the planned workflow.
-13. A new session can reconstruct work using `adw:status` without the old chat transcript.
-14. Machine-local values and credentials remain outside committed files.
-15. Compatibility checks touch no project artifacts; previous project, plan, and approval schemas are rejected without automatic migration.
-16. A project with no integrations completes the same workflow without provider tooling.
-17. An optional unavailable integration does not block, while a required unavailable operation stops the relevant workflow.
-18. An authorized external write is idempotent, read back, and represented by a redacted receipt; changed requirement-bearing content invalidates approval.
+3. Another contributor can clone the initialized project, run `adw:onboard`, attach the existing remote docs branch, and receive a readiness report without changing committed project policy.
+4. Codex and Claude Code expose equivalent required skills and produce the same artifact formats.
+5. Project discovery identifies accurate component paths and validation commands.
+6. A developer creates and reviews a specification and sequential plan.
+7. `adw:approve` records explicit human approval bound to the current contents and docs commit.
+8. Editing the approved specification or plan causes execution to stop until reapproval.
+9. Either agent implements the plan on one feature branch.
+10. Required checks are actually executed and their exit codes are recorded.
+11. A failed required check prevents a successful completion claim.
+12. The agent can prepare a draft GitHub pull request but cannot merge it.
+13. A quick change that becomes risky or cross-cutting is routed to the planned workflow.
+14. A new session can reconstruct work using `adw:status` without the old chat transcript.
+15. Machine-local values and credentials remain outside committed files.
+16. Compatibility checks touch no project artifacts; previous project, plan, and approval schemas are rejected without automatic migration.
+17. A project with no integrations completes the same workflow without provider tooling.
+18. An optional unavailable integration does not block, while a required unavailable operation stops the relevant workflow.
+19. An authorized external write is idempotent, read back, and represented by a redacted receipt; changed requirement-bearing content invalidates approval.
 
 ## 15. Product decisions
 

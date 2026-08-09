@@ -6,7 +6,7 @@ ADW is a private, dual-provider plugin that gives Codex and Claude Code the same
 discover -> plan -> approve -> execute -> validate -> draft PR
 ```
 
-The plugin contains the skills, schemas, templates, and deterministic helper. During initialization, ADW conducts an adaptive onboarding interview for agent tools, execution isolation, integrations, tracker policy, compatible project conventions, and optional local identity hints. New projects receive a managed Dev Container by default; ADW installs only the selected pinned agent CLIs and derives supported project runtimes, locked dependency setup, native packages, ports, and registry domains from repository evidence. Projects with an existing Dev Container keep it unchanged. Initialized projects contain project-specific `adw.yaml`, bounded routing blocks, ignored local state, the selected execution profile, provider-native `managed-development` permission rules, and a `docs` branch checked out at `worktrees/docs`.
+The plugin contains the skills, schemas, templates, and deterministic helper. During project initialization, ADW conducts an adaptive interview for agent tools, execution isolation, integrations, tracker policy, compatible project conventions, and optional local identity hints. New projects receive a managed Dev Container by default; ADW installs only the selected pinned agent CLIs and derives supported project runtimes, locked dependency setup, native packages, ports, and registry domains from repository evidence. Projects with an existing Dev Container keep it unchanged. Initialized projects contain project-specific `adw.yaml`, bounded routing blocks, ignored local state, the selected execution profile, provider-native `managed-development` permission rules, and a `docs` branch checked out at `worktrees/docs`. Each contributor then uses `adw:onboard` to apply personal non-secret preferences, attach the existing docs branch in a fresh clone, and receive doctor/status-backed readiness guidance without changing shared policy.
 
 Projects may also opt into provider-neutral integrations for work tracking, code hosting, observability, and knowledge. ADW targets Azure DevOps, GitHub, Datadog, and Notion first, but workflows depend on capabilities rather than provider-specific tools. A project with no integrations keeps the lightweight local workflow.
 
@@ -32,11 +32,11 @@ claude plugin marketplace add /absolute/path/to/adw
 claude plugin install adw@adw-local --scope user
 ```
 
-Then start a new provider session in a target Git project and invoke `adw:init`. Answer the onboarding questions, review the normalized choices and digest-bound preview, and explicitly approve before ADW writes. Commit the generated files, rebuild/reopen the repository in its container, authenticate the selected agents and provider tools inside project-scoped volumes, reinstall ADW there, and run `adw:doctor` before project work. See [private installation](docs/private-installation.md) for tagged private repositories, organization distribution, update, and rollback guidance.
+Then start a new provider session in a target Git project and invoke `adw:init`. Answer the project-setup questions, review the normalized choices and digest-bound preview, and explicitly approve before ADW writes. Commit the generated files, make the docs branch available through the project's approved delivery path, rebuild/reopen the repository in its container, authenticate the selected agents and provider tools inside project-scoped volumes, reinstall ADW there, and run `adw:onboard` before project work. Later contributors clone and reopen the initialized project, install ADW in that environment, and also run `adw:onboard`; they do not rerun `adw:init`. See [private installation](docs/private-installation.md) for tagged private repositories, organization distribution, update, and rollback guidance.
 
 ## Skills
 
-- Foundation: `adw:init`, `adw:doctor`, `adw:status`, `adw:discover`
+- Foundation: `adw:init`, `adw:onboard`, `adw:doctor`, `adw:status`, `adw:discover`
 - Operations: `adw:investigate`
 - Change loop: `adw:plan`, `adw:approve`, `adw:amend`, `adw:execute`
 - Delivery: `adw:quick`, `adw:address-review`

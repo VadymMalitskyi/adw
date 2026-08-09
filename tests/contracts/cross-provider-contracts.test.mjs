@@ -18,6 +18,7 @@ const REQUIRED_SKILLS = [
   "execute",
   "init",
   "investigate",
+  "onboard",
   "plan",
   "quick",
   "status",
@@ -152,6 +153,16 @@ test("skills preserve the required behavior and safety boundaries", () => {
       ["both provider routing files", /AGENTS\.md[\s\S]*CLAUDE\.md|CLAUDE\.md[\s\S]*AGENTS\.md/],
       ["managed devcontainer default", /default to `managed-devcontainer`|managed `\.devcontainer\/` only when absent/i],
       ["project devcontainer preservation", /project-devcontainer[\s\S]*preserve|preserve every byte of an existing project devcontainer/i],
+    ],
+    onboard: [
+      ["initialized-project boundary", /already initialized|adw\.yaml is absent/i],
+      ["personal ignored state", /\.adw\/local\.yaml/],
+      ["existing docs branch attachment", /attach[^\n]*existing|already existing configured docs branch/i],
+      ["digest-bound preview", /preview digest|preview_digest/i],
+      ["explicit confirmation", /explicit confirmation/i],
+      ["doctor readiness check", /doctor\/SKILL\.md|adw:doctor/i],
+      ["status orientation", /status\/SKILL\.md|adw:status/i],
+      ["shared-policy preservation", /never rerun project initialization|never initialize or reconfigure/i],
     ],
     update: [
       ["exact schema compatibility", /exact[ -]schema|current project schema/i],
@@ -301,7 +312,7 @@ test("integration-aware workflow language depends on capabilities and shared con
     assert.match(contract, new RegExp(`\\b${capability}\\b`), `shared contract omits ${capability}`);
   }
 
-  const workflows = ["plan", "approve", "execute", "amend", "doctor", "discover", "status", "quick", "address-review", "investigate"];
+  const workflows = ["plan", "approve", "execute", "amend", "doctor", "discover", "status", "quick", "address-review", "investigate", "onboard"];
   for (const name of workflows) {
     const source = skillText(name);
     assert.match(source, /integrations\/contracts\.md/, `${name}: missing shared integration contract`);

@@ -27,7 +27,7 @@ Each configured capability has one requirement mode:
 
 Omitting integrations is equivalent to the current lightweight workflow. Configuration contains non-secret project facts such as provider, organization, project, repository, access policy, and requirement mode. Machine-local transport preferences may live in ignored `.adw/local.yaml`.
 
-During `adw:init`, the onboarding interview can populate these shared capability entries and their exact managed-container network domains. Personal display information, account hints, and transport preferences remain local-only. Initialization validates provider/capability compatibility and prepares configuration, but it does not install a transport, authenticate, contact business data, or perform an external write; `adw:doctor` verifies availability after the selected execution environment is active.
+During `adw:init`, the project-initialization interview can populate these shared capability entries and their exact managed-container network domains. Personal display information, account hints, and transport preferences remain local-only. Initialization validates provider/capability compatibility and prepares configuration, but it does not install a transport, authenticate, contact business data, or perform an external write. Each contributor uses `adw:onboard` to select compatible local hints and run the `adw:doctor` availability checks after the selected execution environment is active.
 
 ## Transport resolution
 

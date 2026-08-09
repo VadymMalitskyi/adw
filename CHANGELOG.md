@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add `adw:onboard` for repeatable contributor setup in initialized projects, with digest-bound personal configuration, safe fresh-clone attachment of an existing remote docs branch, and doctor/status-backed readiness reporting.
+- Split reusable `.adw/local.yaml` validation and rendering from project initialization so init and contributor onboarding enforce the same non-secret local configuration contract.
 - Make Claude Code's managed-development policy sandbox-first: auto-allow arbitrary sandbox-confined Bash, remove the redundant generated Bash allow catalog, and classify external, destructive, provider, and MCP operations through a fail-closed managed hook backed by static ask/deny rules.
 - Drop support for project schemas 1–4, plan schema 1, approval schema 1, and every bundled migration from previous ADW releases.
 - Make `adw:update` a read-only exact-schema compatibility check; unsupported projects now require fresh initialization or separately reviewed manual replacement.

@@ -250,6 +250,7 @@ updated_at: 2026-08-05T14:30:00Z
 | Skill | Contract |
 |---|---|
 | `adw:init` | Inspect the project, preview changes, create schema-5 `adw.yaml` plus selected-provider permission adapters, select and create the managed devcontainer when absent or preserve a project-owned one, ignore `/worktrees/` and `.adw/`, create or attach the docs worktree, and add bounded routing blocks. |
+| `adw:onboard` | Read committed project decisions, preview and write only ignored contributor-local settings, attach the existing docs branch from one unambiguous local or remote-tracking ref, then run doctor/status readiness checks without reinitializing shared policy. |
 | `adw:doctor` | Read-only check of plugin compatibility, project schema, local setup, and each configured capability's requirement, provider, transport, operations, and access level. |
 | `adw:status` | Read-only reconstruction of active changes, approval state, external bindings/receipts, branches, validation, and draft PRs. |
 | `adw:discover` | Analyze repository structure and propose project/component context plus non-secret integration settings; write only after approval. |
@@ -648,17 +649,18 @@ The private 0.2 release is complete only when:
 1. ADW is installed privately into both Codex and Claude Code without an ADW CLI.
 2. The same skill source produces equivalent behavior in both providers.
 3. `adw:init` adds only project-specific files, creates or attaches `worktrees/docs`, and preserves existing setup.
-4. A meaningful change can move through plan, explicit digest-bound approval, implementation, documentation, validation, and draft PR.
-5. Editing approved intent invalidates approval.
-6. Failed validation cannot be reported as successful completion.
-7. A new provider session can reconstruct the state from Git-native artifacts.
-8. `adw:sync-docs` can reconcile code changes into the docs branch using `SYNC.yaml` without a code PR or force push.
-9. Compatible ADW updates change only the installed plugin.
-10. Breaking artifact updates require fresh initialization or a separately reviewed manual replacement; no legacy migration path is bundled.
-11. Devcontainers, external systems, hosted services, and multi-agent orchestration remain unnecessary for the core loop.
-12. Optional integrations resolve capabilities independently of provider and transport, with no committed credentials.
-13. Required external state is bound into approval; operational drift alone does not invalidate it.
-14. Authorized external mutations are idempotent, read back, and recorded as redacted receipts.
+4. `adw:onboard` prepares a fresh contributor clone from committed policy and an existing docs branch without changing shared project artifacts.
+5. A meaningful change can move through plan, explicit digest-bound approval, implementation, documentation, validation, and draft PR.
+6. Editing approved intent invalidates approval.
+7. Failed validation cannot be reported as successful completion.
+8. A new provider session can reconstruct the state from Git-native artifacts.
+9. `adw:sync-docs` can reconcile code changes into the docs branch using `SYNC.yaml` without a code PR or force push.
+10. Compatible ADW updates change only the installed plugin.
+11. Breaking artifact updates require fresh initialization or a separately reviewed manual replacement; no legacy migration path is bundled.
+12. Devcontainers, external systems, hosted services, and multi-agent orchestration remain unnecessary for the core loop.
+13. Optional integrations resolve capabilities independently of provider and transport, with no committed credentials.
+14. Required external state is bound into approval; operational drift alone does not invalidate it.
+15. Authorized external mutations are idempotent, read back, and recorded as redacted receipts.
 
 ## 15. Authorization boundary
 
