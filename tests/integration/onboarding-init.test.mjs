@@ -120,7 +120,7 @@ test("onboarding choices are preview-bound and split shared from personal config
   assert.deepEqual(containerConfig.customizations.vscode.extensions, ["openai.chatgpt", "anthropic.claude-code"]);
   assert.ok(containerConfig.mounts.some((mount) => mount.includes(".codex")));
   assert.ok(containerConfig.mounts.some((mount) => mount.includes(".claude")));
-  assert.equal(containerConfig.features["ghcr.io/devcontainers/features/dotnet:1"].version, "8");
+  assert.equal(containerConfig.features["ghcr.io/devcontainers/features/dotnet:1"].version, "8.0");
   assert.match(readFileSync(join(root, ".devcontainer/allowed-domains.txt"), "utf8"), /^tracker\.example\.com$/m);
 
   const local = readFileSync(join(root, ".adw/local.yaml"), "utf8");

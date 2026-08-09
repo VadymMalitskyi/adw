@@ -19,4 +19,4 @@ for command in "${agent_commands[@]}"; do
   fi
 done
 
-echo "ADW managed container ready with Codex and Claude Code. Authenticate the agent tools and required providers, install the ADW plugin inside this container, then run adw:doctor."
+echo "ADW managed base environment is ready. Project dependency setup runs next; authenticate tools only when first used."

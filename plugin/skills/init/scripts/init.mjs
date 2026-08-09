@@ -14,7 +14,7 @@ import {
 } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { discoverDevelopmentEnvironment, managedDevelopmentFiles } from "./development-environment.mjs";
+import { discoverDevelopmentEnvironment, discoverProjectUnderstanding, managedDevelopmentFiles } from "./development-environment.mjs";
 import {
   loadOnboarding,
   onboardingDigest,
@@ -431,7 +431,7 @@ async function writeChangedFiles(projectRoot, files) {
   })));
 }
 
-function initializeDocs(projectRoot, plan) {
+function initializeDocs(projectRoot, plan, understanding) {
   const docsPath = join(projectRoot, plan.path);
   if (plan.action === "reuse") return;
   mkdirSync(dirname(docsPath), { recursive: true });
@@ -439,18 +439,20 @@ function initializeDocs(projectRoot, plan) {
   if (plan.action === "attach") git(projectRoot, ["-c", "core.hooksPath=/dev/null", "worktree", "add", docsPath, "docs"]);
   else git(projectRoot, ["-c", "core.hooksPath=/dev/null", "worktree", "add", "--orphan", "-b", "docs", docsPath]);
   if (plan.action !== "create") return;
-  const architecture = readFileSync(join(pluginRoot, "templates/architecture.md"), "utf8");
   const codeHead = git(projectRoot, ["rev-parse", "HEAD"], { allowFailure: true });
   const reviewedThrough = codeHead.status === 0 ? codeHead.stdout : "unresolved";
   const branch = defaultBranch(projectRoot);
-  writeFileSync(join(docsPath, "README.md"), "# ADW project records\n\nKeep concise agent context and reviewable change records on this branch.\n", "utf8");
-  writeFileSync(join(docsPath, "architecture.md"), architecture, "utf8");
   mkdirSync(join(docsPath, "components"), { recursive: true });
   mkdirSync(join(docsPath, "changes"), { recursive: true });
-  writeFileSync(join(docsPath, "components/.gitkeep"), "", "utf8");
+  for (const [path, content] of understanding.files) {
+    const target = join(docsPath, path);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, content, "utf8");
+  }
+  if (![...understanding.files.keys()].some((path) => path.startsWith("components/"))) writeFileSync(join(docsPath, "components/.gitkeep"), "", "utf8");
   writeFileSync(join(docsPath, "changes/.gitkeep"), "", "utf8");
   writeFileSync(join(docsPath, "SYNC.yaml"), `code_branch: ${yamlScalar(branch)}\nreviewed_through: ${yamlScalar(reviewedThrough)}\nupdated_at: null\n`, "utf8");
-  git(projectRoot, ["-c", "core.hooksPath=/dev/null", "add", "README.md", "architecture.md", "components/.gitkeep", "changes/.gitkeep", "SYNC.yaml"], { cwd: docsPath });
+  git(projectRoot, ["-c", "core.hooksPath=/dev/null", "add", "--all"], { cwd: docsPath });
   git(projectRoot, ["-c", "core.hooksPath=/dev/null", "commit", "-m", "Initialize ADW docs branch"], { cwd: docsPath });
 }
 
@@ -463,27 +465,27 @@ function rollbackDocsInitialization(projectRoot, plan) {
   if (plan.action === "create") git(projectRoot, ["branch", "-D", plan.branch], { allowFailure: true });
 }
 
-function previewDigest(projectRoot, files, docs, execution, onboarding) {
+function previewDigest(projectRoot, files, docs, execution, onboarding, understanding) {
   const codeHead = git(projectRoot, ["rev-parse", "HEAD"], { allowFailure: true });
   const payload = {
     project_root: realpathSync(projectRoot),
     code_head: codeHead.status === 0 ? codeHead.stdout : null,
     files: files.map(({ path, action, before, after }) => ({ path, action, before, after })),
     docs,
-    docs_template: readFileSync(join(pluginRoot, "templates/architecture.md"), "utf8"),
+    docs_files: [...understanding.files].map(([path, content]) => ({ path, content })),
     execution,
     onboarding_digest: onboardingDigest(onboarding),
   };
   return createHash("sha256").update("ADW-INIT-PREVIEW-V1\0").update(JSON.stringify(payload)).digest("hex");
 }
 
-function summarize(projectRoot, files, docs, execution, onboarding) {
+function summarize(projectRoot, files, docs, execution, onboarding, developmentEnvironment, understanding) {
   const nextSteps = execution.reopen_required
     ? [
       "Review the preview, then commit the generated project files after approval.",
       "Rebuild and reopen the repository in its devcontainer so the isolated workspace can be created.",
-      "Inside that container, authenticate Codex, Claude Code, and any provider tools your project uses. Credentials stay in their project-scoped volumes.",
-      "Install ADW inside the container and run adw:onboard. It verifies that the environment is ready before project work begins.",
+      "Open the repository in its devcontainer. Project runtimes and manifest-backed dependencies install automatically after the outbound firewall is active.",
+      "Authenticate Codex, Claude Code, and any configured provider tools when first used. Credentials stay in their project-scoped volumes.",
     ]
     : ["Run adw:onboard to prepare and verify the selected provider sandbox before project work begins."];
   return {
@@ -491,17 +493,15 @@ function summarize(projectRoot, files, docs, execution, onboarding) {
     writes: files.filter((file) => file.before !== file.after).map((file) => ({ path: file.path, action: file.action })),
     unchanged: files.filter((file) => file.before === file.after).map((file) => file.path),
     local_state: [".adw/local.yaml", ".adw/preferences.md", ".adw/cache/"],
-    docs,
+    docs: { ...docs, generated_files: [...understanding.files.keys()], components: understanding.components.map(({ name, path }) => ({ name, path })) },
     devcontainer: { ...execution, agent_tools: onboarding.agentTools, web_access: onboarding.webAccess },
     onboarding: onboardingSummary(onboarding),
-    development_environment: execution.isolation === "managed-devcontainer"
-      ? discoverDevelopmentEnvironment(projectRoot, { runtimeVersions: onboarding.development?.runtimeVersions })
-      : null,
+    development_environment: developmentEnvironment,
     setup_guidance: {
       what_adw_is: "ADW helps a team plan, review, and safely carry out software changes with Codex and Claude Code.",
       preview_safety: "This preview has not changed the repository. Files are written only after your explicit approval.",
       why_information_is_needed: "ADW asks only for choices it cannot safely infer: the workspace security profile, optional team services, and project conventions. Do not provide credentials in setup answers.",
-      after_initialization: "Initialization creates project configuration and, when selected, an isolated development container. It does not authenticate tools or contact external services.",
+      after_initialization: "Initialization creates project documentation, project configuration, and a ready-to-open development container. It does not authenticate tools or contact external services.",
     },
     next_steps: nextSteps,
   };
@@ -521,24 +521,26 @@ try {
     ? { isolation: "existing-configuration", action: "preserve", required: false, reopen_required: false }
     : resolveExecution(projectRoot, args.execution ?? onboarding.execution?.isolation);
   const files = plannedFiles(projectRoot, execution, onboarding);
+  const developmentEnvironment = discoverDevelopmentEnvironment(projectRoot, { runtimeVersions: onboarding.development?.runtimeVersions });
+  const understanding = discoverProjectUnderstanding(projectRoot, developmentEnvironment);
   const plannedConfig = files.find(({ path }) => path === "adw.yaml")?.after ?? readFileSync(join(projectRoot, "adw.yaml"), "utf8");
   const projectValidation = await validateArtifact("project", parseYaml(plannedConfig, "adw.yaml"));
   if (!projectValidation.valid) throw new Error(`adw.yaml is invalid: ${projectValidation.errors.map((item) => `${item.path} ${item.message}`).join("; ")}`);
   const docs = docsPlan(projectRoot);
-  const approvedPreviewDigest = previewDigest(projectRoot, files, docs, execution, onboarding);
+  const approvedPreviewDigest = previewDigest(projectRoot, files, docs, execution, onboarding, understanding);
   if (args.action === "preview") {
-    process.stdout.write(`${JSON.stringify({ mode: "preview", preview_digest: approvedPreviewDigest, ...summarize(projectRoot, files, docs, execution, onboarding) }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ mode: "preview", preview_digest: approvedPreviewDigest, ...summarize(projectRoot, files, docs, execution, onboarding, developmentEnvironment, understanding) }, null, 2)}\n`);
   } else {
     if (args.previewDigest !== approvedPreviewDigest) throw new Error("apply requires the exact --preview-digest shown for the reviewed initialization preview");
     try {
-      initializeDocs(projectRoot, docs);
+      initializeDocs(projectRoot, docs, understanding);
       mkdirSync(join(projectRoot, ".adw/cache"), { recursive: true });
       await writeChangedFiles(projectRoot, files);
     } catch (error) {
       rollbackDocsInitialization(projectRoot, docs);
       throw error;
     }
-    process.stdout.write(`${JSON.stringify({ mode: "apply", preview_digest: approvedPreviewDigest, ...summarize(projectRoot, files, { ...docs, action: docs.action === "reuse" ? "reuse" : "ready" }, execution, onboarding) }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ mode: "apply", preview_digest: approvedPreviewDigest, ...summarize(projectRoot, files, { ...docs, action: docs.action === "reuse" ? "reuse" : "ready" }, execution, onboarding, developmentEnvironment, understanding) }, null, 2)}\n`);
   }
 } catch (error) {
   fail(error.message);

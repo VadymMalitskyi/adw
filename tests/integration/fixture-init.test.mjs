@@ -100,6 +100,7 @@ test("empty repository initializes an empty validation set, docs records, and a 
     ".devcontainer/init-firewall.sh",
     ".devcontainer/post-create.sh",
     ".devcontainer/project-requirements.json",
+    ".devcontainer/project-requirements.md",
     ".devcontainer/project-setup.sh",
   ]);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /^schema: 5$/m);

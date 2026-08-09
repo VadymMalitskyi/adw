@@ -61,7 +61,7 @@ test("source-only runtime discovery is ordered independently of directory insert
 
 test("an explicit onboarding choice provisions a detected but unpinned .NET SDK", () => {
   const root = mkdtempSync(join(tmpdir(), "adw-runtime-choice-"));
-  writeFileSync(join(root, "App.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>\n");
+  writeFileSync(join(root, "App.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\" />\n");
 
   const result = discoverDevelopmentEnvironment(root, { runtimeVersions: { dotnet: "8" } });
   const dotnet = result.runtimes.find((runtime) => runtime.name === "dotnet");
@@ -70,6 +70,18 @@ test("an explicit onboarding choice provisions a detected but unpinned .NET SDK"
   assert.equal(dotnet.source, "onboarding.development.runtime_versions.dotnet");
   assert.equal(dotnet.detected_source, "App.csproj");
   assert.ok(!result.unresolved.some(({ requirement }) => requirement.startsWith(".NET SDK version")));
+  assert.ok(result.setup_commands.some(({ command }) => command === "dotnet restore"));
+});
+
+test("a .NET target framework pins the managed SDK when global.json is absent", () => {
+  const root = mkdtempSync(join(tmpdir(), "adw-target-framework-"));
+  writeFileSync(join(root, "App.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>\n");
+
+  const result = discoverDevelopmentEnvironment(root);
+  const dotnet = result.runtimes.find((runtime) => runtime.name === "dotnet");
+
+  assert.deepEqual(result.selected_versions, { dotnet: "8.0" });
+  assert.equal(dotnet.source, "App.csproj#TargetFramework");
   assert.ok(result.setup_commands.some(({ command }) => command === "dotnet restore"));
 });
 

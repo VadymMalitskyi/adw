@@ -19,7 +19,7 @@ Use the same `load-artifact-file` command for every project-relative YAML artifa
 
 For `required`, stop before reads that execute project code and before every mutation when the runtime cannot be verified. Read-only inspection of configuration needed to diagnose or enter the environment is allowed. For `preferred`, report the weaker boundary and obtain explicit confirmation before continuing with a mutating workflow.
 
-`adw:init` is the only workflow allowed to create a managed container from outside it. After applying initialization, stop and require the user to commit the reviewed files, rebuild/reopen the repository, authenticate inside project-scoped volumes, install ADW inside the container, and run `adw:doctor`.
+`adw:init` is the only workflow allowed to create a managed container from outside it. It must derive project documentation and the development environment from one reviewed project model, and must resolve setup-blocking requirements before apply. After applying initialization, require only that the user commit the reviewed files, rebuild/reopen the repository, and authenticate inside project-scoped volumes when first used. `adw:doctor` remains an optional readiness diagnostic for the initializing person.
 
 ## Managed-container invariants
 

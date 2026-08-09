@@ -226,7 +226,7 @@ test("init derives a reviewable project-specific development environment from re
   writeFileSync(join(root, "services/api/requirements.txt"), "psycopg2==2.9.10\n");
   writeFileSync(join(root, "services/worker/go.mod"), "module example.invalid/worker\n\ngo 1.22.4\n");
   writeFileSync(join(root, "services/dotnet/global.json"), `${JSON.stringify({ sdk: { version: "8.0.408" } }, null, 2)}\n`);
-  writeFileSync(join(root, "services/dotnet/App.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>\n");
+  writeFileSync(join(root, "services/dotnet/App.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup><ItemGroup><PackageReference Include=\"DuckDB.NET.Data.Full\" Version=\"1.5.0\" /></ItemGroup></Project>\n");
   writeFileSync(join(root, "services/dotnet/packages.lock.json"), `${JSON.stringify({ version: 1, dependencies: { "net8.0": {} } }, null, 2)}\n`);
   git(root, "add", ".");
   git(root, "commit", "-q", "-m", "fixture");
@@ -243,6 +243,7 @@ test("init derives a reviewable project-specific development environment from re
   assert.ok(preview.development_environment.system_packages.some(({ name }) => name === "libpq-dev"));
   assert.ok(preview.development_environment.unresolved.some(({ requirement }) => requirement === "compose services"));
   assert.ok(preview.development_environment.unresolved.some(({ requirement }) => requirement === "environment variable DATABASE_URL"));
+  assert.ok(preview.docs.generated_files.includes("components/services-dotnet.md"));
 
   const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--project-root", root], { encoding: "utf8" });
   assert.equal(initialized.status, 0, initialized.stderr);
@@ -260,6 +261,14 @@ test("init derives a reviewable project-specific development environment from re
   assert.match(setup, /go mod download/);
   assert.match(setup, /dotnet restore --locked-mode/);
   assert.doesNotMatch(setup, /malicious-repository-text-must-not-be-copied/);
+  const requirementsGuide = readFileSync(join(root, ".devcontainer/project-requirements.md"), "utf8");
+  assert.match(requirementsGuide, /DuckDB\.NET\.Data\.Full` 1\.5\.0/);
+  assert.match(requirementsGuide, /restored by `dotnet restore`/);
+  const architecture = readFileSync(join(root, "worktrees/docs/architecture.md"), "utf8");
+  const dotnetComponent = readFileSync(join(root, "worktrees/docs/components/services-dotnet.md"), "utf8");
+  assert.match(architecture, /services\/dotnet/);
+  assert.match(dotnetComponent, /Embedded DuckDB persistence/);
+  assert.match(dotnetComponent, /DuckDB\.NET\.Data\.Full/);
   const shellCheck = spawnSync("bash", ["-n", join(root, ".devcontainer/project-setup.sh")], { encoding: "utf8" });
   assert.equal(shellCheck.status, 0, shellCheck.stderr);
   const allowedDomains = readFileSync(join(root, ".devcontainer/allowed-domains.txt"), "utf8");
