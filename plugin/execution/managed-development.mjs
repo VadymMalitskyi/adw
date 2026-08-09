@@ -30,7 +30,9 @@ prefix_rule(pattern = ["gh", "issue", ["list", "status", "view"]], decision = "a
 prefix_rule(pattern = ["gh", "run", ["list", "view", "watch"]], decision = "allow")
 prefix_rule(pattern = ["gh", "workflow", ["list", "view"]], decision = "allow")
 
-prefix_rule(pattern = ["git", "push"], decision = "prompt")
+# In managed devcontainers, the root-owned git wrapper rejects force and delete
+# pushes before delegating to Git. Direct calls to /usr/bin/git remain unruled.
+prefix_rule(pattern = ["git", "push"], decision = "allow")
 prefix_rule(pattern = ["gh", "api"], decision = "prompt")
 prefix_rule(pattern = ["gh", "pr", ["close", "comment", "create", "edit", "ready", "reopen", "review"]], decision = "prompt")
 prefix_rule(pattern = ["gh", "issue", ["close", "comment", "create", "delete", "edit", "reopen"]], decision = "prompt")

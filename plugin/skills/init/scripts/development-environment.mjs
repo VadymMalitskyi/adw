@@ -591,6 +591,7 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { agentTools 
   marker.integration_domains = configuredIntegrationDomains;
   marker.allowed_domains_sha256 = sha256(allowedDomains);
   marker.codex_rules_sha256 = sha256(CODEX_RULES);
+  marker.git_wrapper_sha256 = sha256(readFileSync(join(templateRoot, "git-wrapper.sh"), "utf8"));
   marker.claude_settings_sha256 = sha256(claudeSettings);
   marker.claude_hook_sha256 = sha256(readFileSync(join(templateRoot, "claude-permission-hook.mjs"), "utf8"));
   marker.egress_proxy_sha256 = sha256(readFileSync(join(templateRoot, "egress-proxy.mjs"), "utf8"));
@@ -608,6 +609,7 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { agentTools 
       ["init-firewall.sh", readFileSync(join(templateRoot, "init-firewall.sh"), "utf8")],
       ["post-create.sh", readFileSync(join(templateRoot, "post-create.sh"), "utf8")],
       ["codex.rules", CODEX_RULES],
+      ["git-wrapper.sh", readFileSync(join(templateRoot, "git-wrapper.sh"), "utf8")],
       ["claude-settings.json", claudeSettings],
       ["claude-permission-hook.mjs", readFileSync(join(templateRoot, "claude-permission-hook.mjs"), "utf8")],
       ["project-requirements.json", requirementsText],

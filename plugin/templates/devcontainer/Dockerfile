@@ -33,6 +33,7 @@ COPY .devcontainer/egress-proxy.mjs /usr/local/bin/adw-egress-proxy
 COPY .devcontainer/init-firewall.sh /usr/local/bin/adw-init-firewall
 COPY .devcontainer/post-create.sh /usr/local/bin/adw-post-create
 COPY .devcontainer/codex.rules /etc/adw/codex.rules
+COPY .devcontainer/git-wrapper.sh /usr/local/bin/git
 COPY .devcontainer/claude-settings.json /etc/claude-code/managed-settings.d/20-adw.json
 COPY .devcontainer/claude-permission-hook.mjs /usr/local/bin/adw-claude-permission-hook
 COPY .devcontainer/project-setup.sh /usr/local/bin/adw-project-setup
@@ -42,12 +43,13 @@ RUN useradd --system --no-create-home --shell /usr/sbin/nologin adw-egress \
     && case "$ADW_WEB_ACCESS" in hosted-only|public-pages) ;; *) echo "Unsupported ADW web access profile: $ADW_WEB_ACCESS" >&2; exit 1 ;; esac \
     && printf '%s\n' both > /etc/adw/agent-tools \
     && printf '%s\n' "$ADW_WEB_ACCESS" > /etc/adw/web-access \
-    && chown root:root /etc/adw/agent-tools /etc/adw/web-access /etc/adw/allowed-domains.txt /etc/adw/codex.rules /etc/adw/project-requirements.json /etc/claude-code/managed-settings.d/20-adw.json /usr/local/bin/adw-egress-proxy /usr/local/bin/adw-claude-permission-hook /usr/local/bin/adw-init-firewall /usr/local/bin/adw-post-create /usr/local/bin/adw-project-setup \
+    && chown root:root /etc/adw/agent-tools /etc/adw/web-access /etc/adw/allowed-domains.txt /etc/adw/codex.rules /etc/adw/project-requirements.json /etc/claude-code/managed-settings.d/20-adw.json /usr/local/bin/adw-egress-proxy /usr/local/bin/adw-claude-permission-hook /usr/local/bin/adw-init-firewall /usr/local/bin/adw-post-create /usr/local/bin/adw-project-setup /usr/local/bin/git \
     && chmod 0444 /etc/adw/agent-tools /etc/adw/web-access /etc/adw/allowed-domains.txt /etc/adw/codex.rules /etc/adw/project-requirements.json /etc/claude-code/managed-settings.d/20-adw.json \
     && chmod 0500 /usr/local/bin/adw-init-firewall /usr/local/bin/adw-post-create \
     && chmod 0555 /usr/local/bin/adw-project-setup \
     && chmod 0555 /usr/local/bin/adw-egress-proxy \
     && chmod 0555 /usr/local/bin/adw-claude-permission-hook \
+    && chmod 0555 /usr/local/bin/git \
     # Root intentionally has no CAP_DAC_OVERRIDE at runtime. Make the known
     # credential mount paths traversable and root-owned before named volumes
     # are attached, so the narrowly sudo-authorized bootstrap can initialize

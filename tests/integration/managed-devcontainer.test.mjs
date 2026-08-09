@@ -33,7 +33,7 @@ test("managed template pins agents, runs non-root, scopes credentials, and denie
   assert.match(config.build.args.CLAUDE_CODE_VERSION, /^\d+\.\d+\.\d+$/);
   assert.equal(marker.codex_version, config.build.args.CODEX_VERSION);
   assert.equal(marker.claude_code_version, config.build.args.CLAUDE_CODE_VERSION);
-  for (const key of ["allowed_domains_sha256", "codex_rules_sha256", "claude_settings_sha256", "claude_hook_sha256", "egress_proxy_sha256", "project_requirements_sha256", "project_setup_sha256"]) {
+  for (const key of ["allowed_domains_sha256", "codex_rules_sha256", "git_wrapper_sha256", "claude_settings_sha256", "claude_hook_sha256", "egress_proxy_sha256", "project_requirements_sha256", "project_setup_sha256"]) {
     assert.equal(marker[key], undefined, `template must not carry stale generated digest ${key}`);
   }
   assert.match(dockerfile, /@openai\/codex@\$\{CODEX_VERSION\}/);
@@ -44,6 +44,8 @@ test("managed template pins agents, runs non-root, scopes credentials, and denie
   assert.match(dockerfile, /chmod 0751 \/home\/vscode/);
   assert.match(dockerfile, /install -d -m 0755 -o root -g root \/home\/vscode\/\.codex \/home\/vscode\/\.claude \/home\/vscode\/\.config \/home\/vscode\/\.config\/gh/);
   assert.match(dockerfile, /chmod 0555 \/usr\/local\/bin\/adw-claude-permission-hook/);
+  assert.match(dockerfile, /COPY \.devcontainer\/git-wrapper\.sh \/usr\/local\/bin\/git/);
+  assert.match(dockerfile, /chmod 0555 \/usr\/local\/bin\/git/);
   assert.doesNotMatch(dockerfile, /chmod 0500 [^\n]*adw-claude-permission-hook/);
   const postCreate = readFileSync(join(templateRoot, "post-create.sh"), "utf8");
   assert.match(postCreate, /agent_commands=\(codex claude\)/);
@@ -70,6 +72,25 @@ test("managed template pins agents, runs non-root, scopes credentials, and denie
   assert.equal(config.containerEnv.HTTPS_PROXY, "http://127.0.0.1:18080");
   assert.doesNotMatch(configText, /SYS_ADMIN|SYS_PTRACE|NET_RAW|seccomp=unconfined|apparmor=unconfined/);
   assert.doesNotMatch(dockerfile, /chmod u\+s \/usr\/bin\/bwrap/);
+});
+
+test("managed git wrapper permits ordinary Git and blocks unsafe auto-approved pushes", () => {
+  const wrapper = join(templateRoot, "git-wrapper.sh");
+  const version = spawnSync("bash", [wrapper, "--version"], { encoding: "utf8" });
+  assert.equal(version.status, 0, version.stderr);
+  assert.match(version.stdout, /^git version /);
+
+  for (const args of [
+    ["push", "origin", "main", "--force"],
+    ["push", "-uf", "origin", "main"],
+    ["push", "origin", "+main"],
+    ["push", "origin", ":main"],
+    ["push", "--delete", "origin", "main"],
+  ]) {
+    const result = spawnSync("bash", [wrapper, ...args], { encoding: "utf8" });
+    assert.equal(result.status, 64, `${args.join(" ")}: ${result.stderr}`);
+    assert.match(result.stderr, /ADW blocks/);
+  }
 });
 
 test("managed development files always include both agent tools, credentials, extensions, environment, and domains", async (t) => {
@@ -115,6 +136,7 @@ test("managed development files always include both agent tools, credentials, ex
       assert.equal(marker.project_setup_sha256, createHash("sha256").update(generated.files.get("project-setup.sh")).digest("hex"));
       assert.equal(marker.allowed_domains_sha256, createHash("sha256").update(generated.files.get("allowed-domains.txt")).digest("hex"));
       assert.equal(marker.egress_proxy_sha256, createHash("sha256").update(generated.files.get("egress-proxy.mjs")).digest("hex"));
+      assert.equal(marker.git_wrapper_sha256, createHash("sha256").update(generated.files.get("git-wrapper.sh")).digest("hex"));
       assert.deepEqual(marker.integration_domains, ["tracker.example.com"]);
       assert.ok(allowedDomains.has("tracker.example.com"));
       assert.equal([...allowedDomains].filter((domain) => domain === "tracker.example.com").length, 1);

@@ -35,7 +35,7 @@ test("Codex policy keeps workspace development automatic and external effects ga
 
   for (const expected of [
     'pattern = ["git", ["add", "commit"]], decision = "allow"',
-    'pattern = ["git", "push"], decision = "prompt"',
+    'pattern = ["git", "push"], decision = "allow"',
     'pattern = ["gh", "api"], decision = "prompt"',
     'pattern = [["glab", "jira", "datadog-ci", "datadog", "notion"]], decision = "prompt"',
     'pattern = ["gh", "pr", "merge"], decision = "forbidden"',

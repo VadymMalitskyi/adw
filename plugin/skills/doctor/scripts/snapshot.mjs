@@ -124,7 +124,7 @@ async function workTrackerPolicyChecks(projectRoot, project) {
 function managedDevcontainerChecks(projectRoot, execution) {
   const checks = [];
   const directory = join(projectRoot, ".devcontainer");
-  const required = ["devcontainer.json", "Dockerfile", "allowed-domains.txt", "egress-proxy.mjs", "init-firewall.sh", "post-create.sh", "codex.rules", "claude-settings.json", "claude-permission-hook.mjs", "project-requirements.json", "project-setup.sh", "adw-managed.json"];
+  const required = ["devcontainer.json", "Dockerfile", "allowed-domains.txt", "egress-proxy.mjs", "init-firewall.sh", "post-create.sh", "codex.rules", "git-wrapper.sh", "claude-settings.json", "claude-permission-hook.mjs", "project-requirements.json", "project-setup.sh", "adw-managed.json"];
   const missing = required.filter((name) => !existsSync(join(directory, name)));
   if (missing.length > 0) {
     checks.push(check("execution:managed-files", "fail", `managed devcontainer is missing: ${missing.join(", ")}`));
@@ -222,9 +222,11 @@ function managedDevcontainerChecks(projectRoot, execution) {
     && readFileSync(join(directory, "claude-settings.json"), "utf8") === managedClaudeSettings({ allowedDomains: [...configuredDomains], webAccess: marker.web_access })
     && readFileSync(join(directory, "claude-permission-hook.mjs"), "utf8") === readFileSync(join(pluginRoot, "templates/devcontainer/claude-permission-hook.mjs"), "utf8")
     && /COPY \.devcontainer\/codex\.rules/.test(dockerfile)
+    && /COPY \.devcontainer\/git-wrapper\.sh \/usr\/local\/bin\/git/.test(dockerfile)
     && /managed-settings\.d\/20-adw\.json/.test(dockerfile)
     && /adw-claude-permission-hook/.test(dockerfile)
     && marker?.codex_rules_sha256 === createHash("sha256").update(readFileSync(join(directory, "codex.rules"))).digest("hex")
+    && marker?.git_wrapper_sha256 === createHash("sha256").update(readFileSync(join(directory, "git-wrapper.sh"))).digest("hex")
     && marker?.claude_settings_sha256 === createHash("sha256").update(readFileSync(join(directory, "claude-settings.json"))).digest("hex")
     && marker?.claude_hook_sha256 === createHash("sha256").update(readFileSync(join(directory, "claude-permission-hook.mjs"))).digest("hex");
   const mountsMatch = scopedVolumes && agentMountsMatch;
