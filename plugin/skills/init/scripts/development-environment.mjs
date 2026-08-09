@@ -11,9 +11,10 @@ const MANIFESTS = new Set([
   "package.json", "pyproject.toml", "requirements.txt", "Pipfile", "Pipfile.lock", "poetry.lock", "uv.lock",
   "go.mod", "Cargo.toml", "Gemfile", "Gemfile.lock", "pom.xml", "build.gradle", "build.gradle.kts",
 ]);
+const DOTNET_PROJECT_EXTENSION = /\.(?:csproj|fsproj|vbproj)$/i;
 const SOURCE_EXTENSIONS = new Map([
   [".js", "node"], [".jsx", "node"], [".mjs", "node"], [".cjs", "node"], [".ts", "node"], [".tsx", "node"],
-  [".py", "python"], [".go", "go"], [".rs", "rust"], [".java", "java"], [".rb", "ruby"],
+  [".py", "python"], [".go", "go"], [".rs", "rust"], [".java", "java"], [".rb", "ruby"], [".cs", "dotnet"], [".fs", "dotnet"], [".vb", "dotnet"],
 ]);
 const IGNORED_DIRECTORIES = new Set([".git", ".adw", ".devcontainer", ".next", ".venv", "node_modules", "vendor", "dist", "build", "coverage", "target", "venv", "worktrees"]);
 
@@ -23,6 +24,7 @@ const OFFICIAL_FEATURES = {
   rust: "ghcr.io/devcontainers/features/rust:1",
   java: "ghcr.io/devcontainers/features/java:1",
   ruby: "ghcr.io/devcontainers/features/ruby:1",
+  dotnet: "ghcr.io/devcontainers/features/dotnet:1",
 };
 
 const ECOSYSTEM_DOMAINS = {
@@ -32,6 +34,7 @@ const ECOSYSTEM_DOMAINS = {
   rust: ["crates.io", "index.crates.io", "static.crates.io", "static.rust-lang.org"],
   java: ["repo.maven.apache.org", "plugins.gradle.org", "services.gradle.org"],
   ruby: ["rubygems.org", "index.rubygems.org"],
+  dotnet: ["api.nuget.org", "globalcdn.nuget.org"],
 };
 
 const AGENT_TOOL_PROFILES = new Map([
@@ -80,7 +83,7 @@ function componentRoots(projectRoot) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       if (!entry.isDirectory() || entry.isSymbolicLink() || IGNORED_DIRECTORIES.has(entry.name)) continue;
       const target = join(directory, entry.name);
-      if ([...MANIFESTS].some((name) => existsSync(join(target, name)))) roots.add(target);
+      if ([...MANIFESTS].some((name) => existsSync(join(target, name))) || readdirSync(target, { withFileTypes: true }).some((child) => child.isFile() && DOTNET_PROJECT_EXTENSION.test(child.name))) roots.add(target);
       visit(target, depth + 1);
     }
   }
@@ -132,8 +135,22 @@ function javaVersion(text) {
   return null;
 }
 
+function dotnetGlobalJson(projectRoot, componentRoot) {
+  for (let root = componentRoot; withinProject(projectRoot, root); root = resolve(root, "..")) {
+    const path = join(root, "global.json");
+    if (existsSync(path)) {
+      const version = readJson(path, sourcePath(projectRoot, path))?.sdk?.version;
+      return typeof version === "string" && numericVersion(version, null)
+        ? { raw: version, version: numericVersion(version, null), source: `${sourcePath(projectRoot, path)}#sdk.version` }
+        : { raw: null, version: null, source: `${sourcePath(projectRoot, path)}#sdk.version` };
+    }
+    if (root === projectRoot) break;
+  }
+  return null;
+}
+
 function declaredRuntimeVersion(projectRoot, componentRoot, runtime) {
-  const toolKeys = { node: "nodejs", python: "python", go: "golang", rust: "rust", java: "java", ruby: "ruby" };
+  const toolKeys = { node: "nodejs", python: "python", go: "golang", rust: "rust", java: "java", ruby: "ruby", dotnet: "dotnet" };
   for (const root of componentRoot === projectRoot ? [componentRoot] : [componentRoot, projectRoot]) {
     const path = join(root, ".tool-versions");
     const text = readText(path);
@@ -153,8 +170,8 @@ function declaredRuntimeVersion(projectRoot, componentRoot, runtime) {
     const path = join(projectRoot, name);
     if (existsSync(path)) candidates.push(path);
   }
-  const yamlKeys = { node: "node-version", python: "python-version", go: "go-version", rust: "toolchain", java: "java-version", ruby: "ruby-version" };
-  const imageNames = { node: "node", python: "python", go: "golang", rust: "rust", java: "(?:eclipse-temurin|openjdk)", ruby: "ruby" };
+  const yamlKeys = { node: "node-version", python: "python-version", go: "go-version", rust: "toolchain", java: "java-version", ruby: "ruby-version", dotnet: "dotnet-version" };
+  const imageNames = { node: "node", python: "python", go: "golang", rust: "rust", java: "(?:eclipse-temurin|openjdk)", ruby: "ruby", dotnet: "mcr\\.microsoft\\.com/dotnet/sdk" };
   for (const path of candidates.sort()) {
     const text = readFileSync(path, "utf8");
     const yaml = text.match(new RegExp(`^\\s*${yamlKeys[runtime]}:\\s*["']?([0-9][0-9A-Za-z._-]*)`, "m"));
@@ -366,6 +383,24 @@ export function discoverDevelopmentEnvironment(projectRoot) {
       runtimes.push({ name: "ruby", version, requested: version, source: existsSync(versionFile) ? sourcePath(projectRoot, versionFile) : declared?.source ?? sourcePath(projectRoot, gemPath), component });
       if (version && existsSync(join(componentRoot, "Gemfile.lock"))) setupCommands.push({ command: inComponent(projectRoot, componentRoot, "bundle install"), source: sourcePath(projectRoot, join(componentRoot, "Gemfile.lock")) });
       else unresolved.push({ requirement: `Ruby runtime and locked dependencies in ${component}`, source: sourcePath(projectRoot, gemPath), reason: "both .ruby-version and Gemfile.lock are required for autonomous setup" });
+    }
+
+    const dotnetProjectPath = readdirSync(componentRoot, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && DOTNET_PROJECT_EXTENSION.test(entry.name))
+      .map((entry) => join(componentRoot, entry.name))
+      .sort()[0];
+    if (dotnetProjectPath) {
+      const global = dotnetGlobalJson(projectRoot, componentRoot);
+      const declared = declaredRuntimeVersion(projectRoot, componentRoot, "dotnet");
+      const version = global?.version ?? declared?.version ?? null;
+      const source = global?.source ?? declared?.source ?? sourcePath(projectRoot, dotnetProjectPath);
+      runtimes.push({ name: "dotnet", version, requested: global?.raw ?? declared?.raw ?? null, source, component });
+      const lockPath = join(componentRoot, "packages.lock.json");
+      if (version && existsSync(lockPath)) setupCommands.push({ command: inComponent(projectRoot, componentRoot, "dotnet restore --locked-mode"), source: sourcePath(projectRoot, lockPath) });
+      else if (version) {
+        setupCommands.push({ command: inComponent(projectRoot, componentRoot, "dotnet restore"), source: sourcePath(projectRoot, dotnetProjectPath) });
+        unresolved.push({ requirement: `reproducible .NET dependency resolution in ${component}`, source: sourcePath(projectRoot, dotnetProjectPath), reason: "no packages.lock.json proves a locked restore" });
+      } else unresolved.push({ requirement: `.NET SDK version in ${component}`, source, reason: "global.json, .tool-versions, or supported CI/Docker SDK declaration is required" });
     }
   }
 

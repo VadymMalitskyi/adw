@@ -123,6 +123,7 @@ test("managed firewall scripts are valid shell and establish deny-by-default bef
 test("init derives a reviewable project-specific development environment from repository evidence", () => {
   const root = mkdtempSync(join(tmpdir(), "adw-managed-discovery-"));
   mkdirSync(join(root, "services/api"), { recursive: true });
+  mkdirSync(join(root, "services/dotnet"), { recursive: true });
   mkdirSync(join(root, "services/worker"), { recursive: true });
   git(root, "init", "-q", "-b", "main");
   git(root, "config", "user.name", "ADW Test");
@@ -139,17 +140,21 @@ test("init derives a reviewable project-specific development environment from re
   writeFileSync(join(root, "services/api/pyproject.toml"), "[project]\nname = \"api\"\nversion = \"0.0.0\"\nrequires-python = \">=3.11\"\n");
   writeFileSync(join(root, "services/api/requirements.txt"), "psycopg2==2.9.10\n");
   writeFileSync(join(root, "services/worker/go.mod"), "module example.invalid/worker\n\ngo 1.22.4\n");
+  writeFileSync(join(root, "services/dotnet/global.json"), `${JSON.stringify({ sdk: { version: "8.0.408" } }, null, 2)}\n`);
+  writeFileSync(join(root, "services/dotnet/App.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>\n");
+  writeFileSync(join(root, "services/dotnet/packages.lock.json"), `${JSON.stringify({ version: 1, dependencies: { "net8.0": {} } }, null, 2)}\n`);
   git(root, "add", ".");
   git(root, "commit", "-q", "-m", "fixture");
 
   const previewResult = spawnSync(process.execPath, [initScript, "preview", "--project-root", root], { encoding: "utf8" });
   assert.equal(previewResult.status, 0, previewResult.stderr);
   const preview = JSON.parse(previewResult.stdout);
-  assert.deepEqual(preview.development_environment.selected_versions, { go: "1.22.4", node: "20", python: "3.11" });
+  assert.deepEqual(preview.development_environment.selected_versions, { dotnet: "8.0.408", go: "1.22.4", node: "20", python: "3.11" });
   assert.deepEqual(preview.development_environment.forward_ports.map(({ port }) => port), [3000, 4173, 55432]);
   assert.ok(preview.development_environment.setup_commands.some(({ command, source }) => command === "npm ci" && source === "package-lock.json"));
   assert.ok(preview.development_environment.setup_commands.some(({ command }) => command.includes("services/api") && command.includes("requirements.txt")));
   assert.ok(preview.development_environment.setup_commands.some(({ command }) => command.includes("services/worker") && command.includes("go mod download")));
+  assert.ok(preview.development_environment.setup_commands.some(({ command, source }) => command.includes("services/dotnet") && command.includes("dotnet restore --locked-mode") && source === "services/dotnet/packages.lock.json"));
   assert.ok(preview.development_environment.system_packages.some(({ name }) => name === "libpq-dev"));
   assert.ok(preview.development_environment.unresolved.some(({ requirement }) => requirement === "compose services"));
   assert.ok(preview.development_environment.unresolved.some(({ requirement }) => requirement === "environment variable DATABASE_URL"));
@@ -161,17 +166,21 @@ test("init derives a reviewable project-specific development environment from re
   assert.match(config.build.args.ADW_PROJECT_APT_PACKAGES, /\blibpq-dev\b/);
   assert.equal(config.features["ghcr.io/devcontainers/features/python:1"].version, "3.11");
   assert.equal(config.features["ghcr.io/devcontainers/features/go:1"].version, "1.22.4");
+  assert.equal(config.features["ghcr.io/devcontainers/features/dotnet:1"].version, "8.0.408");
   assert.deepEqual(config.forwardPorts, [3000, 4173, 55432]);
   assert.match(config.postCreateCommand, /adw-project-setup/);
 
   const setup = readFileSync(join(root, ".devcontainer/project-setup.sh"), "utf8");
   assert.match(setup, /^npm ci$/m);
   assert.match(setup, /go mod download/);
+  assert.match(setup, /dotnet restore --locked-mode/);
   assert.doesNotMatch(setup, /malicious-repository-text-must-not-be-copied/);
   const shellCheck = spawnSync("bash", ["-n", join(root, ".devcontainer/project-setup.sh")], { encoding: "utf8" });
   assert.equal(shellCheck.status, 0, shellCheck.stderr);
   const allowedDomains = readFileSync(join(root, ".devcontainer/allowed-domains.txt"), "utf8");
   assert.match(allowedDomains, /^proxy\.golang\.org$/m);
+  assert.match(allowedDomains, /^api\.nuget\.org$/m);
+  assert.match(allowedDomains, /^globalcdn\.nuget\.org$/m);
 
   const doctor = spawnSync(process.execPath, [doctorScript, "--project-root", root], {
     encoding: "utf8",
