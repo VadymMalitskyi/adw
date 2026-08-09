@@ -7,6 +7,7 @@
     "args": {
       "NODE_MAJOR": "22",
       "ADW_AGENT_TOOLS": "both",
+      "ADW_WEB_ACCESS": "hosted-only",
       "CODEX_VERSION": "0.146.1",
       "CLAUDE_CODE_VERSION": "2.1.222",
       "ADW_PROJECT_APT_PACKAGES": ""

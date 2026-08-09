@@ -101,12 +101,15 @@ test("managed development files scope agent tools, credentials, extensions, envi
       const claudeSandbox = claudeSettings.sandbox;
       assert.deepEqual(new Set(claudeSandbox.network.allowedDomains), allowedDomains);
       assert.equal(claudeSandbox.network.allowManagedDomainsOnly, true);
+      assert.equal(claudeSandbox.network.strictAllowlist, true);
       assert.equal(claudeSandbox.autoAllowBashIfSandboxed, true);
-      assert.equal(claudeSettings.permissions.allow, undefined);
+      assert.deepEqual(claudeSettings.permissions.allow, ["WebSearch"]);
       assert.equal(claudeSettings.hooks.PreToolUse.length, 2);
 
       assert.equal(config.build.args.ADW_AGENT_TOOLS, profile);
+      assert.equal(config.build.args.ADW_WEB_ACCESS, "hosted-only");
       assert.equal(marker.agent_tools, profile);
+      assert.equal(marker.web_access, "hosted-only");
       assert.equal(marker.project_requirements_sha256, createHash("sha256").update(generated.files.get("project-requirements.json")).digest("hex"));
       assert.equal(marker.project_setup_sha256, createHash("sha256").update(generated.files.get("project-setup.sh")).digest("hex"));
       assert.equal(marker.allowed_domains_sha256, createHash("sha256").update(generated.files.get("allowed-domains.txt")).digest("hex"));
@@ -131,9 +134,23 @@ test("managed development files scope agent tools, credentials, extensions, envi
 test("managed development files reject invalid agent profiles and integration domains", () => {
   const root = mkdtempSync(join(tmpdir(), "adw-agent-invalid-"));
   assert.throws(() => managedDevelopmentFiles(root, templateRoot, { agentTools: "other" }), /unsupported agent tools profile/);
+  assert.throws(() => managedDevelopmentFiles(root, templateRoot, { webAccess: "unrestricted" }), /unsupported web access profile/);
+  assert.throws(() => managedDevelopmentFiles(root, templateRoot, { agentTools: "codex", webAccess: "public-pages" }), /applies only when Claude Code is selected/);
   assert.throws(() => managedDevelopmentFiles(root, templateRoot, { integrationDomains: "tracker.example.com" }), /must be an array/);
   assert.throws(() => managedDevelopmentFiles(root, templateRoot, { integrationDomains: ["https://tracker.example.com/path"] }), /invalid integration domain/);
   assert.throws(() => managedDevelopmentFiles(root, templateRoot, { integrationDomains: ["tracker.example.com\nmalicious.example.com"] }), /invalid integration domain/);
+});
+
+test("public page access is explicit in every managed policy surface", () => {
+  const root = mkdtempSync(join(tmpdir(), "adw-public-pages-"));
+  const generated = managedDevelopmentFiles(root, templateRoot, { agentTools: "both", webAccess: "public-pages" });
+  const config = JSON.parse(generated.files.get("devcontainer.json"));
+  const marker = JSON.parse(generated.files.get("adw-managed.json"));
+  const claudeSettings = JSON.parse(generated.files.get("claude-settings.json"));
+  assert.equal(config.build.args.ADW_WEB_ACCESS, "public-pages");
+  assert.equal(marker.web_access, "public-pages");
+  assert.equal(claudeSettings.sandbox.network.allowManagedDomainsOnly, undefined);
+  assert.equal(claudeSettings.sandbox.network.strictAllowlist, true);
 });
 
 test("managed firewall scripts are valid shell and establish deny-by-default before DNS resolution", () => {
@@ -145,12 +162,15 @@ test("managed firewall scripts are valid shell and establish deny-by-default bef
   assert.ok(firewall.indexOf("iptables -P OUTPUT DROP") < firewall.lastIndexOf("resolve_domains\n"));
   assert.match(firewall, /ip6tables -P OUTPUT DROP/);
   assert.match(firewall, /claude\) verification_domain="api\.anthropic\.com"/);
-  assert.match(firewall, /codex\|both\) verification_domain="api\.openai\.com"/);
+  assert.match(firewall, /codex\) verification_domain="api\.openai\.com"/);
+  assert.match(firewall, /both\) verification_domain="api\.openai\.com"/);
+  assert.match(firewall, /public-pages\) web_fetch_enabled=1/);
   assert.match(firewall, /awk '\$1 == "nameserver"/);
   assert.match(firewall, /dig \+short \+time="\$dns_timeout" \+tries=1 @"\$resolver"/);
   assert.match(firewall, /--uid-owner "\$uid" -p udp -d "\$resolver" --dport 53 -j ACCEPT/);
   assert.match(firewall, /--uid-owner "\$uid" -p tcp -d "\$resolver" --dport 53 -j ACCEPT/);
   assert.match(firewall, /--uid-owner "\$proxy_uid" -p tcp --dport 443 -j "\$dispatcher_chain"/);
+  assert.match(firewall, /if \[ "\$web_fetch_enabled" -eq 1 \]; then\n    iptables -A "\$next_chain" -p tcp --dport 443 -j ACCEPT/);
   assert.match(firewall, /iptables -I "\$dispatcher_chain" 1 -j "\$next_chain"/);
   assert.doesNotMatch(firewall, /\bipset\b/);
   assert.match(firewall, /--chuid "\$proxy_user" --exec \/usr\/local\/bin\/adw-egress-proxy/);

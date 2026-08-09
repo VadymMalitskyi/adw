@@ -4,6 +4,7 @@ IFS=$'\n\t'
 
 readonly domains_file="/etc/adw/allowed-domains.txt"
 readonly agent_tools_file="/etc/adw/agent-tools"
+readonly web_access_file="/etc/adw/web-access"
 readonly dispatcher_chain="ADW_EGRESS"
 readonly active_chain_file="/run/adw-egress-active-chain"
 readonly proxy_user="adw-egress"
@@ -37,14 +38,26 @@ for resolver in "${dns_resolvers[@]}"; do
   fi
 done
 
+case "$(cat "$web_access_file")" in
+  hosted-only) web_fetch_enabled=0 ;;
+  public-pages) web_fetch_enabled=1 ;;
+  *)
+    echo "[adw-firewall] invalid web access profile" >&2
+    exit 1
+    ;;
+esac
 case "$(cat "$agent_tools_file")" in
-  codex|both) verification_domain="api.openai.com" ;;
+  codex) verification_domain="api.openai.com" ;;
   claude) verification_domain="api.anthropic.com" ;;
+  both) verification_domain="api.openai.com" ;;
   *)
     echo "[adw-firewall] invalid agent tools profile" >&2
     exit 1
     ;;
 esac
+if [ "$(cat "$agent_tools_file")" = "codex" ]; then
+  web_fetch_enabled=0
+fi
 
 resolve_domains() {
   local domain ips ip resolver attempt failed=0
@@ -93,6 +106,13 @@ install_egress_chain() {
   for ip in "${resolved_ips[@]}"; do
     iptables -A "$next_chain" -d "${ip}/32" -j ACCEPT
   done
+  # Claude Code WebFetch is an HTTPS GET/HEAD client rather than a hosted page
+  # opener. The root-owned proxy validates that distinctive forward-proxy path,
+  # resolves and pins a public IPv4 target, strips credentials, and bounds the
+  # response before this public-port fallback can be used.
+  if [ "$web_fetch_enabled" -eq 1 ]; then
+    iptables -A "$next_chain" -p tcp --dport 443 -j ACCEPT
+  fi
   iptables -A "$next_chain" -j REJECT --reject-with icmp-admin-prohibited
   iptables -I "$dispatcher_chain" 1 -j "$next_chain"
   if [ -f "$active_chain_file" ]; then

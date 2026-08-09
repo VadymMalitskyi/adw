@@ -78,7 +78,7 @@ test("empty repository initializes an empty validation set, docs records, and a 
   const preview = runInit(root, "preview");
   assert.equal(preview.mode, "preview");
   assert.equal(preview.docs.action, "create");
-  assert.deepEqual(preview.devcontainer, { isolation: "managed-devcontainer", action: "create", required: true, reopen_required: true, agent_tools: "both" });
+  assert.deepEqual(preview.devcontainer, { isolation: "managed-devcontainer", action: "create", required: true, reopen_required: true, agent_tools: "both", web_access: "hosted-only" });
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), statusBefore);
 
   runInit(root, "apply", true);
@@ -103,9 +103,9 @@ test("empty repository initializes an empty validation set, docs records, and a 
   assert.equal(existsSync(join(root, ".codex/rules/adw.rules")), true);
   assert.equal(existsSync(join(root, ".claude/settings.json")), true);
   const claudeProjectSettings = JSON.parse(readFileSync(join(root, ".claude/settings.json"), "utf8"));
-  assert.equal(claudeProjectSettings.permissions.allow, undefined);
+  assert.deepEqual(claudeProjectSettings.permissions.allow, ["WebSearch"]);
   assert.equal(claudeProjectSettings.sandbox.autoAllowBashIfSandboxed, true);
-  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /execution:\n  isolation: managed-devcontainer\n  enforcement: required/);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /execution:\n  isolation: managed-devcontainer\n  enforcement: required\n  web_access: hosted-only/);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /validation:\n  default: \[\]/);
   assert.doesNotMatch(readFileSync(join(root, "adw.yaml"), "utf8"), /<unresolved>|<replace with/);
   assert.deepEqual(filesUnder(root, "worktrees/docs"), [
@@ -128,10 +128,10 @@ test("empty repository initializes an empty validation set, docs records, and a 
 test("provider sandbox is an explicit initialization choice and creates no container", () => {
   const root = copyFixture("empty-repo");
   const preview = runInit(root, "preview", false, 0, "provider-sandbox");
-  assert.deepEqual(preview.devcontainer, { isolation: "provider-sandbox", action: "none", required: false, reopen_required: false, agent_tools: "both" });
+  assert.deepEqual(preview.devcontainer, { isolation: "provider-sandbox", action: "none", required: false, reopen_required: false, agent_tools: "both", web_access: "hosted-only" });
   runInit(root, "apply", true, 0, "provider-sandbox");
   assert.equal(existsSync(join(root, ".devcontainer")), false);
-  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /execution:\n  isolation: provider-sandbox\n  enforcement: preferred/);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /execution:\n  isolation: provider-sandbox\n  enforcement: preferred\n  web_access: hosted-only/);
 });
 
 test("existing project keeps instructions, documentation, ignores, and devcontainer bytes", () => {

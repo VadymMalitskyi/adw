@@ -58,6 +58,7 @@ prefix_rule(pattern = ["gh", "auth", "token"], decision = "forbidden")
 const CODEX_ROOT_SETTINGS = [
   'approval_policy = "on-request"',
   'sandbox_mode = "workspace-write"',
+  'web_search = "live"',
 ];
 
 function topLevelTomlValue(source, key) {
@@ -98,13 +99,13 @@ export function mergeCodexConfig(source = "") {
     const ends = source.split(CODEX_END).length - 1;
     if (starts !== 1 || ends !== 1 || source.indexOf(CODEX_START) > source.indexOf(CODEX_END)) throw new Error(".codex/config.toml has an invalid ADW managed block");
   }
-  for (const [key, expected] of [["approval_policy", "on-request"], ["sandbox_mode", "workspace-write"]]) {
+  for (const [key, expected] of [["approval_policy", "on-request"], ["sandbox_mode", "workspace-write"], ["web_search", "live"]]) {
     const value = topLevelTomlValue(source, key);
     if (value && value !== expected) throw new Error(`.codex/config.toml ${key}=${JSON.stringify(value)} conflicts with ${PERMISSION_PROFILE}`);
   }
   const activeProfile = topLevelTomlValue(source, "profile");
   if (activeProfile) {
-    for (const [key, expected] of [["approval_policy", "on-request"], ["sandbox_mode", "workspace-write"]]) {
+    for (const [key, expected] of [["approval_policy", "on-request"], ["sandbox_mode", "workspace-write"], ["web_search", "live"]]) {
       const value = tableTomlValue(source, `profiles.${activeProfile}`, key);
       if (value && value !== expected) throw new Error(`.codex/config.toml active profile ${JSON.stringify(activeProfile)} sets ${key}=${JSON.stringify(value)}, which conflicts with ${PERMISSION_PROFILE}`);
     }
@@ -138,6 +139,8 @@ export const CLAUDE_DENY = [
   "Bash(gh auth token *)", "Read(./.env)", "Read(./.env.*)", "Read(~/.ssh/**)",
 ];
 
+export const CLAUDE_ALLOW = ["WebSearch"];
+
 function union(left, right) {
   return [...new Set([...(Array.isArray(left) ? left : []), ...right])];
 }
@@ -159,8 +162,7 @@ export function mergeClaudeSettings(source = "") {
   permissions.defaultMode = "acceptEdits";
   permissions.disableBypassPermissionsMode = "disable";
   const existingAllows = (permissions.allow ?? []).filter((rule) => typeof rule === "string");
-  if (existingAllows.length > 0) permissions.allow = existingAllows;
-  else delete permissions.allow;
+  permissions.allow = union(existingAllows, CLAUDE_ALLOW);
   permissions.ask = union(permissions.ask, CLAUDE_ASK);
   permissions.deny = union(permissions.deny, CLAUDE_DENY);
   const sandbox = settings.sandbox && typeof settings.sandbox === "object" && !Array.isArray(settings.sandbox) ? { ...settings.sandbox } : {};
@@ -171,11 +173,13 @@ export function mergeClaudeSettings(source = "") {
   return `${JSON.stringify({ $schema: settings.$schema ?? "https://json.schemastore.org/claude-code-settings.json", ...settings, permissions, sandbox }, null, 2)}\n`;
 }
 
-export function managedClaudeSettings({ allowedDomains = [] } = {}) {
+export function managedClaudeSettings({ allowedDomains = [], webAccess = "hosted-only" } = {}) {
+  if (!["hosted-only", "public-pages"].includes(webAccess)) throw new Error(`unsupported web access profile: ${webAccess}`);
   const settings = JSON.parse(mergeClaudeSettings());
   settings.sandbox.network = {
     allowedDomains: [...new Set(allowedDomains)].sort(),
-    allowManagedDomainsOnly: true,
+    strictAllowlist: true,
+    ...(webAccess === "hosted-only" ? { allowManagedDomainsOnly: true } : {}),
   };
   settings.hooks = {
     PreToolUse: [

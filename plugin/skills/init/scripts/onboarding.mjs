@@ -15,6 +15,7 @@ const DOCUMENTATION_DELIVERIES = new Set(["direct-push", "pull-request"]);
 const REQUIREMENTS = new Set(["disabled", "optional", "required"]);
 const TRANSPORTS = new Set(["auto", "native", "mcp", "cli", "api"]);
 const ACCESS_MODES = new Set(["read-only", "read-write"]);
+const WEB_ACCESS_MODES = new Set(["hosted-only", "public-pages"]);
 const WORKFLOW_VALUES = {
   binding: new Set(["optional", "required"]),
   ensure: new Set(["link-only", "create-or-link"]),
@@ -223,13 +224,17 @@ function normalizeConventions(value) {
 function normalizeOnboarding(raw, pluginRoot) {
   raw = object(raw, "onboarding");
   rejectSecretLikeKeys(raw);
-  rejectUnknown(raw, new Set(["schema", "agents", "execution", "documentation", "integrations", "workflows", "conventions", "local"]), "onboarding");
+  rejectUnknown(raw, new Set(["schema", "agents", "web_access", "execution", "documentation", "integrations", "workflows", "conventions", "local"]), "onboarding");
   if (raw.schema !== 1) fail("onboarding.schema", "must equal 1");
   const providers = readProviderRegistry(pluginRoot);
   const { integrations, networkDomains } = normalizeIntegrations(raw.integrations, providers);
+  const agentTools = normalizeAgents(raw.agents);
+  const webAccess = raw.web_access === undefined ? "hosted-only" : enumValue(raw.web_access, WEB_ACCESS_MODES, "onboarding.web_access");
+  if (agentTools === "codex" && webAccess === "public-pages") fail("onboarding.web_access", "public-pages applies only when Claude Code is selected; Codex page opening is hosted");
   const normalized = {
     schema: 1,
-    agentTools: normalizeAgents(raw.agents),
+    agentTools,
+    webAccess,
     documentation: normalizeDocumentation(raw.documentation) ?? { delivery: "direct-push" },
     integrations,
     networkDomains,
@@ -247,6 +252,7 @@ export function defaultOnboarding() {
   const onboarding = {
     schema: 1,
     agentTools: "both",
+    webAccess: "hosted-only",
     documentation: { delivery: "direct-push" },
     integrations: {},
     networkDomains: [],
@@ -285,6 +291,7 @@ export function onboardingSummary(onboarding) {
   return {
     schema: 1,
     agent_tools: onboarding.agentTools,
+    web_access: onboarding.webAccess,
     execution: onboarding.execution?.isolation ?? null,
     documentation_delivery: onboarding.documentation?.delivery ?? null,
     integrations,

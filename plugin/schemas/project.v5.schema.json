@@ -30,6 +30,7 @@
       "properties": {
         "isolation": { "enum": ["managed-devcontainer", "project-devcontainer", "provider-sandbox"] },
         "enforcement": { "enum": ["required", "preferred"] },
+        "web_access": { "enum": ["hosted-only", "public-pages"] },
         "permissions": {
           "type": "object",
           "required": ["profile"],

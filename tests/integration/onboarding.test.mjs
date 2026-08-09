@@ -36,6 +36,7 @@ test("missing answers use a fresh dual-agent default", () => {
   assert.deepEqual({ ...first, digest: "<digest>" }, {
     schema: 1,
     agentTools: "both",
+    webAccess: "hosted-only",
     documentation: { delivery: "direct-push" },
     integrations: {},
     networkDomains: [],
@@ -59,6 +60,7 @@ test("missing answers use a fresh dual-agent default", () => {
 test("normalizes supported project and local onboarding answers", () => {
   const onboarding = load(base({
     agents: ["claude", "codex"],
+    web_access: "public-pages",
     execution: { isolation: "managed-devcontainer" },
     documentation: { delivery: "pull-request" },
     integrations: {
@@ -106,6 +108,7 @@ test("normalizes supported project and local onboarding answers", () => {
   }));
 
   assert.equal(onboarding.agentTools, "both");
+  assert.equal(onboarding.webAccess, "public-pages");
   assert.deepEqual(onboarding.execution, { isolation: "managed-devcontainer" });
   assert.deepEqual(onboarding.documentation, { delivery: "pull-request" });
   assert.deepEqual(onboarding.networkDomains, ["api.github.com", "github.com"]);
@@ -178,6 +181,8 @@ test("rejects invalid agents, unknown fields, and secret-like keys recursively",
   assert.throws(() => load(base({ agents: [] })), /agents.*non-empty/);
   assert.throws(() => load(base({ agents: ["codex", "codex"] })), /duplicate agent/);
   assert.throws(() => load(base({ agents: ["cursor"] })), /codex, claude/);
+  assert.throws(() => load(base({ web_access: "unrestricted" })), /hosted-only, public-pages/);
+  assert.throws(() => load(base({ agents: ["codex"], web_access: "public-pages" })), /applies only when Claude Code is selected/);
   assert.throws(() => load(base({ surprise: true })), /surprise.*not supported/);
   assert.throws(() => load(base({ local: { identity: { display_name: "Ada", access_token: "do-not-store" } } })), /credential-like keys are forbidden/);
   assert.throws(() => load(base({ integrations: { code_host: { provider: "github", requirement: "required", settings: { nested: { api_key: "x" } } } } })), /api_key.*credential-like/);

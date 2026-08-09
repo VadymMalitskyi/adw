@@ -21,6 +21,13 @@ test("project schema v5 supports optional provider-neutral capability configurat
   };
 
   assert.deepEqual(await validateArtifact("project", base), { valid: true, errors: [] });
+  const publicPages = structuredClone(base);
+  publicPages.execution.web_access = "public-pages";
+  assert.deepEqual(await validateArtifact("project", publicPages), { valid: true, errors: [] });
+  const unrestrictedWeb = structuredClone(base);
+  unrestrictedWeb.execution.web_access = "unrestricted";
+  const invalidWeb = await validateArtifact("project", unrestrictedWeb);
+  assert.ok(invalidWeb.errors.some(({ path, keyword }) => path === "/execution/web_access" && keyword === "enum"));
 
   const integrated = {
     ...base,

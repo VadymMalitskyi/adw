@@ -528,8 +528,10 @@ function setupScript(requirements) {
   return `${lines.join("\n")}\n`;
 }
 
-export function managedDevelopmentFiles(projectRoot, templateRoot, { agentTools = "both", integrationDomains = [] } = {}) {
+export function managedDevelopmentFiles(projectRoot, templateRoot, { agentTools = "both", webAccess = "hosted-only", integrationDomains = [] } = {}) {
   const selectedAgents = selectedAgentTools(agentTools);
+  if (!["hosted-only", "public-pages"].includes(webAccess)) throw new Error(`unsupported web access profile: ${webAccess}`);
+  if (agentTools === "codex" && webAccess === "public-pages") throw new Error("public-pages applies only when Claude Code is selected; Codex page opening is hosted");
   const selectedAgentSet = new Set(selectedAgents);
   const configuredIntegrationDomains = normalizedIntegrationDomains(integrationDomains);
   const requirements = discoverDevelopmentEnvironment(projectRoot);
@@ -537,6 +539,7 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { agentTools 
   const projectSetup = setupScript(requirements);
   const config = readJson(join(templateRoot, "devcontainer.json"), "managed devcontainer template");
   config.build.args.ADW_AGENT_TOOLS = agentTools;
+  config.build.args.ADW_WEB_ACCESS = webAccess;
   const nodeVersion = requirements.selected_versions.node;
   if (nodeVersion) config.build.args.NODE_MAJOR = nodeVersion.split(".")[0];
   const aptPackages = [...new Set(requirements.system_packages.map(({ name }) => name))].sort();
@@ -574,9 +577,10 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { agentTools 
   addDomainSection("Project dependency sources detected by adw:init", requirements.allowed_domains);
   const allowedDomains = `${allowedBase}${domainSections.length > 0 ? `\n\n${domainSections.join("\n\n")}` : ""}\n`;
   const sandboxDomains = allowedDomains.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith("#"));
-  const claudeSettings = managedClaudeSettings({ allowedDomains: sandboxDomains });
+  const claudeSettings = managedClaudeSettings({ allowedDomains: sandboxDomains, webAccess });
   const marker = readJson(join(templateRoot, "adw-managed.json"), "managed devcontainer marker");
   marker.agent_tools = agentTools;
+  marker.web_access = webAccess;
   marker.schema = 2;
   marker.plugin_version = readJson(resolve(templateRoot, "../../.codex-plugin/plugin.json"), "Codex plugin manifest").version;
   marker.codex_version = config.build.args.CODEX_VERSION;

@@ -259,6 +259,7 @@ function projectConfiguration(projectRoot, execution, onboarding) {
     "execution:",
     `  isolation: ${execution}`,
     `  enforcement: ${execution === "provider-sandbox" ? "preferred" : "required"}`,
+    `  web_access: ${onboarding.webAccess}`,
     "  permissions:",
     `    profile: ${PERMISSION_PROFILE}`,
     "",
@@ -333,6 +334,7 @@ function managedDevcontainerFiles(projectRoot, onboarding) {
   const templateRoot = join(pluginRoot, "templates/devcontainer");
   const generated = managedDevelopmentFiles(projectRoot, templateRoot, {
     agentTools: onboarding.agentTools,
+    webAccess: onboarding.webAccess,
     integrationDomains: onboarding.networkDomains,
   });
   return [...generated.files].map(([name, content]) => ({
@@ -479,7 +481,7 @@ function summarize(projectRoot, files, docs, execution, onboarding) {
     unchanged: files.filter((file) => file.before === file.after).map((file) => file.path),
     local_state: [".adw/local.yaml", ".adw/cache/"],
     docs,
-    devcontainer: { ...execution, agent_tools: onboarding.agentTools },
+    devcontainer: { ...execution, agent_tools: onboarding.agentTools, web_access: onboarding.webAccess },
     onboarding: onboardingSummary(onboarding),
     development_environment: execution.isolation === "managed-devcontainer" ? discoverDevelopmentEnvironment(projectRoot) : null,
     next_steps: execution.reopen_required

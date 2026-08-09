@@ -150,6 +150,10 @@ function managedDevcontainerChecks(projectRoot, execution) {
   const selectedAgents = profiles[marker?.agent_tools] ?? [];
   const selectedAgentSet = new Set(selectedAgents);
   const validAgentProfile = selectedAgents.length > 0 && configObject?.build?.args?.ADW_AGENT_TOOLS === marker?.agent_tools;
+  const expectedWebAccess = execution.web_access ?? "hosted-only";
+  const validWebAccess = ["hosted-only", "public-pages"].includes(marker?.web_access)
+    && marker.web_access === expectedWebAccess
+    && configObject?.build?.args?.ADW_WEB_ACCESS === marker.web_access;
   const versionsMatch = configObject?.build?.args?.CODEX_VERSION === marker?.codex_version
     && configObject?.build?.args?.CLAUDE_CODE_VERSION === marker?.claude_code_version
     && /^\d+\.\d+\.\d+$/.test(marker?.codex_version ?? "")
@@ -198,13 +202,15 @@ function managedDevcontainerChecks(projectRoot, execution) {
     && /COPY \.devcontainer\/egress-proxy\.mjs \/usr\/local\/bin\/adw-egress-proxy/.test(dockerfile)
     && /useradd --system --no-create-home --shell \/usr\/sbin\/nologin adw-egress/.test(dockerfile)
     && /ARG ADW_AGENT_TOOLS=both/.test(dockerfile)
+    && /ARG ADW_WEB_ACCESS=hosted-only/.test(dockerfile)
     && /case "\$ADW_AGENT_TOOLS" in/.test(dockerfile)
     && /> \/etc\/adw\/agent-tools/.test(dockerfile)
-    && /chmod 0444 \/etc\/adw\/agent-tools/.test(dockerfile)
+    && /> \/etc\/adw\/web-access/.test(dockerfile)
+    && /chmod 0444 \/etc\/adw\/agent-tools \/etc\/adw\/web-access/.test(dockerfile)
     && /gpasswd -d vscode sudo/.test(dockerfile)
     && /chmod 0555 \/usr\/local\/bin\/adw-project-setup/.test(dockerfile)
     && /USER vscode/.test(dockerfile);
-  const validMarker = marker?.schema === 2 && marker?.profile === "managed-devcontainer" && marker?.permission_profile === PERMISSION_PROFILE && marker?.plugin_version === JSON.parse(readFileSync(join(pluginRoot, ".codex-plugin/plugin.json"), "utf8")).version;
+  const validMarker = marker?.schema === 2 && marker?.profile === "managed-devcontainer" && marker?.permission_profile === PERMISSION_PROFILE && validWebAccess && marker?.plugin_version === JSON.parse(readFileSync(join(pluginRoot, ".codex-plugin/plugin.json"), "utf8")).version;
   const requirementsDigest = createHash("sha256").update(readFileSync(join(directory, "project-requirements.json"))).digest("hex");
   const setupDigest = createHash("sha256").update(readFileSync(join(directory, "project-setup.sh"))).digest("hex");
   const generatedFilesMatch = marker?.requirements_schema === 1
@@ -213,7 +219,7 @@ function managedDevcontainerChecks(projectRoot, execution) {
     && marker?.egress_proxy_sha256 === createHash("sha256").update(readFileSync(join(directory, "egress-proxy.mjs"))).digest("hex")
     && /^[a-z0-9+.-]*(?: [a-z0-9+.-]+)*$/.test(configObject?.build?.args?.ADW_PROJECT_APT_PACKAGES ?? "");
   const permissionFilesMatch = readFileSync(join(directory, "codex.rules"), "utf8") === CODEX_RULES
-    && readFileSync(join(directory, "claude-settings.json"), "utf8") === managedClaudeSettings({ allowedDomains: [...configuredDomains] })
+    && readFileSync(join(directory, "claude-settings.json"), "utf8") === managedClaudeSettings({ allowedDomains: [...configuredDomains], webAccess: marker.web_access })
     && readFileSync(join(directory, "claude-permission-hook.mjs"), "utf8") === readFileSync(join(pluginRoot, "templates/devcontainer/claude-permission-hook.mjs"), "utf8")
     && /COPY \.devcontainer\/codex\.rules/.test(dockerfile)
     && /managed-settings\.d\/20-adw\.json/.test(dockerfile)

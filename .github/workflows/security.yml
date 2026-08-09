@@ -46,6 +46,7 @@ jobs:
           docker build \
             --build-arg "NODE_MAJOR=$(jq -r '.build.args.NODE_MAJOR' "$config")" \
             --build-arg ADW_AGENT_TOOLS=both \
+            --build-arg ADW_WEB_ACCESS=public-pages \
             --build-arg "CODEX_VERSION=$(jq -r '.build.args.CODEX_VERSION' "$config")" \
             --build-arg "CLAUDE_CODE_VERSION=$(jq -r '.build.args.CLAUDE_CODE_VERSION' "$config")" \
             --build-arg ADW_PROJECT_APT_PACKAGES= \
@@ -100,3 +101,13 @@ jobs:
           ! docker exec adw-security-runtime curl --noproxy '*' --connect-timeout 3 --silent --show-error https://api.openai.com >/dev/null
           ! docker exec adw-security-runtime curl --connect-timeout 3 --silent --show-error https://example.com >/dev/null
           ! docker exec adw-security-runtime sh -c "timeout 8 openssl s_client -quiet -proxy 127.0.0.1:18080 -connect api.openai.com:443 -servername example.com </dev/null >/dev/null 2>&1"
+          docker exec adw-security-runtime curl --fail --silent --show-error \
+            --header 'User-Agent: Claude-User (claude-code/security-test; +https://support.anthropic.com/)' \
+            --header 'Accept: text/markdown, text/html, */*' \
+            --request-target 'https://example.com/' \
+            http://127.0.0.1:18080/ >/dev/null
+          ! docker exec adw-security-runtime curl --fail --silent --show-error \
+            --header 'User-Agent: curl/security-test' \
+            --header 'Accept: text/markdown, text/html, */*' \
+            --request-target 'https://example.com/' \
+            http://127.0.0.1:18080/ >/dev/null

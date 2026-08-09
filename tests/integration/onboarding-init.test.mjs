@@ -35,6 +35,7 @@ test("onboarding choices are preview-bound and split shared from personal config
   writeFileSync(answersPath, `${JSON.stringify({
     schema: 1,
     agents: ["codex"],
+    web_access: "hosted-only",
     execution: { isolation: "managed-devcontainer" },
     documentation: { delivery: "pull-request" },
     integrations: {
@@ -84,6 +85,8 @@ test("onboarding choices are preview-bound and split shared from personal config
   assert.match(preview.preview_digest, /^[0-9a-f]{64}$/);
   assert.equal(preview.devcontainer.agent_tools, "codex");
   assert.equal(preview.onboarding.documentation_delivery, "pull-request");
+  assert.equal(preview.onboarding.web_access, "hosted-only");
+  assert.equal(preview.devcontainer.web_access, "hosted-only");
   assert.deepEqual(preview.onboarding.local.identity_fields, ["display_name", "email", "work_tracker_account"]);
   for (const value of personalValues) assert.doesNotMatch(JSON.stringify(preview), new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 

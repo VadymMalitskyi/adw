@@ -6,6 +6,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  CLAUDE_ALLOW,
   CLAUDE_ASK,
   CLAUDE_DENY,
   CODEX_RULES,
@@ -23,12 +24,14 @@ test("Codex policy keeps workspace development automatic and external effects ga
   const merged = mergeCodexConfig(existing);
   assert.match(merged, /approval_policy = "on-request"/);
   assert.match(merged, /sandbox_mode = "workspace-write"/);
+  assert.match(merged, /web_search = "live"/);
   assert.match(merged, /\[apps\._default\]\ndefault_tools_approval_mode = "writes"/);
   assert.match(merged, /model = "gpt-test"/);
   assert.equal(mergeCodexConfig(merged), merged);
   assert.throws(() => mergeCodexConfig('approval_policy = "never"\n'), /conflicts/);
   assert.throws(() => mergeCodexConfig('profile = "unsafe"\n[profiles.unsafe]\napproval_policy = "never"\n'), /active profile.*conflicts/);
   assert.throws(() => mergeCodexConfig('sandbox_mode = "danger-full-access"\n'), /conflicts/);
+  assert.throws(() => mergeCodexConfig('web_search = "disabled"\n'), /conflicts/);
 
   for (const expected of [
     'pattern = ["git", ["add", "commit"]], decision = "allow"',
@@ -51,8 +54,9 @@ test("Claude policy uses sandbox-first Bash plus explicit external-write review"
   assert.equal(merged.sandbox.allowUnsandboxedCommands, false);
   for (const rule of CLAUDE_ASK) assert.ok(merged.permissions.ask.includes(rule));
   for (const rule of CLAUDE_DENY) assert.ok(merged.permissions.deny.includes(rule));
+  for (const rule of CLAUDE_ALLOW) assert.ok(merged.permissions.allow.includes(rule));
   assert.ok(merged.permissions.ask.includes("Bash(gh api *)"));
-  assert.deepEqual(merged.permissions.allow, ["mcp__docs__get_*"]);
+  assert.deepEqual(merged.permissions.allow, ["mcp__docs__get_*", "WebSearch"]);
   assert.ok(merged.permissions.ask.includes("Bash(az boards work-item update *)"));
   assert.ok(merged.permissions.deny.includes("Bash(git push --force *)"));
   assert.ok(!merged.permissions.allow.includes("mcp__*"));
@@ -67,6 +71,9 @@ test("Claude policy uses sandbox-first Bash plus explicit external-write review"
   const managed = JSON.parse(managedClaudeSettings());
   assert.deepEqual(managed.sandbox.network.allowedDomains, []);
   assert.equal(managed.sandbox.network.allowManagedDomainsOnly, true);
+  assert.equal(managed.sandbox.network.strictAllowlist, true);
+  assert.equal(JSON.parse(managedClaudeSettings({ webAccess: "public-pages" })).sandbox.network.allowManagedDomainsOnly, undefined);
+  assert.throws(() => managedClaudeSettings({ webAccess: "unrestricted" }), /unsupported web access profile/);
   assert.equal(managed.hooks.PreToolUse.length, 2);
   assert.match(managed.hooks.PreToolUse[0].hooks[0].command, /adw-claude-permission-hook/);
 });
