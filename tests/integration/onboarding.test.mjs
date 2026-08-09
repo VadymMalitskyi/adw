@@ -38,6 +38,7 @@ test("missing answers use a fresh dual-agent default", () => {
     agentTools: "both",
     webAccess: "public-pages",
     documentation: { delivery: "direct-push" },
+    development: { runtimeVersions: {} },
     integrations: {},
     networkDomains: [],
     workflows: {},

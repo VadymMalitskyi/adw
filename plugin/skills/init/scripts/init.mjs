@@ -336,6 +336,7 @@ function managedDevcontainerFiles(projectRoot, onboarding) {
     agentTools: onboarding.agentTools,
     webAccess: onboarding.webAccess,
     integrationDomains: onboarding.networkDomains,
+    runtimeVersions: onboarding.development?.runtimeVersions,
   });
   return [...generated.files].map(([name, content]) => ({
     path: `.devcontainer/${name}`,
@@ -485,10 +486,12 @@ function summarize(projectRoot, files, docs, execution, onboarding) {
     docs,
     devcontainer: { ...execution, agent_tools: onboarding.agentTools, web_access: onboarding.webAccess },
     onboarding: onboardingSummary(onboarding),
-    development_environment: execution.isolation === "managed-devcontainer" ? discoverDevelopmentEnvironment(projectRoot) : null,
+    development_environment: execution.isolation === "managed-devcontainer"
+      ? discoverDevelopmentEnvironment(projectRoot, { runtimeVersions: onboarding.development?.runtimeVersions })
+      : null,
     setup_guidance: {
       what_adw_is: "ADW helps a team plan, review, and safely carry out software changes with Codex and Claude Code.",
-      preview_safety: "This preview has not changed the repository. Files are written only after explicit approval of its exact digest.",
+      preview_safety: "This preview has not changed the repository. Files are written only after your explicit approval.",
       why_information_is_needed: "ADW asks only for choices it cannot safely infer: the workspace security profile, optional team services, and project conventions. Do not provide credentials in setup answers.",
       after_initialization: "Initialization creates project configuration and, when selected, an isolated development container. It does not authenticate tools or contact external services.",
     },

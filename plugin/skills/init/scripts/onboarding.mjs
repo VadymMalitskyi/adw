@@ -16,6 +16,7 @@ const REQUIREMENTS = new Set(["disabled", "optional", "required"]);
 const TRANSPORTS = new Set(["auto", "native", "mcp", "cli", "api"]);
 const ACCESS_MODES = new Set(["read-only", "read-write"]);
 const WEB_ACCESS_MODES = new Set(["hosted-only", "public-pages"]);
+const RUNTIMES = new Set(["node", "python", "go", "rust", "java", "ruby", "dotnet"]);
 const WORKFLOW_VALUES = {
   binding: new Set(["optional", "required"]),
   ensure: new Set(["link-only", "create-or-link"]),
@@ -222,10 +223,26 @@ function normalizeConventions(value) {
   return result;
 }
 
+function normalizeDevelopment(value) {
+  if (value === undefined) return { runtimeVersions: {} };
+  value = object(value, "onboarding.development");
+  rejectUnknown(value, new Set(["runtime_versions"]), "onboarding.development");
+  if (value.runtime_versions === undefined) return { runtimeVersions: {} };
+  const versions = object(value.runtime_versions, "onboarding.development.runtime_versions");
+  const runtimeVersions = {};
+  for (const [runtime, rawVersion] of Object.entries(versions)) {
+    if (!RUNTIMES.has(runtime)) fail(`onboarding.development.runtime_versions.${runtime}`, "is not a supported runtime");
+    const version = singleLine(rawVersion, `onboarding.development.runtime_versions.${runtime}`, 100);
+    if (!/^\d+(?:\.\d+){0,2}$/.test(version)) fail(`onboarding.development.runtime_versions.${runtime}`, "must be a numeric version such as 8 or 8.0.408");
+    runtimeVersions[runtime] = version;
+  }
+  return { runtimeVersions: sortedObject(runtimeVersions) };
+}
+
 function normalizeOnboarding(raw, pluginRoot) {
   raw = object(raw, "onboarding");
   rejectSecretLikeKeys(raw);
-  rejectUnknown(raw, new Set(["schema", "agents", "web_access", "execution", "documentation", "integrations", "workflows", "conventions", "local"]), "onboarding");
+  rejectUnknown(raw, new Set(["schema", "agents", "web_access", "execution", "documentation", "development", "integrations", "workflows", "conventions", "local"]), "onboarding");
   if (raw.schema !== 1) fail("onboarding.schema", "must equal 1");
   const providers = readProviderRegistry(pluginRoot);
   const { integrations, networkDomains } = normalizeIntegrations(raw.integrations, providers);
@@ -238,6 +255,7 @@ function normalizeOnboarding(raw, pluginRoot) {
     agentTools,
     webAccess,
     documentation: normalizeDocumentation(raw.documentation) ?? { delivery: "direct-push" },
+    development: normalizeDevelopment(raw.development),
     integrations,
     networkDomains,
     workflows: normalizeWorkflow(raw.workflows, integrations),
@@ -256,6 +274,7 @@ export function defaultOnboarding() {
     agentTools: "both",
     webAccess: "public-pages",
     documentation: { delivery: "direct-push" },
+    development: { runtimeVersions: {} },
     integrations: {},
     networkDomains: [],
     workflows: {},
@@ -296,6 +315,7 @@ export function onboardingSummary(onboarding) {
     web_access: onboarding.webAccess,
     execution: onboarding.execution?.isolation ?? null,
     documentation_delivery: onboarding.documentation?.delivery ?? null,
+    runtime_versions: onboarding.development?.runtimeVersions ?? {},
     integrations,
     network_domains: [...(onboarding.networkDomains ?? [])],
     workflows: onboarding.workflows ?? {},

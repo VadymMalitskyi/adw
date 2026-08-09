@@ -30,6 +30,9 @@ function run(root, ...args) {
 
 test("onboarding choices are preview-bound and split shared from personal configuration", () => {
   const root = project();
+  writeFileSync(join(root, "App.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>\n");
+  git(root, "add", "App.csproj");
+  git(root, "commit", "-q", "-m", "add unpinned dotnet fixture");
   const answersPath = join(root, "onboarding.json");
   const personalValues = ["Ada Lovelace", "ada@example.invalid", "ada-tracker"];
   writeFileSync(answersPath, `${JSON.stringify({
@@ -37,6 +40,7 @@ test("onboarding choices are preview-bound and split shared from personal config
     agents: ["codex"],
     web_access: "hosted-only",
     execution: { isolation: "managed-devcontainer" },
+    development: { runtime_versions: { dotnet: "8" } },
     documentation: { delivery: "pull-request" },
     integrations: {
       work_tracker: {
@@ -87,6 +91,7 @@ test("onboarding choices are preview-bound and split shared from personal config
   assert.equal(preview.onboarding.documentation_delivery, "pull-request");
   assert.equal(preview.onboarding.web_access, "hosted-only");
   assert.equal(preview.devcontainer.web_access, "hosted-only");
+  assert.deepEqual(preview.onboarding.runtime_versions, { dotnet: "8" });
   assert.deepEqual(preview.onboarding.local.identity_fields, ["display_name", "email", "work_tracker_account"]);
   for (const value of personalValues) assert.doesNotMatch(JSON.stringify(preview), new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 
@@ -115,6 +120,7 @@ test("onboarding choices are preview-bound and split shared from personal config
   assert.deepEqual(containerConfig.customizations.vscode.extensions, ["openai.chatgpt", "anthropic.claude-code"]);
   assert.ok(containerConfig.mounts.some((mount) => mount.includes(".codex")));
   assert.ok(containerConfig.mounts.some((mount) => mount.includes(".claude")));
+  assert.equal(containerConfig.features["ghcr.io/devcontainers/features/dotnet:1"].version, "8");
   assert.match(readFileSync(join(root, ".devcontainer/allowed-domains.txt"), "utf8"), /^tracker\.example\.com$/m);
 
   const local = readFileSync(join(root, ".adw/local.yaml"), "utf8");

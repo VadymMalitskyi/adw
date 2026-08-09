@@ -306,7 +306,8 @@ function selectedRuntimeVersions(runtimes, unresolved) {
   return selected;
 }
 
-export function discoverDevelopmentEnvironment(projectRoot) {
+export function discoverDevelopmentEnvironment(projectRoot, { runtimeVersions = {} } = {}) {
+  if (runtimeVersions === null || typeof runtimeVersions !== "object" || Array.isArray(runtimeVersions)) throw new Error("runtimeVersions must be an object");
   const runtimes = [];
   const systemPackages = [];
   const setupCommands = [];
@@ -445,6 +446,53 @@ export function discoverDevelopmentEnvironment(projectRoot) {
   composeEvidence(projectRoot, unresolved, ports);
   for (const variable of variables) unresolved.push({ requirement: `environment variable ${variable.name}`, source: variable.source, reason: "values and secrets are never inferred or committed" });
 
+  // A person may choose a version only when the repository does not pin one.
+  // Keep that choice visible in the generated evidence instead of silently using
+  // a distro default, which makes a fresh container unexpectedly unusable.
+  for (const runtime of runtimes) {
+    const chosen = runtimeVersions[runtime.name];
+    if (!runtime.version && chosen) {
+      const originalSource = runtime.source;
+      runtime.version = chosen;
+      runtime.requested = chosen;
+      runtime.source = `onboarding.development.runtime_versions.${runtime.name}`;
+      runtime.detected_source = originalSource;
+      if (runtime.name === "dotnet") {
+        const componentRoot = resolve(projectRoot, runtime.component);
+        const lockPath = join(componentRoot, "packages.lock.json");
+        const command = inComponent(projectRoot, componentRoot, existsSync(lockPath) ? "dotnet restore --locked-mode" : "dotnet restore");
+        if (!setupCommands.some((item) => item.command === command)) {
+          setupCommands.push({ command, source: existsSync(lockPath) ? sourcePath(projectRoot, lockPath) : originalSource });
+        }
+        if (!existsSync(lockPath)) {
+          unresolved.push({ requirement: `reproducible .NET dependency resolution in ${runtime.component}`, source: originalSource, reason: "no packages.lock.json proves a locked restore" });
+        }
+      }
+    }
+  }
+
+  // Source-only projects have no manifest record to amend above, but a chosen
+  // runtime still makes their managed container usable for development.
+  for (const [name, detectedSource] of sourceKinds) {
+    if (runtimes.some((runtime) => runtime.name === name) || !runtimeVersions[name]) continue;
+    runtimes.push({
+      name,
+      version: runtimeVersions[name],
+      requested: runtimeVersions[name],
+      source: `onboarding.development.runtime_versions.${name}`,
+      detected_source: detectedSource,
+      component: ".",
+    });
+  }
+
+  // Earlier discovery records a missing .NET version while walking a project.
+  // An explicit onboarding choice resolves that exact missing requirement.
+  for (let index = unresolved.length - 1; index >= 0; index -= 1) {
+    const item = unresolved[index];
+    if (item.requirement.startsWith(".NET SDK version") && runtimeVersions.dotnet) unresolved.splice(index, 1);
+    else if (item.requirement.endsWith(" source runtime") && runtimeVersions[item.requirement.slice(0, -" source runtime".length)]) unresolved.splice(index, 1);
+  }
+
   const selected = selectedRuntimeVersions(runtimes, unresolved);
   if (selected.has("node") && Number(selected.get("node").split(".")[0]) < 20) {
     unresolved.push({ requirement: "Node runtime version", source: runtimes.find((runtime) => runtime.name === "node").source, reason: "ADW requires Node.js 20 or newer inside the managed container" });
@@ -528,7 +576,7 @@ function setupScript(requirements) {
   return `${lines.join("\n")}\n`;
 }
 
-export function managedDevelopmentFiles(projectRoot, templateRoot, { agentTools = "both", webAccess, integrationDomains = [] } = {}) {
+export function managedDevelopmentFiles(projectRoot, templateRoot, { agentTools = "both", webAccess, integrationDomains = [], runtimeVersions = {} } = {}) {
   selectedAgentTools(agentTools);
   agentTools = "both";
   const selectedAgents = selectedAgentTools(agentTools);
@@ -536,7 +584,7 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { agentTools 
   if (!["hosted-only", "public-pages"].includes(webAccess)) throw new Error(`unsupported web access profile: ${webAccess}`);
   const selectedAgentSet = new Set(selectedAgents);
   const configuredIntegrationDomains = normalizedIntegrationDomains(integrationDomains);
-  const requirements = discoverDevelopmentEnvironment(projectRoot);
+  const requirements = discoverDevelopmentEnvironment(projectRoot, { runtimeVersions });
   const requirementsText = stableJson(requirements);
   const projectSetup = setupScript(requirements);
   const config = readJson(join(templateRoot, "devcontainer.json"), "managed devcontainer template");

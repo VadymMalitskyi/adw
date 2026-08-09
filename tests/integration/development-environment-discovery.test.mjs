@@ -58,3 +58,27 @@ test("source-only runtime discovery is ordered independently of directory insert
     ["python source runtime", "zeta/worker.py"],
   ]);
 });
+
+test("an explicit onboarding choice provisions a detected but unpinned .NET SDK", () => {
+  const root = mkdtempSync(join(tmpdir(), "adw-runtime-choice-"));
+  writeFileSync(join(root, "App.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>\n");
+
+  const result = discoverDevelopmentEnvironment(root, { runtimeVersions: { dotnet: "8" } });
+  const dotnet = result.runtimes.find((runtime) => runtime.name === "dotnet");
+
+  assert.deepEqual(result.selected_versions, { dotnet: "8" });
+  assert.equal(dotnet.source, "onboarding.development.runtime_versions.dotnet");
+  assert.equal(dotnet.detected_source, "App.csproj");
+  assert.ok(!result.unresolved.some(({ requirement }) => requirement.startsWith(".NET SDK version")));
+  assert.ok(result.setup_commands.some(({ command }) => command === "dotnet restore"));
+});
+
+test("an explicit onboarding choice provisions a source-only language", () => {
+  const root = mkdtempSync(join(tmpdir(), "adw-source-runtime-choice-"));
+  writeFileSync(join(root, "worker.py"), "print('ready')\n");
+
+  const result = discoverDevelopmentEnvironment(root, { runtimeVersions: { python: "3.12" } });
+
+  assert.deepEqual(result.selected_versions, { python: "3.12" });
+  assert.ok(!result.unresolved.some(({ requirement }) => requirement === "python source runtime"));
+});
