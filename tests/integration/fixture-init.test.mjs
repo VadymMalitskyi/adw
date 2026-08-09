@@ -4,10 +4,12 @@ import {
   cpSync,
   existsSync,
   mkdtempSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   realpathSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
@@ -40,6 +42,13 @@ function runInit(root, action, confirmed = false, expectedStatus = 0, execution 
   const args = [initScript, action, "--project-root", root];
   if (confirmed) args.push("--confirmed");
   if (execution) args.push("--execution", execution);
+  if (action === "apply" && confirmed && expectedStatus === 0) {
+    const previewArgs = [initScript, "preview", "--project-root", root];
+    if (execution) previewArgs.push("--execution", execution);
+    const preview = spawnSync(process.execPath, previewArgs, { encoding: "utf8" });
+    assert.equal(preview.status, 0, preview.stderr || preview.stdout);
+    args.push("--preview-digest", JSON.parse(preview.stdout).preview_digest);
+  }
   const result = spawnSync(process.execPath, args, { encoding: "utf8" });
   assert.equal(result.status, expectedStatus, result.stderr || result.stdout);
   return JSON.parse(expectedStatus === 0 ? result.stdout : result.stderr);
@@ -61,7 +70,7 @@ function filesUnder(root, relativeRoot) {
   return paths;
 }
 
-test("empty repository initializes unresolved commands, docs records, and a managed devcontainer", () => {
+test("empty repository initializes an empty validation set, docs records, and a managed devcontainer", () => {
   const root = copyFixture("empty-repo");
   const headBefore = git(root, "rev-parse", "HEAD");
   const statusBefore = git(root, "status", "--porcelain=v1", "--untracked-files=all");
@@ -96,8 +105,8 @@ test("empty repository initializes unresolved commands, docs records, and a mana
   assert.equal(claudeProjectSettings.permissions.allow, undefined);
   assert.equal(claudeProjectSettings.sandbox.autoAllowBashIfSandboxed, true);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /execution:\n  isolation: managed-devcontainer\n  enforcement: required/);
-  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /command: "<unresolved>"[\s\S]*required: false/);
-  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /source: "unresolved: no supported manifest or task-runner target proves a validation command"/);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /validation:\n  default: \[\]/);
+  assert.doesNotMatch(readFileSync(join(root, "adw.yaml"), "utf8"), /<unresolved>|<replace with/);
   assert.deepEqual(filesUnder(root, "worktrees/docs"), [
     "worktrees/docs/.git",
     "worktrees/docs/README.md",
@@ -192,4 +201,22 @@ test("monorepo initialization keeps component commands separate with observable 
   const configBefore = readFileSync(join(root, "adw.yaml"));
   runInit(root, "apply", true);
   assert.deepEqual(readFileSync(join(root, "adw.yaml")), configBefore);
+});
+
+test("init discovers common libs wildcard workspaces and never records the current feature branch as default", () => {
+  const root = copyFixture("empty-repo");
+  git(root, "branch", "-m", "feature/setup");
+  git(root, "config", "init.defaultBranch", "main");
+  mkdirSync(join(root, "libs/core"), { recursive: true });
+  writeFileSync(join(root, "package.json"), `${JSON.stringify({ private: true, workspaces: ["libs/*"] }, null, 2)}\n`);
+  writeFileSync(join(root, "libs/core/package.json"), `${JSON.stringify({ name: "core", scripts: { test: "node --test" } }, null, 2)}\n`);
+  git(root, "add", ".");
+  git(root, "commit", "-q", "-m", "Add wildcard workspace");
+
+  runInit(root, "apply", true);
+  const config = readFileSync(join(root, "adw.yaml"), "utf8");
+  assert.match(config, /default_branch: "main"/);
+  assert.doesNotMatch(config, /default_branch: "feature\/setup"/);
+  assert.match(config, /core:\n    path: "libs\/core"/);
+  assert.match(config, /command: "npm run test"[\s\S]*source: "libs\/core\/package\.json#scripts\.test"/);
 });

@@ -10,14 +10,15 @@ Run `adw:doctor` before resuming active work. Roll back through the provider man
 
 ADW supports only the project, plan, and approval schemas shipped by the current release: project schema 5, plan schema 2, and approval schema 2. Earlier ADW schemas and their migration paths are intentionally not bundled.
 
-Run `adw:update` to check compatibility. It is read-only:
+Run `adw:update` to check compatibility and preview managed-file repair:
 
 1. It reads the installed plugin version and bundled project schema.
-2. It reads the root `adw.yaml` schema without normalizing the file.
-3. It reports compatibility and an empty write set for schema 5.
-4. It rejects every unsupported schema without modifying project or historical artifacts.
+2. It parses and validates root `adw.yaml` through the bundled YAML 1.2 and schema validator without rewriting the file.
+3. For provider-sandbox and project-owned-container profiles it reports compatibility and normally an empty write set.
+4. For a managed container it deterministically regenerates current release `.devcontainer/` and selected-agent permission bytes, showing changed paths and a preview digest. `apply --confirmed --preview-digest <digest>` atomically repairs exactly those reviewed files.
+5. It rejects every unsupported schema without modifying project or historical artifacts.
 
-For an unsupported project, initialize the current ADW release in a clean repository or perform a separately reviewed manual replacement of ADW-owned configuration. Preserve application code and repository-owned documentation, but do not copy old approvals or claim old workflow evidence remains valid under the current contracts.
+This repairs exact plugin-version marker drift and managed-template drift after ordinary plugin upgrades. For an unsupported project schema, perform a separately reviewed manual replacement of ADW-owned configuration. Preserve application code and repository-owned documentation, but do not copy old approvals or claim old workflow evidence remains valid under the current contracts.
 
 ## Docs synchronization recovery
 

@@ -5,8 +5,10 @@ import { spawn } from "node:child_process";
 import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import Ajv2020 from "ajv/dist/2020.js";
+import { parseDocument } from "yaml";
 
-export const EXIT = Object.freeze({ OK: 0, INPUT: 2, SCHEMA_INVALID: 3, APPROVAL_INVALID: 4, VALIDATION_FAILED: 5, INCOMPATIBLE: 6, PATH_VIOLATION: 7, MIGRATION_FAILED: 8, INTERNAL: 9 });
+export const EXIT = Object.freeze({ OK: 0, INPUT: 2, SCHEMA_INVALID: 3, APPROVAL_INVALID: 4, VALIDATION_FAILED: 5, INCOMPATIBLE: 6, PATH_VIOLATION: 7, ATOMIC_WRITE_FAILED: 8, INTERNAL: 9 });
 export const ARTIFACT_SCHEMAS = Object.freeze({
   project: Object.freeze({ 5: new URL("../schemas/project.v5.schema.json", import.meta.url) }),
   plan: Object.freeze({ 2: new URL("../schemas/plan.v2.schema.json", import.meta.url) }),
@@ -20,7 +22,11 @@ export const ARTIFACT_SCHEMAS = Object.freeze({
 
 const BUNDLE_DOMAIN = Buffer.from("ADW-APPROVAL-BUNDLE-V2\0", "utf8");
 const REQUIREMENTS_DOMAIN = Buffer.from("ADW-INTEGRATION-REQUIREMENTS-V1\0", "utf8");
+const AUTHORIZATION_DOMAIN = Buffer.from("ADW-EXTERNAL-AUTHORIZATION-V1\0", "utf8");
 const schemaCache = new Map();
+const validatorCache = new WeakMap();
+const ajv = new Ajv2020({ allErrors: true, strict: true, addUsedSchema: false });
+ajv.addFormat("date-time", (value) => typeof value === "string" && /^\d{4}-\d\d-\d\dT/.test(value) && !Number.isNaN(Date.parse(value)));
 
 function framedField(label, content) {
   const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content, "utf8");
@@ -65,78 +71,49 @@ export function verifyApprovalBundle(inputs, approval) {
   return timingSafeEqual(Buffer.from(bundle.digest, "hex"), Buffer.from(approval.digest, "hex"));
 }
 
-function typeMatches(value, type) {
-  if (type === "null") return value === null;
-  if (type === "array") return Array.isArray(value);
-  if (type === "object") return value !== null && typeof value === "object" && !Array.isArray(value);
-  if (type === "integer") return typeof value === "number" && Number.isInteger(value);
-  return typeof value === type;
-}
-
 function childPointer(path, part) {
   return `${path}/${String(part).replaceAll("~", "~0").replaceAll("/", "~1")}`;
 }
 
-function resolveReference(root, reference) {
-  if (!reference.startsWith("#/")) return undefined;
-  let current = root;
-  for (const raw of reference.slice(2).split("/")) {
-    if (current === null || typeof current !== "object") return undefined;
-    current = current[raw.replaceAll("~1", "/").replaceAll("~0", "~")];
+export function validateJsonSchema(schema, value) {
+  let validate = validatorCache.get(schema);
+  if (!validate) {
+    validate = ajv.compile(schema);
+    validatorCache.set(schema, validate);
   }
-  return current !== null && typeof current === "object" ? current : undefined;
+  const valid = validate(value);
+  const errors = (validate.errors ?? []).map((error) => {
+    let path = error.instancePath || "";
+    if (error.keyword === "required") path = childPointer(path, error.params.missingProperty);
+    if (error.keyword === "additionalProperties") path = childPointer(path, error.params.additionalProperty);
+    return { path: path || "/", keyword: error.keyword, message: error.message ?? "schema constraint failed" };
+  });
+  return { valid: Boolean(valid), errors };
 }
 
-export function validateJsonSchema(schema, value) {
-  const errors = [];
-  const add = (path, keyword, message) => errors.push({ path: path || "/", keyword, message });
-  function visit(rule, candidate, path) {
-    if (typeof rule.$ref === "string") {
-      const resolved = resolveReference(schema, rule.$ref);
-      if (resolved) visit(resolved, candidate, path); else add(path, "$ref", `unresolvable schema reference ${rule.$ref}`);
-      return;
-    }
-    if (Array.isArray(rule.anyOf)) {
-      if (!rule.anyOf.some((branch) => branchValid(branch, candidate))) add(path, "anyOf", "must match at least one allowed shape");
-      return;
-    }
-    if (Object.hasOwn(rule, "const") && !Object.is(candidate, rule.const)) { add(path, "const", `must equal ${JSON.stringify(rule.const)}`); return; }
-    if (Array.isArray(rule.enum) && !rule.enum.some((item) => Object.is(item, candidate))) { add(path, "enum", `must be one of ${rule.enum.map(String).join(", ")}`); return; }
-    if (typeof rule.type === "string" && !typeMatches(candidate, rule.type)) {
-      add(path, "type", `must be ${rule.type}; received ${candidate === null ? "null" : Array.isArray(candidate) ? "array" : typeof candidate}`);
-      return;
-    }
-    if (typeof candidate === "string") {
-      if (typeof rule.minLength === "number" && candidate.length < rule.minLength) add(path, "minLength", `must contain at least ${rule.minLength} character(s)`);
-      if (typeof rule.maxLength === "number" && candidate.length > rule.maxLength) add(path, "maxLength", `must contain no more than ${rule.maxLength} character(s)`);
-      if (typeof rule.pattern === "string" && !new RegExp(rule.pattern).test(candidate)) add(path, "pattern", `must match ${rule.pattern}`);
-      if (rule.format === "date-time" && (Number.isNaN(Date.parse(candidate)) || !/^\d{4}-\d\d-\d\dT/.test(candidate))) add(path, "format", "must be an ISO 8601 date-time");
-    }
-    if (typeof candidate === "number" && typeof rule.minimum === "number" && candidate < rule.minimum) add(path, "minimum", `must be at least ${rule.minimum}`);
-    if (Array.isArray(candidate)) {
-      if (typeof rule.minItems === "number" && candidate.length < rule.minItems) add(path, "minItems", `must contain at least ${rule.minItems} item(s)`);
-      if (rule.items && typeof rule.items === "object") candidate.forEach((item, index) => visit(rule.items, item, childPointer(path, index)));
-    }
-    if (candidate !== null && typeof candidate === "object" && !Array.isArray(candidate)) {
-      if (typeof rule.minProperties === "number" && Object.keys(candidate).length < rule.minProperties) add(path, "minProperties", `must contain at least ${rule.minProperties} property/properties`);
-      if (Array.isArray(rule.required)) for (const key of rule.required) if (!(key in candidate)) add(childPointer(path, key), "required", "is required");
-      const properties = rule.properties && typeof rule.properties === "object" ? rule.properties : {};
-      for (const [key, item] of Object.entries(candidate)) {
-        if (properties[key]) visit(properties[key], item, childPointer(path, key));
-        else if (rule.additionalProperties === false) add(childPointer(path, key), "additionalProperties", "is not allowed");
-        else if (rule.additionalProperties && typeof rule.additionalProperties === "object") visit(rule.additionalProperties, item, childPointer(path, key));
-      }
-    }
-  }
-  function branchValid(rule, candidate) {
-    const before = errors.length;
-    visit(rule, candidate, "");
-    const valid = errors.length === before;
-    errors.splice(before);
-    return valid;
-  }
-  visit(schema, value, "");
-  return { valid: errors.length === 0, errors };
+export function parseYaml(source, label = "YAML document") {
+  if (typeof source !== "string" && !Buffer.isBuffer(source)) throw new InputError(`${label} must be UTF-8 text`);
+  let text;
+  try { text = Buffer.isBuffer(source) ? new TextDecoder("utf-8", { fatal: true }).decode(source) : source; }
+  catch (error) { throw new InputError(`${label} is not valid UTF-8: ${error.message}`, { cause: error }); }
+  const document = parseDocument(text, { merge: false, prettyErrors: false, strict: true, uniqueKeys: true, version: "1.2" });
+  if (document.errors.length > 0) throw new InputError(`${label} is invalid: ${document.errors.map(({ message }) => message).join("; ")}`);
+  const data = document.toJS({ maxAliasCount: 100 });
+  if (data === null || typeof data !== "object" || Array.isArray(data)) throw new InputError(`${label} must contain one mapping object`);
+  return data;
+}
+
+export async function loadArtifactFile({ project_root, path, artifact }) {
+  if (typeof project_root !== "string" || typeof path !== "string" || typeof artifact !== "string") throw new InputError("load-artifact-file requires project_root, path, and artifact");
+  const target = await resolveProjectPath(project_root, path);
+  let stat;
+  try { stat = await lstat(target); }
+  catch (error) { if (error.code === "ENOENT") throw new PathError(`artifact does not exist: ${path}`); throw error; }
+  if (stat.isSymbolicLink() || !stat.isFile()) throw new PathError(`artifact must be a regular non-symlink file: ${path}`);
+  const bytes = await readFile(target);
+  const data = parseYaml(bytes, path);
+  const validation = await validateArtifact(artifact, data);
+  return { data, validation, digest: contentDigest(bytes) };
 }
 
 export async function loadArtifactSchema(artifact, version) {
@@ -297,8 +274,10 @@ function componentMatches(componentPath, affectedPath) {
 }
 
 function resolvedValidation(item, sourcePath, defaultCwd = ".") {
-  if (typeof item === "string") return { command: item, cwd: defaultCwd, timeout_ms: 120000, required: true, source: sourcePath };
-  return { command: item.command, cwd: item.cwd ?? defaultCwd, timeout_ms: item.timeout_ms ?? 120000, required: item.required !== false, source: item.source };
+  const command = typeof item === "string" ? item : item.command;
+  if (typeof command !== "string" || command.length === 0 || /^\s*<[^>]+>\s*$/.test(command)) throw new InputError(`validation command from ${sourcePath} is unresolved or invalid`);
+  if (typeof item === "string") return { command, cwd: defaultCwd, timeout_ms: 120000, required: true, source: sourcePath };
+  return { command, cwd: item.cwd ?? defaultCwd, timeout_ms: item.timeout_ms ?? 120000, required: item.required !== false, source: item.source };
 }
 
 export function validateWorkItemPayload(profile, payload) {
@@ -390,6 +369,11 @@ export function computeRequirementsDigest(fields) {
   return createHash("sha256").update(REQUIREMENTS_DOMAIN).update(canonicalJson(fields)).digest("hex");
 }
 
+export function computeAuthorizationDigest({ target, operation, payload }) {
+  if (typeof target !== "string" || target.length === 0 || typeof operation !== "string" || operation.length === 0) throw new InputError("authorization digest requires target and operation");
+  return createHash("sha256").update(AUTHORIZATION_DOMAIN).update(canonicalJson({ target, operation, payload: payload ?? null })).digest("hex");
+}
+
 export function recordExternalAction(input) {
   const authorization = input.authorized_by ?? input.authorization;
   const receipt = {
@@ -411,13 +395,19 @@ export function recordExternalAction(input) {
     summary: redactAndBound(input.summary)
   };
   if (authorization !== undefined) receipt.authorized_by = typeof authorization === "string" ? authorization : authorization.actor;
-  if (input.authorization_digest !== undefined) receipt.authorization_digest = input.authorization_digest;
+  if (input.effect === "write") {
+    if (typeof input.authorization_digest === "string") {
+      const expected = computeAuthorizationDigest(input);
+      if (input.authorization_digest !== expected) throw new InputError("authorization digest does not match the exact target, operation, and payload");
+      receipt.authorization_digest = expected;
+    }
+  } else if (input.authorization_digest !== undefined) receipt.authorization_digest = input.authorization_digest;
   for (const key of ["external_id", "url", "before_revision", "after_revision"]) if (input[key] !== undefined) receipt[key] = input[key];
   return receipt;
 }
 
 export async function runValidationCommand(input, cwd) {
-  if (!input || typeof input.command !== "string" || input.command.length === 0) throw new InputError("each validation command requires a non-empty command string");
+  if (!input || typeof input.command !== "string" || input.command.length === 0 || /^\s*<[^>]+>\s*$/.test(input.command)) throw new InputError("each validation command requires a resolved non-placeholder command string");
   const started = Date.now();
   if (input.timeout_ms !== undefined && (!Number.isInteger(input.timeout_ms) || input.timeout_ms < 1)) throw new InputError("timeout_ms must be a positive integer");
   return await new Promise((done) => {
@@ -440,21 +430,21 @@ export const CURRENT_PROJECT_SCHEMA = 5;
 export function checkCompatibility({ project_schema, plugin_version, artifact_plugin_version }) {
   const semverMajor = (version) => { const match = /^(\d+)\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.exec(version ?? ""); return match ? Number(match[1]) : undefined; };
   const installedMajor = semverMajor(plugin_version);
-  if (installedMajor === undefined) return { compatible: false, migration_required: false, reason: "plugin_version must be semantic version x.y.z" };
-  if (!Number.isInteger(project_schema) || project_schema < 1) return { compatible: false, migration_required: false, reason: "project_schema must be a positive integer" };
+  if (installedMajor === undefined) return { compatible: false, reason: "plugin_version must be semantic version x.y.z" };
+  if (!Number.isInteger(project_schema) || project_schema < 1) return { compatible: false, reason: "project_schema must be a positive integer" };
   if (project_schema !== CURRENT_PROJECT_SCHEMA) {
-    return { compatible: false, migration_required: false, reason: `project schema ${project_schema} is not supported; this ADW release accepts only schema ${CURRENT_PROJECT_SCHEMA}` };
+    return { compatible: false, reason: `project schema ${project_schema} is not supported; this ADW release accepts only schema ${CURRENT_PROJECT_SCHEMA}` };
   }
   if (artifact_plugin_version !== undefined) {
     const artifactMajor = semverMajor(artifact_plugin_version);
-    if (artifactMajor === undefined) return { compatible: false, migration_required: false, reason: "artifact_plugin_version must be semantic version x.y.z" };
-    if (artifactMajor > installedMajor) return { compatible: false, migration_required: false, reason: `artifact requires plugin major ${artifactMajor}, installed major is ${installedMajor}` };
+    if (artifactMajor === undefined) return { compatible: false, reason: "artifact_plugin_version must be semantic version x.y.z" };
+    if (artifactMajor > installedMajor) return { compatible: false, reason: `artifact requires plugin major ${artifactMajor}, installed major is ${installedMajor}` };
   }
-  return { compatible: true, migration_required: false, reason: "project artifacts are compatible" };
+  return { compatible: true, reason: "project artifacts are compatible" };
 }
 
 export async function resolveProjectPath(projectRoot, explicitRelativePath) {
-  if (typeof projectRoot !== "string" || typeof explicitRelativePath !== "string" || !projectRoot || !explicitRelativePath || isAbsolute(explicitRelativePath) || explicitRelativePath.includes("\0")) throw new PathError("migration paths must be explicit project-relative paths");
+  if (typeof projectRoot !== "string" || typeof explicitRelativePath !== "string" || !projectRoot || !explicitRelativePath || isAbsolute(explicitRelativePath) || explicitRelativePath.includes("\0")) throw new PathError("paths must be explicit project-relative paths");
   const root = await realpath(projectRoot);
   const target = resolve(root, explicitRelativePath);
   const rel = relative(root, target);
@@ -489,13 +479,13 @@ export async function resolveProjectDirectory(projectRoot, explicitRelativePath)
   return actual;
 }
 
-export async function applyAtomicMigration(projectRoot, operations) {
-  if (!Array.isArray(operations) || operations.length === 0) throw new InputError("migration requires at least one explicit write operation");
-  for (const operation of operations) if (!operation || typeof operation.path !== "string" || typeof operation.content !== "string") throw new InputError("each migration operation requires string path and content fields");
+export async function applyAtomicWrites(projectRoot, operations) {
+  if (!Array.isArray(operations) || operations.length === 0) throw new InputError("atomic write requires at least one explicit operation");
+  for (const operation of operations) if (!operation || typeof operation.path !== "string" || typeof operation.content !== "string") throw new InputError("each atomic write operation requires string path and content fields");
   const destinations = await Promise.all(operations.map((operation) => resolveProjectPath(projectRoot, operation.path)));
-  if (new Set(destinations).size !== destinations.length) throw new InputError("migration contains duplicate destination paths");
+  if (new Set(destinations).size !== destinations.length) throw new InputError("atomic write contains duplicate destination paths");
   const root = await realpath(projectRoot);
-  const transaction = await mkdtemp(resolve(root, ".adw-migration-"));
+  const transaction = await mkdtemp(resolve(root, ".adw-atomic-write-"));
   const originals = [];
   try {
     for (let index = 0; index < operations.length; index += 1) {
@@ -508,21 +498,21 @@ export async function applyAtomicMigration(projectRoot, operations) {
         if (destinationStat.isSymbolicLink()) throw new PathError(`destination is a symbolic link: ${operation.path}`);
         previous = await readFile(destination, "utf8");
       } catch (error) { if (error instanceof PathError || error.code !== "ENOENT") throw error; }
-      if (Object.hasOwn(operation, "expected_content") && operation.expected_content !== previous) throw new MigrationError(`precondition failed for ${operation.path}`);
+      if (Object.hasOwn(operation, "expected_content") && operation.expected_content !== previous) throw new AtomicWriteError(`precondition failed for ${operation.path}`);
       const staged = resolve(transaction, `new-${index}`);
       await writeFile(staged, operation.content, { encoding: "utf8", mode: destinationStat?.mode ?? 0o644, flag: "wx" });
       await mkdir(dirname(destination), { recursive: true });
       // Re-resolve immediately before mutation so a replaced parent symlink is caught.
-      if (await resolveProjectPath(projectRoot, operation.path) !== destination) throw new PathError(`path changed while migration was prepared: ${operation.path}`);
+      if (await resolveProjectPath(projectRoot, operation.path) !== destination) throw new PathError(`path changed while atomic writes were prepared: ${operation.path}`);
       let backup;
       try {
         const currentStat = await lstat(destination);
-        if (!destinationStat || currentStat.isSymbolicLink() || currentStat.dev !== destinationStat.dev || currentStat.ino !== destinationStat.ino) throw new MigrationError(`destination changed while migration was prepared: ${operation.path}`);
+        if (!destinationStat || currentStat.isSymbolicLink() || currentStat.dev !== destinationStat.dev || currentStat.ino !== destinationStat.ino) throw new AtomicWriteError(`destination changed while atomic writes were prepared: ${operation.path}`);
         backup = resolve(transaction, `old-${index}`);
         await rename(destination, backup);
       } catch (error) {
         if (error.code !== "ENOENT") throw error;
-        if (destinationStat) throw new MigrationError(`destination changed while migration was prepared: ${operation.path}`);
+        if (destinationStat) throw new AtomicWriteError(`destination changed while atomic writes were prepared: ${operation.path}`);
       }
       originals.push({ destination, backup });
       await rename(staged, destination);
@@ -532,8 +522,8 @@ export async function applyAtomicMigration(projectRoot, operations) {
       await rm(original.destination, { force: true });
       if (original.backup) await rename(original.backup, original.destination);
     }
-    if (error instanceof InputError || error instanceof PathError || error instanceof MigrationError) throw error;
-    throw new MigrationError(error.message, { cause: error });
+    if (error instanceof InputError || error instanceof PathError || error instanceof AtomicWriteError) throw error;
+    throw new AtomicWriteError(error.message, { cause: error });
   } finally {
     await rm(transaction, { recursive: true, force: true });
   }
@@ -542,7 +532,7 @@ export async function applyAtomicMigration(projectRoot, operations) {
 class CodedError extends Error { constructor(message, code, options) { super(message, options); this.code = code; } }
 export class InputError extends CodedError { constructor(message, options) { super(message, EXIT.INPUT, options); } }
 export class PathError extends CodedError { constructor(message, options) { super(message, EXIT.PATH_VIOLATION, options); } }
-export class MigrationError extends CodedError { constructor(message, options) { super(message, EXIT.MIGRATION_FAILED, options); } }
+export class AtomicWriteError extends CodedError { constructor(message, options) { super(message, EXIT.ATOMIC_WRITE_FAILED, options); } }
 
 function requireObject(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new InputError("input must be a JSON object");
@@ -555,6 +545,10 @@ export async function dispatch(command, rawInput) {
     case "validate": {
       const validation = await validateArtifact(input.artifact, input.data);
       return { exitCode: validation.valid ? EXIT.OK : EXIT.SCHEMA_INVALID, body: { ok: validation.valid, artifact: input.artifact, errors: validation.errors } };
+    }
+    case "load-artifact-file": {
+      const loaded = await loadArtifactFile(input);
+      return { exitCode: loaded.validation.valid ? EXIT.OK : EXIT.SCHEMA_INVALID, body: { ok: loaded.validation.valid, artifact: input.artifact, data: loaded.data, digest: loaded.digest, errors: loaded.validation.errors } };
     }
     case "digest-bundle": {
       const bundle = computeApprovalBundle(input.inputs);
@@ -598,6 +592,8 @@ export async function dispatch(command, rawInput) {
     }
     case "digest-requirements":
       return { exitCode: EXIT.OK, body: { ok: true, algorithm: "sha256", digest: computeRequirementsDigest(input.fields) } };
+    case "digest-authorization":
+      return { exitCode: EXIT.OK, body: { ok: true, algorithm: "sha256", digest: computeAuthorizationDigest(input) } };
     case "resolve-project-policy": {
       const projectValidation = await validateArtifact("project", input.project);
       if (!projectValidation.valid) return { exitCode: EXIT.SCHEMA_INVALID, body: { ok: false, errors: projectValidation.errors } };
@@ -622,8 +618,8 @@ export async function dispatch(command, rawInput) {
       const compatibility = checkCompatibility(input);
       return { exitCode: compatibility.compatible ? EXIT.OK : EXIT.INCOMPATIBLE, body: { ok: compatibility.compatible, ...compatibility } };
     }
-    case "migrate":
-      await applyAtomicMigration(input.project_root, input.operations);
+    case "apply-atomic-writes":
+      await applyAtomicWrites(input.project_root, input.operations);
       return { exitCode: EXIT.OK, body: { ok: true, written: input.operations.map((operation) => operation.path) } };
     default:
       throw new InputError(`unknown command ${JSON.stringify(command)}`);

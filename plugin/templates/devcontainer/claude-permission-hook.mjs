@@ -24,8 +24,25 @@ function knownProviderRead(segment) {
     || /(?:^|[\s'"])(?:[^\s'"]*\/)?az\s+(?:(?:--organization|--project)\s+\S+\s+)*(?:boards\s+query|boards\s+work-item\s+show|repos\s+pr\s+(?:list|show))(?:\s|$)/i.test(segment);
 }
 
+function isForcePush(command) {
+  return shellSegments(command).some((segment) => {
+    const push = /\bgit\b[^;\n|&]*\bpush\b([^;\n|&]*)/i.exec(segment);
+    if (!push) return false;
+    return push[1].trim().split(/\s+/).some((rawToken) => {
+      const token = rawToken.replace(/^["']+|["']+$/g, "");
+      return /^--force(?:=.*)?$/i.test(token)
+        || /^--force-with-lease(?:=.*)?$/i.test(token)
+        || /^-[^-]*f[^-]*$/.test(token)
+        || token.toLowerCase() === "--mirror"
+        || token.startsWith("+");
+    });
+  });
+}
+
+const providerExecutables = ["gh", "az", "glab", "jira", "datadog-ci", "datadog", "notion"];
+
 function classifyBash(command) {
-  if (/\bgit\b[^;\n|&]*\bpush\b[^;\n|&]*(?:--force(?:-with-lease)?|(?:^|\s)-f(?:\s|$))/im.test(command)
+  if (isForcePush(command)
       || /\bgit\s+(?:-\S+\s+)*reset\s+--hard\b|\bgit\s+(?:-\S+\s+)*clean\s+-[^\s;|&]*f/i.test(command)
       || /\bgh\s+pr\s+merge\b|\bgh\s+release\s+(?:create|delete|edit|upload)\b/i.test(command)
       || /\b(?:npm|pnpm|yarn)\s+(?:publish|unpublish)\b|\bdotnet\s+nuget\s+(?:push|delete)\b/i.test(command)
@@ -44,7 +61,7 @@ function classifyBash(command) {
     return ["ask", "ADW requires approval before an external or destructive mutation."];
   }
   for (const segment of shellSegments(command)) {
-    if ((providerCommand(segment, "gh") || providerCommand(segment, "az")) && !knownProviderRead(segment)) {
+    if (providerExecutables.some((executable) => providerCommand(segment, executable)) && !knownProviderRead(segment)) {
       return ["ask", "ADW requires approval for an unclassified provider command."];
     }
   }
@@ -56,7 +73,8 @@ try {
   const tool = String(input.tool_name ?? "");
   if (tool.startsWith("mcp__")) {
     const operation = tool.split("__").at(-1).toLowerCase();
-    if (/^(?:(?:wit|git|core|repo|repos|build|work|workitem)_)?(?:get|list|read|search|find|fetch|query|view|show|status|check|inspect|lookup|describe)(?:_|$)/.test(operation)) {
+    const mutating = /(?:^|_)(?:add|approve|archive|assign|cancel|close|comment|create|delete|deploy|disable|edit|enable|execute|merge|modify|move|publish|release|remove|resolve|run|send|set|submit|transition|trigger|update|upload|write)(?:_|$)/.test(operation);
+    if (!mutating && /^(?:(?:wit|git|core|repo|repos|build|work|workitem)_)?(?:get|list|read|search|find|fetch|query|view|show|status|check|inspect|lookup|describe)(?:_|$)/.test(operation)) {
       result("allow", "ADW allows bounded read-only integration tools.");
     } else {
       result("ask", "ADW requires approval for unknown or mutating integration tools.");

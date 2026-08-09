@@ -42,8 +42,9 @@ prefix_rule(pattern = ["az", "repos", "pr", ["list", "show"]], decision = "allow
 prefix_rule(pattern = ["az", "boards", "work-item", ["create", "delete", "update"]], decision = "prompt")
 prefix_rule(pattern = ["az", "repos", "pr", ["create", "update"]], decision = "prompt")
 prefix_rule(pattern = ["az", "devops", "invoke"], decision = "prompt")
+prefix_rule(pattern = [["glab", "jira", "datadog-ci", "datadog", "notion"]], decision = "prompt")
 
-prefix_rule(pattern = ["git", "push", ["--force", "--force-with-lease", "-f"]], decision = "forbidden")
+prefix_rule(pattern = ["git", "push", ["--force", "--force-with-lease", "-f", "--mirror"]], decision = "forbidden")
 prefix_rule(pattern = ["git", "reset", "--hard"], decision = "forbidden")
 prefix_rule(pattern = ["git", "clean", ["-f", "-fd", "-fdx", "-fx"]], decision = "forbidden")
 prefix_rule(pattern = ["gh", "pr", "merge"], decision = "forbidden")
@@ -71,6 +72,13 @@ function topLevelTomlValue(source, key) {
   return undefined;
 }
 
+function tableTomlValue(source, table, key) {
+  const escaped = table.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const section = new RegExp(`^\\s*\\[${escaped}\\]\\s*$([\\s\\S]*?)(?=^\\s*\\[|(?![\\s\\S]))`, "m").exec(source)?.[1];
+  if (!section) return undefined;
+  return new RegExp(`^\\s*${key}\\s*=\\s*(["'])([^"']+)\\1\\s*(?:#.*)?$`, "m").exec(section)?.[2];
+}
+
 function ensureCodexAppApproval(source) {
   const section = /^\[apps\._default\]\s*$([\s\S]*?)(?=^\[|(?![\s\S]))/m.exec(source);
   if (!section) {
@@ -94,6 +102,13 @@ export function mergeCodexConfig(source = "") {
     const value = topLevelTomlValue(source, key);
     if (value && value !== expected) throw new Error(`.codex/config.toml ${key}=${JSON.stringify(value)} conflicts with ${PERMISSION_PROFILE}`);
   }
+  const activeProfile = topLevelTomlValue(source, "profile");
+  if (activeProfile) {
+    for (const [key, expected] of [["approval_policy", "on-request"], ["sandbox_mode", "workspace-write"]]) {
+      const value = tableTomlValue(source, `profiles.${activeProfile}`, key);
+      if (value && value !== expected) throw new Error(`.codex/config.toml active profile ${JSON.stringify(activeProfile)} sets ${key}=${JSON.stringify(value)}, which conflicts with ${PERMISSION_PROFILE}`);
+    }
+  }
   const missing = CODEX_ROOT_SETTINGS.filter((line) => !topLevelTomlValue(source, line.split(" = ")[0]));
   if (missing.length > 0) source = `${CODEX_START}\n${missing.join("\n")}\n${CODEX_END}\n${source.replace(/^\n+/, "")}`;
   return ensureCodexAppApproval(source).replace(/^\n+/, "");
@@ -115,6 +130,7 @@ export const CLAUDE_ASK = [
 
 export const CLAUDE_DENY = [
   "Bash(git push --force *)", "Bash(git push --force-with-lease *)", "Bash(git push -f *)",
+  "Bash(git push --mirror *)", "Bash(git push * --force *)", "Bash(git push * --force-with-lease *)", "Bash(git push * -f *)", "Bash(git push * +*)",
   "Bash(git reset --hard *)", "Bash(git clean -f *)", "Bash(git clean -fd *)", "Bash(git clean -fdx *)",
   "Bash(gh pr merge *)", "Bash(gh release create *)", "Bash(gh release delete *)", "Bash(gh release edit *)", "Bash(gh release upload *)",
   "Bash(npm publish *)", "Bash(npm unpublish *)", "Bash(pnpm publish *)", "Bash(yarn publish *)", "Bash(dotnet nuget push *)", "Bash(dotnet nuget delete *)",
@@ -136,11 +152,14 @@ export function mergeClaudeSettings(source = "") {
   const permissions = settings.permissions && typeof settings.permissions === "object" && !Array.isArray(settings.permissions) ? { ...settings.permissions } : {};
   if (permissions.defaultMode && permissions.defaultMode !== "acceptEdits") throw new Error(`.claude/settings.json permissions.defaultMode=${JSON.stringify(permissions.defaultMode)} conflicts with ${PERMISSION_PROFILE}`);
   if (permissions.allow !== undefined && !Array.isArray(permissions.allow)) throw new Error(".claude/settings.json permissions.allow must be an array");
+  if ((permissions.allow ?? []).some((rule) => typeof rule !== "string")) throw new Error(".claude/settings.json permissions.allow entries must be strings");
   if ((permissions.allow ?? []).some((rule) => /^mcp__\*$/.test(rule))) throw new Error(".claude/settings.json contains a broad MCP allow rule that conflicts with managed external-write review");
+  const bashAllows = (permissions.allow ?? []).filter((rule) => typeof rule === "string" && /^Bash(?:\(|$)/.test(rule));
+  if (bashAllows.length > 0) throw new Error(`.claude/settings.json contains Bash allow rules that ${PERMISSION_PROFILE} cannot preserve safely; review and remove them explicitly: ${bashAllows.join(", ")}`);
   permissions.defaultMode = "acceptEdits";
   permissions.disableBypassPermissionsMode = "disable";
-  const nonBashAllows = (permissions.allow ?? []).filter((rule) => typeof rule === "string" && !/^Bash(?:\(|$)/.test(rule));
-  if (nonBashAllows.length > 0) permissions.allow = nonBashAllows;
+  const existingAllows = (permissions.allow ?? []).filter((rule) => typeof rule === "string");
+  if (existingAllows.length > 0) permissions.allow = existingAllows;
   else delete permissions.allow;
   permissions.ask = union(permissions.ask, CLAUDE_ASK);
   permissions.deny = union(permissions.deny, CLAUDE_DENY);
@@ -180,13 +199,19 @@ export function permissionProjectFiles(agentTools, readExisting = () => "") {
 }
 
 export function permissionAgentsFromProject(projectRoot, { existsSync, readFileSync, lstatSync, realpathSync, relative, isAbsolute, join }) {
+  for (const [name, dependency] of Object.entries({ existsSync, readFileSync, lstatSync, realpathSync, relative, isAbsolute, join })) {
+    if (typeof dependency !== "function") throw new TypeError(`permissionAgentsFromProject requires ${name}`);
+  }
+  const projectReal = realpathSync(projectRoot);
   const safe = (path) => {
-    if (!existsSync(path) || (lstatSync && lstatSync(path).isSymbolicLink())) return false;
-    if (realpathSync && relative && isAbsolute) {
-      const rel = relative(realpathSync(projectRoot), realpathSync(path));
+    try {
+      if (!existsSync(path) || lstatSync(path).isSymbolicLink()) return false;
+      const rel = relative(projectReal, realpathSync(path));
       if (rel === ".." || rel.startsWith("../") || isAbsolute(rel)) return false;
+      return true;
+    } catch {
+      return false;
     }
-    return true;
   };
   const markerPath = join(projectRoot, ".devcontainer/adw-managed.json");
   if (safe(markerPath)) {
@@ -195,10 +220,8 @@ export function permissionAgentsFromProject(projectRoot, { existsSync, readFileS
       if (["codex", "claude", "both"].includes(profile)) return profile;
     } catch {}
   }
-  const codexPolicy = safe(join(projectRoot, ".codex/rules/adw.rules")) || safe(join(projectRoot, ".codex/config.toml"));
+  const codexPolicy = safe(join(projectRoot, ".codex/rules/adw.rules"));
   const claudePolicy = safe(join(projectRoot, ".claude/settings.json"));
   if (codexPolicy || claudePolicy) return codexPolicy && claudePolicy ? "both" : claudePolicy ? "claude" : "codex";
-  const hasCodex = safe(join(projectRoot, "AGENTS.md"));
-  const hasClaude = safe(join(projectRoot, "CLAUDE.md"));
-  return hasCodex && hasClaude ? "both" : hasClaude ? "claude" : "codex";
+  return "unknown";
 }

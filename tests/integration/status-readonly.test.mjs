@@ -32,7 +32,10 @@ function fixture() {
   writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { test: "node --test" } }));
   git(root, "add", ".");
   git(root, "commit", "-q", "-m", "fixture");
-  const initialized = spawnSync(process.execPath, [initScript, "apply", "--project-root", root, "--confirmed"], { encoding: "utf8" });
+  const previewResult = spawnSync(process.execPath, [initScript, "preview", "--project-root", root], { encoding: "utf8" });
+  assert.equal(previewResult.status, 0, previewResult.stderr || previewResult.stdout);
+  const preview = JSON.parse(previewResult.stdout);
+  const initialized = spawnSync(process.execPath, [initScript, "apply", "--project-root", root, "--confirmed", "--preview-digest", preview.preview_digest], { encoding: "utf8" });
   assert.equal(initialized.status, 0, initialized.stderr || initialized.stdout);
   return root;
 }
@@ -110,7 +113,7 @@ test("doctor and status reconstruct initialized state without writes", async () 
   assert.equal(status.changes[0].approval.state, "active");
   assert.equal(status.changes[0].validation.state, "passed");
   assert.equal(status.changes[0].state, "validated");
-  assert.equal(status.draft_prs.state, "not-queried");
+  assert.equal(status.draft_prs, undefined);
   assert.equal(status.pull_requests.state, "not-queried");
   assert.equal(fingerprint(root), beforeFingerprint);
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), codeStatusBefore);
@@ -132,5 +135,40 @@ test("status reports an approval stale when exact plan bytes change", () => {
   const status = run(statusScript, root);
   assert.equal(status.changes[0].approval.state, "invalid");
   assert.equal(status.changes[0].approval.reason, "approval digest is stale");
+  assert.equal(status.changes[0].state, "planned");
+});
+
+test("status invalidates an approval when integrations appear unbound and does not preserve validated state", () => {
+  const root = fixture();
+  const change = join(root, "worktrees/docs/changes/unbound-integrations");
+  mkdirSync(change, { recursive: true });
+  const spec = "# Unbound integration\n";
+  const plan = "schema: 2\nchange_id: unbound-integrations\n";
+  writeFileSync(join(change, "spec.md"), spec);
+  writeFileSync(join(change, "plan.yaml"), plan);
+  const docsCommit = git(root, "-C", join(root, "worktrees/docs"), "rev-parse", "HEAD");
+  const approval = createApprovalBundle({
+    approver: "test",
+    approved_at: "2026-08-05T12:00:00Z",
+    plugin_version: "0.5.0",
+    docs_commit: docsCommit,
+    inputs: [{ path: "spec.md", content: spec }, { path: "plan.yaml", content: plan }],
+  });
+  writeFileSync(join(change, "approval.json"), `${JSON.stringify(approval, null, 2)}\n`);
+  writeFileSync(join(change, "integrations.yaml"), "schema: 1\nchange_id: unbound-integrations\nbindings: []\n");
+  const validation = recordValidation({
+    change_id: "unbound-integrations",
+    plugin_version: "0.5.0",
+    code_commit: git(root, "rev-parse", "HEAD"),
+    docs_commit: docsCommit,
+    recorded_at: "2026-08-05T12:05:00Z",
+    commands: [{ command: "npm test", cwd: ".", exit_code: 0, duration_ms: 1, summary: "passed", required: true }],
+  });
+  writeFileSync(join(change, "validation.json"), `${JSON.stringify(validation, null, 2)}\n`);
+
+  const status = run(statusScript, root);
+  assert.equal(status.changes[0].approval.state, "invalid");
+  assert.equal(status.changes[0].approval.reason, "integrations.yaml exists but is not bound by the approval");
+  assert.equal(status.changes[0].validation.state, "passed");
   assert.equal(status.changes[0].state, "planned");
 });

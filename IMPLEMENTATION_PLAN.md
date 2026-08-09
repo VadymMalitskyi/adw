@@ -1,8 +1,10 @@
-# ADW Private Plugin — 0.2 Implementation Plan
+# ADW Private Plugin — Historical 0.2 Implementation Plan
 
-**Status:** 0.1 foundation implemented; 0.2 optional integration layer in implementation
+**Status:** Historical implementation record; superseded by the current README, schemas, and plugin contracts
 **Prepared:** 2026-08-05
 **Target:** Personal/private first, organization-private later
+
+> This plan records the 0.2 implementation sequence. It is not the implementation plan for the current 0.6.0 / project-schema-5 release and must not override current schemas or plugin contracts.
 
 ## 1. Outcome
 

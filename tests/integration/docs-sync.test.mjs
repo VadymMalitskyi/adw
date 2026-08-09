@@ -110,6 +110,28 @@ test("sync-docs reports drift without writes and protects authoritative records 
   assert.match(readFileSync(join(docs, "SYNC.yaml"), "utf8"), new RegExp(`reviewed_through: "${before.codeHead}"`));
 });
 
+test("sync-docs classifies common nested manifests, lockfiles, and build files", () => {
+  const { root } = fixture();
+  const files = {
+    "package-lock.json": "{}\n",
+    "services/api/go.mod": "module example.invalid/api\n\ngo 1.23\n",
+    "services/api/requirements-dev.txt": "pytest==8.3.5\n",
+    "packages/web/pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+    "packages/web/pom.xml": "<project/>\n",
+    "src/Widget.csproj": "<Project/>\n",
+  };
+  for (const [path, content] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    writeFileSync(join(root, path), content);
+  }
+  git(root, "add", ".");
+  git(root, "commit", "-q", "-m", "add build manifests");
+
+  const report = JSON.parse(run(root, ["report"]).stdout);
+  const categories = new Map(report.changes.map(({ path, category }) => [path, category]));
+  for (const path of Object.keys(files)) assert.equal(categories.get(path), "manifest-or-build", path);
+});
+
 test("sync-docs stops on dirty and non-fast-forward worktrees", () => {
   const dirty = fixture();
   writeFileSync(join(dirty.root, "app.js"), "dirty\n");

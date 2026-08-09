@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dispatch, EXIT, validateArtifact } from "../../plugin/lib/adw-helper.mjs";
+import { computeAuthorizationDigest, dispatch, EXIT, validateArtifact } from "../../plugin/lib/adw-helper.mjs";
 
 const base = {
   change_id: "api.retry",
@@ -43,12 +43,12 @@ test("write receipts require authorization evidence and verified readback", asyn
     target: "contoso/platform",
     idempotency_key: "adw:platform:api.retry:create_work_item",
     authorized_by: "Ada",
-    authorization_digest: "d".repeat(64),
     payload: { title: "Retry API calls", access_token: "payload-secret" },
     readback: { external_id: "12345", revision: 1, password: "readback-secret" },
     summary: "created item; Authorization: Bearer summary-secret",
     verified: true,
   };
+  write.authorization_digest = computeAuthorizationDigest(write);
 
   const recorded = await dispatch("record-external-action", write);
   assert.equal(recorded.exitCode, EXIT.OK);

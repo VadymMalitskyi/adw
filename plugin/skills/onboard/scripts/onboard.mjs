@@ -18,6 +18,7 @@ import {
   localConfigurationSummary,
   renderLocalConfiguration,
 } from "../../../lib/local-configuration.mjs";
+import { loadArtifactFile } from "../../../lib/adw-helper.mjs";
 
 const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -62,65 +63,17 @@ function projectRoot(input) {
   return root;
 }
 
-function yamlScalar(raw, path) {
-  const value = raw.trim();
-  if (value.length === 0) fail(`${path} must be a scalar`);
-  if (value.startsWith('"')) {
-    try {
-      const parsed = JSON.parse(value);
-      if (typeof parsed !== "string") fail(`${path} must be a string`);
-      return parsed;
-    } catch (error) {
-      fail(`${path} contains an invalid quoted string: ${error.message}`);
-    }
-  }
-  if (value.startsWith("'")) {
-    if (!value.endsWith("'")) fail(`${path} contains an invalid quoted string`);
-    return value.slice(1, -1).replace(/''/g, "'");
-  }
-  return value.replace(/\s+#.*$/, "").trim();
-}
-
-function section(source, key, indent = 0) {
-  const lines = source.split(/\r?\n/);
-  const prefix = " ".repeat(indent);
-  const start = lines.findIndex((line) => new RegExp(`^${prefix}${key}:\\s*(?:#.*)?$`).test(line));
-  if (start === -1) return null;
-  const body = [];
-  for (let index = start + 1; index < lines.length; index += 1) {
-    const line = lines[index];
-    if (line.trim() === "" || line.trimStart().startsWith("#")) {
-      body.push(line);
-      continue;
-    }
-    const leading = line.length - line.trimStart().length;
-    if (leading <= indent) break;
-    body.push(line);
-  }
-  return body.join("\n");
-}
-
-function field(source, key, indent, path) {
-  const prefix = " ".repeat(indent);
-  const match = source.match(new RegExp(`^${prefix}${key}:\\s*(.+?)\\s*$`, "m"));
-  if (!match) fail(`${path} is required`);
-  return yamlScalar(match[1], path);
-}
-
-function parseProjectConfiguration(root) {
+async function parseProjectConfiguration(root) {
   const path = join(root, "adw.yaml");
   if (!existsSync(path)) fail("adw.yaml is missing; only a project maintainer should initialize the project with adw:init");
   const entry = lstatSync(path);
   if (entry.isSymbolicLink() || !entry.isFile()) fail("adw.yaml must be a non-symlink file");
   const source = readFileSync(path, "utf8");
-  const schemaMatch = source.match(/^schema:\s*(\d+)\s*(?:#.*)?$/m);
-  if (!schemaMatch || Number(schemaMatch[1]) !== 5) fail("adw:onboard requires project schema 5 supported by this plugin");
-
-  const documentation = section(source, "documentation");
-  if (!documentation) fail("adw.yaml documentation configuration is missing");
-  const mode = field(documentation, "mode", 2, "documentation.mode");
-  const branch = field(documentation, "branch", 2, "documentation.branch");
-  const worktree = field(documentation, "worktree", 2, "documentation.worktree");
+  const loaded = await loadArtifactFile({ project_root: root, path: "adw.yaml", artifact: "project" });
+  const project = loaded.data;
+  const validation = loaded.validation;
+  if (!validation.valid) fail(`adw.yaml is invalid: ${validation.errors.map((item) => `${item.path} ${item.message}`).join("; ")}`);
+  const { mode, branch, worktree } = project.documentation;
   if (mode !== "branch") fail("documentation.mode must equal branch");
   if (branch.startsWith("-") || git(root, ["check-ref-format", `refs/heads/${branch}`], { allowFailure: true }).status !== 0) {
     fail(`documentation.branch is not a safe Git branch name: ${branch}`);
@@ -131,18 +84,7 @@ function parseProjectConfiguration(root) {
     fail("documentation.worktree must be a confined root-relative worktrees/<name> path");
   }
 
-  const integrations = {};
-  const integrationsSection = section(source, "integrations");
-  if (integrationsSection) {
-    for (const capability of CAPABILITIES) {
-      const capabilitySection = section(integrationsSection, capability, 2);
-      if (!capabilitySection) continue;
-      integrations[capability] = {
-        provider: field(capabilitySection, "provider", 4, `integrations.${capability}.provider`),
-        requirement: field(capabilitySection, "requirement", 4, `integrations.${capability}.requirement`),
-      };
-    }
-  }
+  const integrations = Object.fromEntries(CAPABILITIES.filter((capability) => project.integrations?.[capability]).map((capability) => [capability, project.integrations[capability]]));
   return { source, documentation: { branch, worktree, target: worktreeTarget }, integrations };
 }
 
@@ -257,7 +199,7 @@ function writeLocal(local) {
 try {
   const args = parseArguments(process.argv.slice(2));
   const root = projectRoot(args.projectRoot);
-  const project = parseProjectConfiguration(root);
+  const project = await parseProjectConfiguration(root);
   const local = loadLocalAnswers(args.answersPath, project.integrations, pluginRoot);
   const docs = docsPlan(root, project.documentation);
   const localFile = localPlan(root, local);

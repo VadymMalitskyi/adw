@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadArtifactFile, parseYaml } from "../../../lib/adw-helper.mjs";
 import { CODEX_RULES, PERMISSION_PROFILE, managedClaudeSettings, mergeClaudeSettings, mergeCodexConfig, permissionAgentsFromProject } from "../../../execution/managed-development.mjs";
 
 const skillDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -31,63 +32,6 @@ function boundedBlock(text, start, end) {
   const starts = text.split(start).length - 1;
   const ends = text.split(end).length - 1;
   return starts === 1 && ends === 1 && text.indexOf(start) < text.indexOf(end);
-}
-
-function yamlValue(text, key) {
-  const match = text.match(new RegExp(`^\\s*${key}:\\s*(?:"([^"]*)"|'([^']*)'|([^#\\n]+))`, "m"));
-  return match ? (match[1] ?? match[2] ?? match[3]).trim() : undefined;
-}
-
-function integrationDeclarations(text) {
-  const lines = text.split(/\r?\n/);
-  const start = lines.findIndex((line) => /^integrations:\s*(?:#.*)?$/.test(line));
-  if (start === -1) return [];
-  const declarations = [];
-  let current;
-  for (const line of lines.slice(start + 1)) {
-    if (/^\S/.test(line)) break;
-    const capability = /^  (work_tracker|code_host|observability|knowledge):\s*(?:#.*)?$/.exec(line);
-    if (capability) {
-      current = { capability: capability[1] };
-      declarations.push(current);
-      continue;
-    }
-    if (!current) continue;
-    const field = /^    (provider|requirement|transport|access):\s*(?:"([^"]*)"|'([^']*)'|([^#\n]+))/.exec(line);
-    if (field) current[field[1]] = (field[2] ?? field[3] ?? field[4]).trim();
-  }
-  return declarations;
-}
-
-function componentDeclarations(text) {
-  const lines = text.split(/\r?\n/);
-  const start = lines.findIndex((line) => /^components:\s*(?:#.*)?$/.test(line));
-  if (start === -1) return [];
-  const components = [];
-  let current;
-  for (const line of lines.slice(start + 1)) {
-    if (/^\S/.test(line)) break;
-    const component = /^  ([A-Za-z0-9_-]+):\s*(?:#.*)?$/.exec(line);
-    if (component) { current = { name: component[1] }; components.push(current); continue; }
-    const path = current && /^    path:\s*(?:"([^"]*)"|'([^']*)'|([^#\n]+))/.exec(line);
-    if (path) current.path = (path[1] ?? path[2] ?? path[3]).trim();
-  }
-  return components;
-}
-
-function executionDeclaration(text) {
-  const lines = text.split(/\r?\n/);
-  const start = lines.findIndex((line) => /^execution:\s*(?:#.*)?$/.test(line));
-  if (start === -1) return {};
-  const execution = {};
-  for (const line of lines.slice(start + 1)) {
-    if (/^\S/.test(line)) break;
-    const field = /^  (isolation|enforcement):\s*(?:"([^"]*)"|'([^']*)'|([^#\n]+))/.exec(line);
-    if (field) execution[field[1]] = (field[2] ?? field[3] ?? field[4]).trim();
-  }
-  const profile = text.match(/^    profile:\s*(?:"([^"]*)"|'([^']*)'|([^#\n]+))/m);
-  if (profile) execution.permissions = { profile: (profile[1] ?? profile[2] ?? profile[3]).trim() };
-  return execution;
 }
 
 function regularFile(path, projectRoot) {
@@ -121,25 +65,10 @@ function permissionChecks(projectRoot, execution) {
   return checks;
 }
 
-function workTrackerWorkflow(text) {
-  const lines = text.split(/\r?\n/);
-  const workflows = lines.findIndex((line) => /^workflows:\s*(?:#.*)?$/.test(line));
-  if (workflows === -1) return null;
-  const start = lines.findIndex((line, index) => index > workflows && /^  work_tracker:\s*(?:#.*)?$/.test(line));
-  if (start === -1) return null;
-  const policy = {};
-  for (const line of lines.slice(start + 1)) {
-    if (/^\S|^  \S/.test(line)) break;
-    const field = /^    (binding|ensure|stage|cardinality|profile|child_profile):\s*(?:"([^"]*)"|'([^']*)'|([^#\n]+))/.exec(line);
-    if (field) policy[field[1]] = (field[2] ?? field[3] ?? field[4]).trim();
-  }
-  return policy;
-}
-
-function workTrackerPolicyChecks(projectRoot, config, integrations) {
-  const policy = workTrackerWorkflow(config);
+async function workTrackerPolicyChecks(projectRoot, project) {
+  const policy = project.workflows?.work_tracker;
   if (!policy) return [];
-  const tracker = integrations.find(({ capability }) => capability === "work_tracker");
+  const tracker = project.integrations?.work_tracker;
   const validPolicy = ["optional", "required"].includes(policy.binding)
     && ["link-only", "create-or-link"].includes(policy.ensure)
     && ["plan", "execute"].includes(policy.stage)
@@ -158,15 +87,17 @@ function workTrackerPolicyChecks(projectRoot, config, integrations) {
     checks.push(check("workflow:work_tracker:profile", "fail", "profile must be an existing non-symlink project-relative file", { profile: policy.profile }));
     return checks;
   }
-  const profile = readFileSync(target, "utf8");
-  const provider = yamlValue(profile, "provider");
-  const structurallyPresent = yamlValue(profile, "schema") === "1"
-    && Boolean(yamlValue(profile, "id"))
-    && Boolean(yamlValue(profile, "object_type"))
-    && /^required_fields:\s*$/m.test(profile)
-    && /^requirement_fields:\s*$/m.test(profile);
-  const valid = structurallyPresent && provider === tracker?.provider;
-  checks.push(check("workflow:work_tracker:profile", valid ? "pass" : "fail", valid ? "profile structure and provider match" : "profile structure or provider is invalid", { profile: policy.profile, provider, sha256: createHash("sha256").update(profile).digest("hex") }));
+  let profile;
+  let profileValidation = { valid: false };
+  let profileDigest;
+  try {
+    const loaded = await loadArtifactFile({ project_root: projectRoot, path: policy.profile, artifact: "work-item-profile" });
+    profile = loaded.data;
+    profileValidation = loaded.validation;
+    profileDigest = loaded.digest;
+  } catch {}
+  const valid = profileValidation.valid && profile.provider === tracker?.provider;
+  checks.push(check("workflow:work_tracker:profile", valid ? "pass" : "fail", valid ? "profile schema and provider match" : "profile schema or provider is invalid", { profile: policy.profile, provider: profile?.provider, sha256: profileDigest }));
   if (policy.cardinality === "one-parent-plus-plan-tasks" && !policy.child_profile) checks.push(check("workflow:work_tracker:child-profile", "fail", "one-parent-plus-plan-tasks requires a child profile"));
   if (policy.child_profile) {
     const childTarget = resolve(projectRoot, policy.child_profile);
@@ -174,10 +105,17 @@ function workTrackerPolicyChecks(projectRoot, config, integrations) {
     if (isAbsolute(policy.child_profile) || childRel === ".." || childRel.startsWith("../") || !existsSync(childTarget) || lstatSync(childTarget).isSymbolicLink()) {
       checks.push(check("workflow:work_tracker:child-profile", "fail", "child profile must be an existing non-symlink project-relative file", { profile: policy.child_profile }));
     } else {
-      const child = readFileSync(childTarget, "utf8");
-      const childProvider = yamlValue(child, "provider");
-      const childValid = yamlValue(child, "schema") === "1" && Boolean(yamlValue(child, "id")) && Boolean(yamlValue(child, "object_type")) && /^required_fields:\s*$/m.test(child) && /^requirement_fields:\s*$/m.test(child) && childProvider === tracker?.provider;
-      checks.push(check("workflow:work_tracker:child-profile", childValid ? "pass" : "fail", childValid ? "child profile structure and provider match" : "child profile structure or provider is invalid", { profile: policy.child_profile, provider: childProvider, sha256: createHash("sha256").update(child).digest("hex") }));
+      let child;
+      let childValidation = { valid: false };
+      let childDigest;
+      try {
+        const loaded = await loadArtifactFile({ project_root: projectRoot, path: policy.child_profile, artifact: "work-item-profile" });
+        child = loaded.data;
+        childValidation = loaded.validation;
+        childDigest = loaded.digest;
+      } catch {}
+      const childValid = childValidation.valid && child.provider === tracker?.provider;
+      checks.push(check("workflow:work_tracker:child-profile", childValid ? "pass" : "fail", childValid ? "child profile schema and provider match" : "child profile schema or provider is invalid", { profile: policy.child_profile, provider: child?.provider, sha256: childDigest }));
     }
   }
   return checks;
@@ -212,8 +150,7 @@ function managedDevcontainerChecks(projectRoot, execution) {
   const selectedAgents = profiles[marker?.agent_tools] ?? [];
   const selectedAgentSet = new Set(selectedAgents);
   const validAgentProfile = selectedAgents.length > 0 && configObject?.build?.args?.ADW_AGENT_TOOLS === marker?.agent_tools;
-  const versionsMatch = validAgentProfile
-    && configObject?.build?.args?.CODEX_VERSION === marker?.codex_version
+  const versionsMatch = configObject?.build?.args?.CODEX_VERSION === marker?.codex_version
     && configObject?.build?.args?.CLAUDE_CODE_VERSION === marker?.claude_code_version
     && /^\d+\.\d+\.\d+$/.test(marker?.codex_version ?? "")
     && /^\d+\.\d+\.\d+$/.test(marker?.claude_code_version ?? "");
@@ -237,18 +174,14 @@ function managedDevcontainerChecks(projectRoot, execution) {
     ? ["api.openai.com", "auth.openai.com", "chatgpt.com"]
     : ["api.anthropic.com", "claude.ai", "console.anthropic.com"]);
   const configuredDomains = new Set(allowedDomains.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith("#")));
-  const agentDomainsPresent = requiredAgentDomains.every((domain) => configuredDomains.has(domain));
+  const allowedDomainsMatch = marker?.allowed_domains_sha256 === createHash("sha256").update(allowedDomains).digest("hex");
+  const agentDomainsPresent = requiredAgentDomains.every((domain) => configuredDomains.has(domain)) && allowedDomainsMatch;
   const postCreateCommand = configObject?.postCreateCommand ?? "";
   const hardening = configObject?.remoteUser === "vscode"
     && configObject?.containerEnv?.ADW_MANAGED_DEVCONTAINER === "1"
     && /adw-init-firewall/.test(configObject?.postStartCommand ?? "")
     && postCreateCommand.indexOf("adw-init-firewall") !== -1
     && postCreateCommand.indexOf("adw-init-firewall") < postCreateCommand.indexOf("adw-project-setup")
-    && scopedVolumes
-    && agentMountsMatch
-    && agentExtensionsMatch
-    && claudeEnvironmentMatches
-    && agentDomainsPresent
     && /bubblewrap/.test(dockerfile)
     && /ARG ADW_AGENT_TOOLS=both/.test(dockerfile)
     && /case "\$ADW_AGENT_TOOLS" in/.test(dockerfile)
@@ -257,7 +190,7 @@ function managedDevcontainerChecks(projectRoot, execution) {
     && /gpasswd -d vscode sudo/.test(dockerfile)
     && /chmod 0555 \/usr\/local\/bin\/adw-project-setup/.test(dockerfile)
     && /USER vscode/.test(dockerfile);
-  const validMarker = marker?.schema === 2 && marker?.profile === "managed-devcontainer" && marker?.permission_profile === PERMISSION_PROFILE && validAgentProfile && marker?.plugin_version === JSON.parse(readFileSync(join(pluginRoot, ".codex-plugin/plugin.json"), "utf8")).version;
+  const validMarker = marker?.schema === 2 && marker?.profile === "managed-devcontainer" && marker?.permission_profile === PERMISSION_PROFILE && marker?.plugin_version === JSON.parse(readFileSync(join(pluginRoot, ".codex-plugin/plugin.json"), "utf8")).version;
   const requirementsDigest = createHash("sha256").update(readFileSync(join(directory, "project-requirements.json"))).digest("hex");
   const setupDigest = createHash("sha256").update(readFileSync(join(directory, "project-setup.sh"))).digest("hex");
   const generatedFilesMatch = marker?.requirements_schema === 1
@@ -273,15 +206,25 @@ function managedDevcontainerChecks(projectRoot, execution) {
     && marker?.codex_rules_sha256 === createHash("sha256").update(readFileSync(join(directory, "codex.rules"))).digest("hex")
     && marker?.claude_settings_sha256 === createHash("sha256").update(readFileSync(join(directory, "claude-settings.json"))).digest("hex")
     && marker?.claude_hook_sha256 === createHash("sha256").update(readFileSync(join(directory, "claude-permission-hook.mjs"))).digest("hex");
-  const valid = hardening && validMarker && versionsMatch && generatedFilesMatch && permissionFilesMatch && !unsafeMount;
-  checks.push(check("execution:managed-files", valid ? "pass" : "fail", valid ? `managed devcontainer hardening and selected pinned agent tools (${marker.agent_tools}) are configured` : "managed devcontainer hardening, selected agent tools, versions, mounts, domains, or marker are invalid"));
+  const mountsMatch = scopedVolumes && agentMountsMatch;
+  checks.push(check("execution:managed-files", "pass", "all required managed devcontainer files are present and readable"));
+  checks.push(check("execution:managed-marker", validMarker ? "pass" : "fail", validMarker ? "managed marker schema, profile, permission profile, and plugin version match" : "managed marker schema, profile, permission profile, or plugin version is invalid"));
+  checks.push(check("execution:agent-profile", validAgentProfile ? "pass" : "fail", validAgentProfile ? `selected agent profile (${marker.agent_tools}) matches the container build` : "selected agent profile is missing, unsupported, or differs from the container build"));
+  checks.push(check("execution:agent-versions", versionsMatch ? "pass" : "fail", versionsMatch ? "pinned Codex and Claude Code versions match the managed marker" : "pinned Codex or Claude Code versions are invalid or differ from the managed marker"));
+  checks.push(check("execution:mounts", mountsMatch ? "pass" : "fail", mountsMatch ? "credential volumes are scoped to the selected agents" : "credential volumes are missing, not volumes, or expose an unselected agent"));
+  checks.push(check("execution:extensions", agentExtensionsMatch ? "pass" : "fail", agentExtensionsMatch ? "editor extensions match the selected agents" : "editor extensions do not match the selected agents"));
+  checks.push(check("execution:environment", claudeEnvironmentMatches ? "pass" : "fail", claudeEnvironmentMatches ? "agent-specific environment settings match the selected agents" : "Claude-specific environment settings are missing or exposed to an unselected profile"));
+  checks.push(check("execution:domains", agentDomainsPresent ? "pass" : "fail", agentDomainsPresent ? "required selected-agent domains are present and the allowlist matches its managed digest" : "required selected-agent domains are missing or the allowlist differs from its managed digest"));
+  checks.push(check("execution:hardening", hardening ? "pass" : "fail", hardening ? "managed devcontainer hardening is configured" : "managed devcontainer user, startup ordering, Dockerfile hardening, or setup command is invalid"));
+  checks.push(check("execution:generated-files", generatedFilesMatch ? "pass" : "fail", generatedFilesMatch ? "generated project requirements and setup bytes match the managed marker" : "generated project requirements, setup bytes, schema, or package arguments differ from the managed marker"));
+  checks.push(check("execution:permission-files", permissionFilesMatch ? "pass" : "fail", permissionFilesMatch ? "managed Codex and Claude permission payloads match their recorded digests" : "managed Codex or Claude permission payloads, installs, or recorded digests are invalid"));
+  checks.push(check("execution:unsafe-mounts", unsafeMount ? "fail" : "pass", unsafeMount ? "a host credential directory or Docker socket is mounted into the container" : "no broad host credential or Docker socket mount was detected"));
   const active = process.env.ADW_MANAGED_DEVCONTAINER === "1";
   checks.push(check("execution:runtime", active ? "pass" : execution.enforcement === "required" ? "fail" : "warn", active ? "running inside the ADW managed devcontainer" : "ADW managed devcontainer is not the active execution environment"));
   return checks;
 }
 
-function executionChecks(projectRoot, config) {
-  const execution = executionDeclaration(config);
+function executionChecks(projectRoot, execution) {
   if (!execution.isolation || !["required", "preferred"].includes(execution.enforcement)) {
     return [check("execution:configuration", "fail", "execution isolation or enforcement is missing")];
   }
@@ -317,7 +260,7 @@ function manifestChecks() {
   }
 }
 
-function projectChecks(projectRoot) {
+async function projectChecks(projectRoot) {
   const checks = [];
   const top = git(projectRoot, ["rev-parse", "--show-toplevel"]);
   if (top.status !== 0 || realpathSync(top.stdout.trim()) !== projectRoot) {
@@ -329,16 +272,24 @@ function projectChecks(projectRoot) {
   if (!existsSync(configPath)) {
     checks.push(check("project-schema", "fail", "adw.yaml is missing"));
   } else {
-    const config = readFileSync(configPath, "utf8");
-    const schema = yamlValue(config, "schema");
-    const worktree = yamlValue(config, "worktree");
-    checks.push(check("project-schema", schema === "5" ? "pass" : "fail", schema === "5" ? "project schema 5 is supported" : `unsupported project schema: ${schema ?? "missing"}`));
-    checks.push(check("docs-config", worktree === "worktrees/docs" ? "pass" : "fail", worktree === "worktrees/docs" ? "docs worktree uses worktrees/docs" : `unexpected docs worktree: ${worktree ?? "missing"}`));
-    const componentPaths = componentDeclarations(config).map(({ path }) => path).filter(Boolean);
+    let project;
+    let schemaValidation;
+    try {
+      const loaded = await loadArtifactFile({ project_root: projectRoot, path: "adw.yaml", artifact: "project" });
+      project = loaded.data;
+      schemaValidation = loaded.validation;
+    }
+    catch (error) {
+      checks.push(check("project-schema", "fail", error.message));
+      return checks;
+    }
+    checks.push(check("project-schema", schemaValidation.valid ? "pass" : "fail", schemaValidation.valid ? "project schema 5 is valid" : "adw.yaml failed project schema validation", schemaValidation.valid ? {} : { errors: schemaValidation.errors }));
+    checks.push(check("docs-config", project.documentation?.worktree === "worktrees/docs" && project.documentation?.branch === "docs" ? "pass" : "fail", project.documentation?.worktree === "worktrees/docs" && project.documentation?.branch === "docs" ? "docs branch and worktree use the fixed ADW locations" : "unexpected docs branch or worktree"));
+    const componentPaths = Object.values(project.components ?? {}).map(({ path }) => path).filter(Boolean);
     const uniqueComponents = new Set(componentPaths).size === componentPaths.length;
     checks.push(check("components", uniqueComponents ? "pass" : "fail", uniqueComponents ? `${componentPaths.length} component path(s) have unambiguous ownership` : "duplicate component paths create ambiguous ownership"));
-    checks.push(...executionChecks(projectRoot, config));
-    const integrations = integrationDeclarations(config);
+    checks.push(...executionChecks(projectRoot, project.execution ?? {}));
+    const integrations = Object.entries(project.integrations ?? {}).map(([capability, declaration]) => ({ capability, ...declaration }));
     if (integrations.length === 0) {
       checks.push(check("integrations", "info", "no integrations configured; lightweight workflow is enabled"));
     } else {
@@ -352,13 +303,15 @@ function projectChecks(projectRoot) {
         ));
       }
     }
-    checks.push(...workTrackerPolicyChecks(projectRoot, config, integrations));
+    checks.push(...await workTrackerPolicyChecks(projectRoot, project));
   }
 
-  for (const [path, start, end] of [
-    ["AGENTS.md", "<!-- ADW:START -->", "<!-- ADW:END -->"],
-    ["CLAUDE.md", "<!-- ADW:START -->", "<!-- ADW:END -->"],
-  ]) {
+  const selectedAgents = permissionAgentsFromProject(projectRoot, { existsSync, readFileSync, lstatSync, realpathSync, relative, isAbsolute, join });
+  const routingFiles = selectedAgents === "codex"
+    ? ["AGENTS.md"]
+    : selectedAgents === "claude" ? ["CLAUDE.md"] : ["AGENTS.md", "CLAUDE.md"];
+  for (const path of routingFiles) {
+    const [start, end] = ["<!-- ADW:START -->", "<!-- ADW:END -->"];
     const fullPath = join(projectRoot, path);
     const valid = existsSync(fullPath) && boundedBlock(readFileSync(fullPath, "utf8"), start, end);
     checks.push(check(`routing:${path}`, valid ? "pass" : "fail", valid ? "one bounded ADW routing block" : "missing, duplicate, or incomplete ADW routing block"));
@@ -377,8 +330,10 @@ function projectChecks(projectRoot) {
   if (!existsSync(syncPath)) {
     checks.push(check("context-freshness", "warn", "SYNC.yaml is unavailable"));
   } else {
-    const sync = readFileSync(syncPath, "utf8");
-    const reviewed = yamlValue(sync, "reviewed_through");
+    let sync;
+    try { sync = parseYaml(readFileSync(syncPath, "utf8"), "SYNC.yaml"); }
+    catch (error) { checks.push(check("context-freshness", "fail", error.message)); sync = {}; }
+    const reviewed = sync.reviewed_through;
     const head = git(projectRoot, ["rev-parse", "HEAD"]);
     if (!reviewed || reviewed === "unresolved" || head.status !== 0) checks.push(check("context-freshness", "warn", "context freshness is unresolved"));
     else {
@@ -400,7 +355,7 @@ function projectChecks(projectRoot) {
 
 try {
   const { projectRoot } = parseArguments(process.argv.slice(2));
-  const checks = [manifestChecks(), ...projectChecks(projectRoot)];
+  const checks = [manifestChecks(), ...await projectChecks(projectRoot)];
   const failed = checks.some(({ status }) => status === "fail");
   process.stdout.write(`${JSON.stringify({ ok: !failed, read_only: true, project_root: projectRoot, checks }, null, 2)}\n`);
   process.exitCode = failed ? 1 : 0;

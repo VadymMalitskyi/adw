@@ -166,10 +166,10 @@ test("skills preserve the required behavior and safety boundaries", () => {
     ],
     update: [
       ["exact schema compatibility", /exact[ -]schema|current project schema/i],
-      ["read-only compatibility check", /read-only|without changing|never modifies/i],
+      ["digest-bound managed repair", /preview digest|--preview-digest/i],
       ["previous version rejection", /previous ADW versions|unsupported schema/i],
       ["plugin-manager ownership", /plugin manager/i],
-      ["no automatic migration", /does not carry automatic migrations|do not attempt an automatic migration/i],
+      ["no automatic schema migration", /does not carry automatic (?:schema )?migrations|do not attempt an automatic (?:schema )?migration/i],
     ],
     doctor: [
       ["read-only operation", /read-only|without changing/i],
@@ -303,6 +303,8 @@ test("provider inventory is explicit, bounded, and backed by provider references
     assert.match(reference, new RegExp(entry.provider.replace("azure-devops", "Azure DevOps"), "i"));
     for (const capability of entry.capabilities) assert.match(reference, new RegExp(`\\b${capability}\\b`), `${entry.provider}: reference omits ${capability}`);
   }
+  assert.ok(new Set(inventory.providers.map(({ transports }) => transports.join(","))).size > 1, "provider transport declarations must discriminate real adapter support");
+  assert.deepEqual(inventory.providers.find(({ provider }) => provider === "azure-devops").capabilities, ["code_host", "work_tracker"]);
 });
 
 test("integration-aware workflow language depends on capabilities and shared contracts", () => {

@@ -10,9 +10,15 @@
   "scripts": {
     "build:helper": "node src/helpers/build-bundle.mjs --write",
     "check:helper": "node src/helpers/build-bundle.mjs --check",
-    "test": "node --test tests/**/*.test.mjs",
+    "stage:managed-container": "node src/stage-managed-devcontainer.mjs",
+    "test": "node --test",
     "test:contracts": "node --test tests/contracts/*.test.mjs",
     "test:helpers": "node --test tests/helpers/*.test.mjs",
     "test:integration": "node --test tests/integration/*.test.mjs"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0",
+    "esbuild": "^0.25.12",
+    "yaml": "^2.9.0"
   }
 }

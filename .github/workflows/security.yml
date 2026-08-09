@@ -1,0 +1,76 @@
+name: Security boundary
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  managed-container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+
+      - name: Lint managed shell entrypoints
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends shellcheck
+          shellcheck --severity=warning plugin/templates/devcontainer/init-firewall.sh plugin/templates/devcontainer/post-create.sh plugin/templates/devcontainer/project-setup.sh
+
+      - name: Stage and validate the managed devcontainer
+        env:
+          STAGE: ${{ runner.temp }}/adw-managed-container
+        run: |
+          mkdir -p "$STAGE"
+          npm run stage:managed-container -- "$STAGE"
+          npx --yes @devcontainers/cli@0.88.0 read-configuration --workspace-folder "$STAGE" >/dev/null
+
+      - name: Build the managed image
+        env:
+          STAGE: ${{ runner.temp }}/adw-managed-container
+        run: |
+          config="$STAGE/.devcontainer/devcontainer.json"
+          docker build \
+            --build-arg "NODE_MAJOR=$(jq -r '.build.args.NODE_MAJOR' "$config")" \
+            --build-arg ADW_AGENT_TOOLS=both \
+            --build-arg "CODEX_VERSION=$(jq -r '.build.args.CODEX_VERSION' "$config")" \
+            --build-arg "CLAUDE_CODE_VERSION=$(jq -r '.build.args.CLAUDE_CODE_VERSION' "$config")" \
+            --build-arg ADW_PROJECT_APT_PACKAGES= \
+            --tag adw-managed-security \
+            --file "$STAGE/.devcontainer/Dockerfile" \
+            "$STAGE"
+
+      - name: Verify pinned agents and protected policy sources
+        env:
+          STAGE: ${{ runner.temp }}/adw-managed-container
+        run: |
+          config="$STAGE/.devcontainer/devcontainer.json"
+          codex_version="$(jq -r '.build.args.CODEX_VERSION' "$config")"
+          claude_version="$(jq -r '.build.args.CLAUDE_CODE_VERSION' "$config")"
+          docker run --rm --entrypoint bash \
+            -e "EXPECTED_CODEX=$codex_version" \
+            -e "EXPECTED_CLAUDE=$claude_version" \
+            adw-managed-security -lc '
+              test "$(codex --version | awk "{print \$2}")" = "$EXPECTED_CODEX"
+              test "$(claude --version | awk "{print \$1}")" = "$EXPECTED_CLAUDE"
+              test "$(stat -c "%U:%G %a" /etc/adw/codex.rules)" = "root:root 444"
+              test "$(stat -c "%U:%G %a" /etc/claude-code/managed-settings.d/20-adw.json)" = "root:root 444"
+              test "$(stat -c "%U:%G %a" /usr/local/bin/adw-claude-permission-hook)" = "root:root 555"
+              test "$(stat -c "%U:%G %a" /usr/local/bin/adw-init-firewall)" = "root:root 500"
+              test "$(stat -c "%U:%G %a" /usr/local/bin/adw-post-create)" = "root:root 500"
+              printf "%s\n" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git status\"}}" | /usr/local/bin/adw-claude-permission-hook | grep -q "\"permissionDecision\":\"allow\""
+              codex execpolicy check --rules /etc/adw/codex.rules git push --force origin main | grep -Eq "\"decision\"[[:space:]]*:[[:space:]]*\"forbidden\""
+            '

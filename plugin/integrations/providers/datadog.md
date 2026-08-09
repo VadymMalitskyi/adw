@@ -1,6 +1,6 @@
 # Datadog provider
 
-Use Datadog only for the read-only `observability` capability. Resolve an available native connector, MCP server, CLI, or API without authenticating or persisting credentials during the workflow.
+Use Datadog only for the read-only `observability` capability. Resolve an available MCP server, CLI, or API without authenticating or persisting credentials during the workflow.
 
 Permit scoped searches and reads of logs, metrics, traces, monitors, incidents, dashboards, and CI visibility when they are relevant to planning, diagnosis, validation, or review. Bound every query by the configured site, service, environment, and a specific time range. Show the query before running it when it may expose broad or sensitive data.
 

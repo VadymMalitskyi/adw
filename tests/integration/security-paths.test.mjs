@@ -14,11 +14,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import {
-  applyAtomicMigration,
+  applyAtomicWrites,
   dispatch,
   EXIT,
   InputError,
-  MigrationError,
+  AtomicWriteError,
   PathError,
   resolveProjectPath,
 } from "../../plugin/lib/adw-helper.mjs";
@@ -53,7 +53,7 @@ function planWith(overrides = {}) {
   };
 }
 
-test("path resolver and migration reject traversal, absolute, root, duplicate, and symlink destinations", async () => {
+test("path resolver and atomic writes reject traversal, absolute, root, duplicate, and symlink destinations", async () => {
   const root = repository();
   const outside = mkdtempSync(join(tmpdir(), "adw-security-outside-"));
   mkdirSync(join(root, "nested"));
@@ -65,9 +65,9 @@ test("path resolver and migration reject traversal, absolute, root, duplicate, a
     await assert.rejects(resolveProjectPath(root, path), PathError, path || "empty path");
   }
   for (const path of ["linked-directory/write.txt", "linked-file"]) {
-    await assert.rejects(applyAtomicMigration(root, [{ path, content: "escaped\n" }]), PathError);
+    await assert.rejects(applyAtomicWrites(root, [{ path, content: "escaped\n" }]), PathError);
   }
-  await assert.rejects(applyAtomicMigration(root, [
+  await assert.rejects(applyAtomicWrites(root, [
     { path: "nested/file.txt", content: "first\n" },
     { path: "nested/./file.txt", content: "second\n" },
   ]), InputError);
@@ -113,23 +113,23 @@ test("artifact schemas reject malicious change IDs and path strings", async () =
   }
 });
 
-test("failed and interrupted-looking migrations leave prior bytes usable and rerunnable", async () => {
+test("failed and interrupted-looking atomic writes leave prior bytes usable and rerunnable", async () => {
   const root = repository("adw-security-rollback-");
   mkdirSync(join(root, "config"));
   writeFileSync(join(root, "config/one"), "old-one\n");
   mkdirSync(join(root, "config/blocker"));
-  mkdirSync(join(root, ".adw-migration-interrupted"));
-  writeFileSync(join(root, ".adw-migration-interrupted/staged"), "untrusted stale transaction\n");
+  mkdirSync(join(root, ".adw-atomic-write-interrupted"));
+  writeFileSync(join(root, ".adw-atomic-write-interrupted/staged"), "untrusted stale transaction\n");
 
-  await assert.rejects(applyAtomicMigration(root, [
+  await assert.rejects(applyAtomicWrites(root, [
     { path: "config/one", content: "new-one\n", expected_content: "old-one\n" },
     { path: "config/blocker", content: "cannot replace a directory\n" },
-  ]), MigrationError);
+  ]), AtomicWriteError);
   assert.equal(readFileSync(join(root, "config/one"), "utf8"), "old-one\n");
-  assert.equal(readFileSync(join(root, ".adw-migration-interrupted/staged"), "utf8"), "untrusted stale transaction\n");
+  assert.equal(readFileSync(join(root, ".adw-atomic-write-interrupted/staged"), "utf8"), "untrusted stale transaction\n");
 
   rmSync(join(root, "config/blocker"), { recursive: true });
-  await applyAtomicMigration(root, [
+  await applyAtomicWrites(root, [
     { path: "config/one", content: "new-one\n", expected_content: "old-one\n" },
     { path: "config/two", content: "new-two\n", expected_content: null },
   ]);

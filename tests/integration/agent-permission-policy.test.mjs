@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
@@ -10,6 +12,7 @@ import {
   managedClaudeSettings,
   mergeClaudeSettings,
   mergeCodexConfig,
+  permissionAgentsFromProject,
 } from "../../plugin/execution/managed-development.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -24,19 +27,21 @@ test("Codex policy keeps workspace development automatic and external effects ga
   assert.match(merged, /model = "gpt-test"/);
   assert.equal(mergeCodexConfig(merged), merged);
   assert.throws(() => mergeCodexConfig('approval_policy = "never"\n'), /conflicts/);
+  assert.throws(() => mergeCodexConfig('profile = "unsafe"\n[profiles.unsafe]\napproval_policy = "never"\n'), /active profile.*conflicts/);
   assert.throws(() => mergeCodexConfig('sandbox_mode = "danger-full-access"\n'), /conflicts/);
 
   for (const expected of [
     'pattern = ["git", ["add", "commit"]], decision = "allow"',
     'pattern = ["git", "push"], decision = "prompt"',
     'pattern = ["gh", "api"], decision = "prompt"',
+    'pattern = [["glab", "jira", "datadog-ci", "datadog", "notion"]], decision = "prompt"',
     'pattern = ["gh", "pr", "merge"], decision = "forbidden"',
   ]) assert.match(CODEX_RULES, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.doesNotMatch(CODEX_RULES, /\["npm", "run"\], decision = "allow"/);
 });
 
 test("Claude policy uses sandbox-first Bash plus explicit external-write review", () => {
-  const merged = JSON.parse(mergeClaudeSettings('{"env":{"EXAMPLE":"1"},"permissions":{"allow":["Bash(custom-tool *)","mcp__docs__get_*"]}}'));
+  const merged = JSON.parse(mergeClaudeSettings('{"env":{"EXAMPLE":"1"},"permissions":{"allow":["mcp__docs__get_*"]}}'));
   assert.equal(merged.env.EXAMPLE, "1");
   assert.equal(merged.permissions.defaultMode, "acceptEdits");
   assert.equal(merged.permissions.disableBypassPermissionsMode, "disable");
@@ -53,6 +58,11 @@ test("Claude policy uses sandbox-first Bash plus explicit external-write review"
   assert.ok(!merged.permissions.allow.includes("mcp__*"));
   assert.throws(() => mergeClaudeSettings('{"permissions":{"defaultMode":"bypassPermissions"}}'), /conflicts/);
   assert.throws(() => mergeClaudeSettings('{"permissions":{"allow":["mcp__*"]}}'), /broad MCP allow/);
+  assert.throws(() => mergeClaudeSettings('{"permissions":{"allow":[42]}}'), /allow entries must be strings/);
+  assert.throws(
+    () => mergeClaudeSettings('{"permissions":{"allow":["Bash(custom-tool *)","mcp__docs__get_*"]}}'),
+    /contains Bash allow rules.*review and remove them explicitly.*Bash\(custom-tool \*\)/,
+  );
 
   const managed = JSON.parse(managedClaudeSettings());
   assert.deepEqual(managed.sandbox.network.allowedDomains, []);
@@ -71,11 +81,14 @@ test("Claude managed hook allows sandboxed local work, asks for external effects
   assert.equal(hookDecision("mcp__github__get_file_contents"), "allow");
   assert.equal(hookDecision("mcp__azure_devops__wit_query_by_wiql"), "allow");
   assert.equal(hookDecision("mcp__github__create_pull_request"), "ask");
+  assert.equal(hookDecision("mcp__github__get_or_create_pull_request"), "ask");
   assert.equal(hookDecision("mcp__custom__opaque_operation"), "ask");
   assert.equal(hookDecision("Bash", { command: "git status" }), "allow");
   assert.equal(hookDecision("Bash", { command: "dotnet tool restore && dotnet test" }), "allow");
   assert.equal(hookDecision("Bash", { command: "git status && git push origin main" }), "ask");
   assert.equal(hookDecision("Bash", { command: "gh label create urgent --color ff0000" }), "ask");
+  assert.equal(hookDecision("Bash", { command: "glab repo view" }), "ask");
+  assert.equal(hookDecision("Bash", { command: "datadog-ci synthetics run-tests" }), "ask");
   assert.equal(hookDecision("Bash", { command: "env FOO=bar gh pr view 42" }), "allow");
   assert.equal(hookDecision("Bash", { command: "gh --repo acme/repo pr view 42" }), "allow");
   assert.equal(hookDecision("Bash", { command: "bash -lc 'gh label create urgent --color ff0000'" }), "ask");
@@ -83,9 +96,35 @@ test("Claude managed hook allows sandboxed local work, asks for external effects
   assert.equal(hookDecision("Bash", { command: "npm run release" }), "ask");
   assert.equal(hookDecision("Bash", { command: "rm -rf build" }), "ask");
   assert.equal(hookDecision("Bash", { command: "git push --force origin main" }), "deny");
+  assert.equal(hookDecision("Bash", { command: "git push origin main --force" }), "deny");
+  assert.equal(hookDecision("Bash", { command: "git push --force-with-lease=main origin main" }), "deny");
+  assert.equal(hookDecision("Bash", { command: "git push -uf origin main" }), "deny");
+  assert.equal(hookDecision("Bash", { command: "git push origin +main" }), "deny");
+  assert.equal(hookDecision("Bash", { command: "git push origin '+main'" }), "deny");
+  assert.equal(hookDecision("Bash", { command: "bash -lc 'git push origin main --force'" }), "deny");
+  assert.equal(hookDecision("Bash", { command: "git push --mirror origin" }), "deny");
   assert.equal(hookDecision("Bash", { command: "git reset --hard HEAD~1" }), "deny");
   assert.equal(hookDecision("Bash", { command: "gh auth token" }), "deny");
   assert.equal(hookDecision("Bash", { command: "npm publish" }), "deny");
   const malformed = spawnSync(process.execPath, [hook], { input: "not-json", encoding: "utf8" });
   assert.equal(malformed.status, 2);
+});
+
+test("permission agent detection requires explicit ADW policy evidence", () => {
+  const root = mkdtempSync(join(tmpdir(), "adw-permission-agents-"));
+  const dependencies = { existsSync, readFileSync, lstatSync, realpathSync, relative, isAbsolute, join };
+  writeFileSync(join(root, "AGENTS.md"), "routing only\n");
+  writeFileSync(join(root, "CLAUDE.md"), "routing only\n");
+  mkdirSync(join(root, ".codex"), { recursive: true });
+  writeFileSync(join(root, ".codex/config.toml"), 'approval_policy = "on-request"\n');
+  assert.equal(permissionAgentsFromProject(root, dependencies), "unknown");
+  assert.throws(() => permissionAgentsFromProject(root, { existsSync, readFileSync, join }), /requires lstatSync/);
+
+  mkdirSync(join(root, ".codex/rules"), { recursive: true });
+  writeFileSync(join(root, ".codex/rules/adw.rules"), CODEX_RULES);
+  assert.equal(permissionAgentsFromProject(root, dependencies), "codex");
+
+  mkdirSync(join(root, ".claude"), { recursive: true });
+  writeFileSync(join(root, ".claude/settings.json"), mergeClaudeSettings());
+  assert.equal(permissionAgentsFromProject(root, dependencies), "both");
 });

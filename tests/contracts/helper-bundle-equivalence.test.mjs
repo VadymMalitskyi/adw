@@ -13,50 +13,38 @@ function read(relativePath) {
 
 const bundle = read("plugin/lib/adw-helper.mjs");
 
-test("the generated helper remains dependency-free and runnable on Node 20", () => {
-  assert.match(bundle, /^#!\/usr\/bin\/env node\n\/\/ Generated as a dependency-free Node\.js 20\+ runtime bundle/m);
+test("the generated helper is self-contained and runnable on Node 20", () => {
+  assert.match(bundle, /^#!\/usr\/bin\/env node\n/);
   for (const match of bundle.matchAll(/(?:import[^;]*?from\s+|import\s*)["']([^"']+)["']/g)) {
     assert.match(match[1], /^node:/, `bundle has a non-built-in runtime dependency: ${match[1]}`);
   }
   assert.doesNotMatch(bundle, /(?:^|\n)\s*(?:import|require\s*\()[^\n]*(?:src\/helpers|\.ts["'])/, "bundle must not load TypeScript source at runtime");
 });
 
-test("the bundle covers every operational helper entry point maintained in source", () => {
-  const operationalExports = new Map([
-    ["src/helpers/approval.ts", ["computeApprovalBundle", "createApprovalBundle", "verifyApprovalBundle"]],
-    ["src/helpers/integrations.ts", ["computeRequirementsDigest", "recordExternalAction"]],
-    ["src/helpers/migration.ts", ["resolveProjectPath", "applyAtomicMigration"]],
-    ["src/helpers/project-version.ts", ["checkCompatibility"]],
-    ["src/helpers/project-policy.ts", ["computePolicyDigest", "resolveProjectPolicy", "resolveValidationSet", "validateWorkItemPayload"]],
-    ["src/helpers/schemas.ts", ["validateJsonSchema"]],
-    ["src/helpers/validation.ts", ["recordValidation", "runValidationCommand"]],
-  ]);
-
-  for (const [sourcePath, exports] of operationalExports) {
-    const source = read(sourcePath);
-    for (const name of exports) {
-      assert.match(source, new RegExp(`export (?:async )?function ${name}\\b`), `${sourcePath}: missing source export ${name}`);
-      assert.match(bundle, new RegExp(`export (?:async )?function ${name}\\b`), `bundle: missing source operation ${name}`);
-    }
+test("the canonical source and generated bundle expose every operational helper", () => {
+  const source = read("src/helpers/runtime-bundle.mjs");
+  const operations = [
+    "computeApprovalBundle", "createApprovalBundle", "verifyApprovalBundle", "computeAuthorizationDigest",
+    "computeRequirementsDigest", "recordExternalAction", "resolveProjectPath", "applyAtomicWrites",
+    "checkCompatibility", "computePolicyDigest", "resolveProjectPolicy", "resolveValidationSet",
+    "validateWorkItemPayload", "validateJsonSchema", "validateArtifact", "parseYaml", "loadArtifactFile",
+    "recordValidation", "runValidationCommand",
+  ];
+  for (const name of operations) {
+    assert.match(source, new RegExp(`export (?:async )?function ${name}\\b`), `canonical source: missing ${name}`);
+    assert.match(bundle, new RegExp(`\\b${name}(?:,|\\n)`), `generated bundle: missing exported ${name}`);
   }
 });
 
-test("security- and evidence-critical source invariants are represented in the bundle", () => {
-  const invariantMarkers = new Map([
-    ["src/helpers/approval.ts", ["ADW-APPROVAL-BUNDLE-V2\\0", "sha256", "timingSafeEqual"]],
-    ["src/helpers/migration.ts", ["realpath", "isAbsolute", "expected_content", ".adw-migration-"]],
-    ["src/helpers/project-version.ts", ["project_schema", "CURRENT_PROJECT_SCHEMA", "artifact_plugin_version", "migration_required"]],
-    ["src/helpers/project-policy.ts", ["ADW-EFFECTIVE-POLICY-V1\\0", "affected_paths", "project_policy_digest", "required_validation"]],
-    ["src/helpers/schemas.ts", ["additionalProperties", "date-time", "unresolvable schema reference"]],
-    ["src/helpers/validation.ts", ["authorization", "[REDACTED]", "timed_out", "required"]],
-    ["src/helpers/integrations.ts", ["ADW-INTEGRATION-REQUIREMENTS-V1\\0", "authorization", "[REDACTED]", "readback_digest"]],
-  ]);
-
-  for (const [sourcePath, markers] of invariantMarkers) {
-    const source = read(sourcePath);
-    for (const marker of markers) {
-      assert.ok(source.includes(marker), `${sourcePath}: missing invariant marker ${JSON.stringify(marker)}`);
-      assert.ok(bundle.includes(marker), `bundle: missing ${sourcePath} invariant marker ${JSON.stringify(marker)}`);
-    }
+test("security- and evidence-critical canonical invariants are represented in the bundle", () => {
+  const source = read("src/helpers/runtime-bundle.mjs");
+  const markers = [
+    "ADW-APPROVAL-BUNDLE-V2\\0", "ADW-EXTERNAL-AUTHORIZATION-V1\\0", "timingSafeEqual", "expected_content",
+    ".adw-atomic-write-", "CURRENT_PROJECT_SCHEMA", "ADW-EFFECTIVE-POLICY-V1\\0", "project_policy_digest",
+    "ADW-INTEGRATION-REQUIREMENTS-V1\\0", "[REDACTED]", "timed_out", "readback_digest",
+  ];
+  for (const marker of markers) {
+    assert.ok(source.includes(marker), `canonical source: missing invariant ${JSON.stringify(marker)}`);
+    assert.ok(bundle.includes(marker), `generated bundle: missing invariant ${JSON.stringify(marker)}`);
   }
 });

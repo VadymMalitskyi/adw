@@ -3,8 +3,8 @@
   "providers": [
     {
       "provider": "azure-devops",
-      "capabilities": ["work_tracker"],
-      "transports": ["native", "mcp", "cli", "api"],
+      "capabilities": ["code_host", "work_tracker"],
+      "transports": ["mcp", "cli", "api"],
       "reference": "providers/azure-devops.md"
     },
     {
@@ -16,13 +16,13 @@
     {
       "provider": "datadog",
       "capabilities": ["observability"],
-      "transports": ["native", "mcp", "cli", "api"],
+      "transports": ["mcp", "cli", "api"],
       "reference": "providers/datadog.md"
     },
     {
       "provider": "notion",
       "capabilities": ["knowledge"],
-      "transports": ["native", "mcp", "cli", "api"],
+      "transports": ["native", "mcp", "api"],
       "reference": "providers/notion.md"
     }
   ]

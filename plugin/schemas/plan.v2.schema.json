@@ -68,7 +68,7 @@
       "type": "object",
       "required": ["command", "cwd", "timeout_ms", "required", "source"],
       "properties": {
-        "command": { "type": "string", "minLength": 1 },
+        "command": { "type": "string", "minLength": 1, "pattern": "^(?!\\s*<[^>]+>\\s*$).+$" },
         "cwd": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$" },
         "timeout_ms": { "type": "integer", "minimum": 1 },
         "required": { "type": "boolean" },

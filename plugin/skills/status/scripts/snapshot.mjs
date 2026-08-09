@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { verifyApprovalBundle, validateArtifact } from "../../../lib/adw-helper.mjs";
+import { loadArtifactFile, verifyApprovalBundle, validateArtifact } from "../../../lib/adw-helper.mjs";
 import { permissionAgentsFromProject } from "../../../execution/managed-development.mjs";
 
 function parseArguments(argv) {
@@ -25,14 +25,10 @@ function readJson(path) {
   catch (error) { return { error: error.message }; }
 }
 
-function executionSnapshot(projectRoot) {
-  const configPath = join(projectRoot, "adw.yaml");
-  if (!existsSync(configPath)) return { configured: false, active: false, reason: "adw.yaml is missing" };
-  const source = readFileSync(configPath, "utf8");
-  const block = source.match(/^execution:\s*\n((?:^[ \t]+.*(?:\n|$))*)/m)?.[1] ?? "";
-  const isolation = block.match(/^\s+isolation:\s*["']?([^\s"']+)/m)?.[1] ?? null;
-  const enforcement = block.match(/^\s+enforcement:\s*["']?([^\s"']+)/m)?.[1] ?? null;
-  const permissionProfile = block.match(/^\s+profile:\s*["']?([^\s"']+)/m)?.[1] ?? null;
+function executionSnapshot(projectRoot, project) {
+  if (!project) return { configured: false, active: false, reason: "adw.yaml is missing or invalid" };
+  const { isolation = null, enforcement = null, permissions = {} } = project.execution ?? {};
+  const permissionProfile = permissions.profile ?? null;
   const agentTools = permissionAgentsFromProject(projectRoot, { existsSync, readFileSync, lstatSync, realpathSync, relative, isAbsolute, join });
   const providerArtifacts = {
     codex: existsSync(join(projectRoot, ".codex/config.toml")) && existsSync(join(projectRoot, ".codex/rules/adw.rules")),
@@ -93,10 +89,15 @@ async function changeSnapshot(changePath, changeId) {
     else {
       const schema = await validateArtifact("approval", parsed.value);
       let digestMatches = false;
+      let expectedInputsMatch = false;
+      let unboundIntegrations = false;
       if (schema.valid) {
         const paths = parsed.value.inputs.map(({ path }) => path);
+        const expectedPaths = ["spec.md", "plan.yaml", ...(existsSync(integrationsPath) ? ["integrations.yaml"] : [])];
+        expectedInputsMatch = paths.length === expectedPaths.length && expectedPaths.every((path) => paths.includes(path));
+        unboundIntegrations = existsSync(integrationsPath) && !paths.includes("integrations.yaml");
         const present = paths.every((path) => existsSync(join(changePath, path)));
-        digestMatches = present && verifyApprovalBundle(paths.map((path) => ({ path, content: readFileSync(join(changePath, path)) })), parsed.value);
+        digestMatches = expectedInputsMatch && present && verifyApprovalBundle(paths.map((path) => ({ path, content: readFileSync(join(changePath, path)) })), parsed.value);
       }
       const active = schema.valid && parsed.value.status === "active" && digestMatches;
       snapshot.approval = {
@@ -104,7 +105,17 @@ async function changeSnapshot(changePath, changeId) {
         approver: parsed.value.approver,
         approved_at: parsed.value.approved_at,
         docs_commit: parsed.value.docs_commit,
-        reason: active ? "digest matches current approval input bytes" : !schema.valid ? "approval schema is invalid" : parsed.value.status !== "active" ? "approval is superseded" : "approval digest is stale",
+        reason: active
+          ? "digest matches the complete current approval input set and exact bytes"
+          : !schema.valid
+            ? "approval schema is invalid"
+            : parsed.value.status !== "active"
+              ? "approval is superseded"
+              : unboundIntegrations
+                ? "integrations.yaml exists but is not bound by the approval"
+                : !expectedInputsMatch
+                  ? "approval input set does not match the current required artifacts"
+                  : "approval digest is stale",
       };
     }
   }
@@ -122,7 +133,7 @@ async function changeSnapshot(changePath, changeId) {
       };
     }
   }
-  if (snapshot.validation.state === "passed") snapshot.state = "validated";
+  if (snapshot.validation.state === "passed" && snapshot.approval.state === "active") snapshot.state = "validated";
   else if (snapshot.validation.state === "failed") snapshot.state = "validation-failed";
   else if (snapshot.approval.state === "active") snapshot.state = "approved";
   else if (snapshot.artifacts.spec || snapshot.artifacts.plan) snapshot.state = "planned";
@@ -150,8 +161,18 @@ try {
   const branch = git(projectRoot, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
   const head = git(projectRoot, ["rev-parse", "HEAD"]);
   const porcelain = git(projectRoot, ["status", "--porcelain=v1", "--untracked-files=all"]);
+  let project = null;
+  const configPath = join(projectRoot, "adw.yaml");
+  if (existsSync(configPath)) {
+    const loaded = await loadArtifactFile({ project_root: projectRoot, path: "adw.yaml", artifact: "project" });
+    project = loaded.data;
+    const validation = loaded.validation;
+    if (!validation.valid) throw new Error(`adw.yaml is invalid: ${validation.errors.map((item) => `${item.path} ${item.message}`).join("; ")}`);
+  }
   const worktrees = worktreeSnapshot(projectRoot);
-  const docsPath = join(projectRoot, "worktrees/docs");
+  const docsRelativePath = project?.documentation?.worktree ?? "worktrees/docs";
+  const docsBranch = project?.documentation?.branch ?? "docs";
+  const docsPath = join(projectRoot, docsRelativePath);
   const changesPath = join(docsPath, "changes");
   const changeIds = existsSync(changesPath)
     ? readdirSync(changesPath).filter((name) => {
@@ -174,15 +195,14 @@ try {
       dirty: porcelain.status === 0 ? porcelain.stdout.trim().split("\n").filter(Boolean) : [],
     },
     docs: {
-      attached: worktrees.some((item) => item.branch === "refs/heads/docs" && resolve(item.worktree) === docsPath),
-      path: "worktrees/docs",
+      attached: worktrees.some((item) => item.branch === `refs/heads/${docsBranch}` && resolve(item.worktree) === docsPath),
+      path: docsRelativePath,
       head: docsHead.status === 0 ? docsHead.stdout.trim() : null,
       dirty: docsDirty.status === 0 ? docsDirty.stdout.trim().split("\n").filter(Boolean) : [],
     },
-    execution: executionSnapshot(projectRoot),
+    execution: executionSnapshot(projectRoot, project),
     changes,
     pull_requests: { state: "not-queried", reason: "local snapshot does not access the network; query the configured code_host capability separately" },
-    draft_prs: { state: "not-queried", reason: "compatibility alias; query pull_requests through the configured code_host capability" },
   }, null, 2)}\n`);
 } catch (error) {
   process.stdout.write(`${JSON.stringify({ ok: false, read_only: true, error: error.message })}\n`);

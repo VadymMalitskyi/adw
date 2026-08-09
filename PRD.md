@@ -1,10 +1,12 @@
-# Agentic Development Workflow (ADW)
+# Agentic Development Workflow (ADW) — Historical 0.2 PRD
 
 ## Product Requirements Document
 
-**Status:** Approved for private 0.2 implementation
+**Status:** Historical baseline; superseded by the current README, schemas, and plugin contracts
 **Audience:** Product owner and implementers
 **Last updated:** 2026-08-05
+
+> This document records the 0.2 product decision baseline. It is not the specification for the current 0.6.0 / project-schema-5 release and must not override current schemas or plugin contracts.
 
 ## 1. What ADW is
 

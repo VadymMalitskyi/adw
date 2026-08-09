@@ -32,6 +32,11 @@ function fixture() {
 function run(root, action, confirmed = false) {
   const args = [initScript, action, "--project-root", root];
   if (confirmed) args.push("--confirmed");
+  if (action === "apply" && confirmed) {
+    const preview = spawnSync(process.execPath, [initScript, "preview", "--project-root", root], { encoding: "utf8" });
+    assert.equal(preview.status, 0, preview.stderr || preview.stdout);
+    args.push("--preview-digest", JSON.parse(preview.stdout).preview_digest);
+  }
   const result = spawnSync(process.execPath, args, { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   return JSON.parse(result.stdout);
@@ -56,6 +61,11 @@ test("init previews without writes and applies idempotent bounded changes", () =
   assert.deepEqual(preview.devcontainer, { isolation: "project-devcontainer", action: "preserve", required: true, reopen_required: true, agent_tools: "both" });
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), statusBefore);
   assert.deepEqual(readFileSync(join(root, "AGENTS.md")), agentBefore);
+
+  const unboundApply = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--project-root", root], { encoding: "utf8" });
+  assert.equal(unboundApply.status, 2);
+  assert.match(unboundApply.stderr, /exact --preview-digest/);
+  assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), statusBefore);
 
   const applied = run(root, "apply", true);
   assert.equal(applied.docs.action, "ready");

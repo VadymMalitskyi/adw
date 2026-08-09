@@ -1,4 +1,4 @@
 interface:
   display_name: "ADW Update"
-  short_description: "Check current project compatibility"
-  default_prompt: "Use $update to check whether this project uses the exact ADW schema supported by the installed plugin."
+  short_description: "Check compatibility and repair managed files"
+  default_prompt: "Use $update to check exact ADW schema compatibility and preview repair of current release managed files."

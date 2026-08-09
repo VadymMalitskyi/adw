@@ -50,6 +50,11 @@ function run(script, args, expectedStatus = 0) {
   return JSON.parse(stream);
 }
 
+function applyInit(root) {
+  const preview = run(initScript, ["preview", "--project-root", root]);
+  return run(initScript, ["apply", "--confirmed", "--preview-digest", preview.preview_digest, "--project-root", root]);
+}
+
 function treeFingerprint(root) {
   const hash = createHash("sha256");
   function visit(directory) {
@@ -103,6 +108,21 @@ test("init rejects incomplete, reversed, and duplicate managed blocks without wr
   }
 });
 
+test("init apply rejects symlinked managed project targets", () => {
+  const root = repository("adw-init-symlink-");
+  const outside = join(mkdtempSync(join(tmpdir(), "adw-init-outside-")), "instructions.md");
+  writeFileSync(outside, "outside bytes\n");
+  symlinkSync(outside, join(root, "AGENTS.md"));
+  commitFixture(root);
+  const preview = run(initScript, ["preview", "--project-root", root]);
+  const before = readFileSync(outside, "utf8");
+  const rejected = run(initScript, ["apply", "--confirmed", "--preview-digest", preview.preview_digest, "--project-root", root], 2);
+  assert.match(rejected.error, /symbolic link/);
+  assert.equal(readFileSync(outside, "utf8"), before);
+  assert.equal(existsSync(join(root, "worktrees/docs")), false);
+  assert.equal(spawnSync("git", ["show-ref", "--verify", "--quiet", "refs/heads/docs"], { cwd: root }).status, 1);
+});
+
 test("init preserves CRLF and no-final-newline project bytes outside bounded blocks", () => {
   const root = repository("adw-line-endings-");
   const agents = Buffer.from(`prefix\r\n${ROUTING_START}\r\nold block\r\n${ROUTING_END}\r\nsuffix-without-final-newline`);
@@ -115,13 +135,13 @@ test("init preserves CRLF and no-final-newline project bytes outside bounded blo
 
   const originalAgentOutside = outsideSegments(agents, ROUTING_START, ROUTING_END);
   const originalIgnoreOutside = outsideSegments(ignore, IGNORE_START, IGNORE_END);
-  run(initScript, ["apply", "--confirmed", "--project-root", root]);
+  applyInit(root);
   assert.deepEqual(outsideSegments(readFileSync(join(root, "AGENTS.md")), ROUTING_START, ROUTING_END), originalAgentOutside);
   assert.deepEqual(outsideSegments(readFileSync(join(root, ".gitignore")), IGNORE_START, IGNORE_END), originalIgnoreOutside);
   assert.ok(readFileSync(join(root, "CLAUDE.md")).subarray(0, claude.length).equals(claude));
 
   const stable = new Map(["AGENTS.md", "CLAUDE.md", ".gitignore", "adw.yaml"].map((path) => [path, readFileSync(join(root, path))]));
-  run(initScript, ["apply", "--confirmed", "--project-root", root]);
+  applyInit(root);
   for (const [path, bytes] of stable) assert.deepEqual(readFileSync(join(root, path)), bytes, `${path} changed on repeat init`);
 });
 
@@ -145,7 +165,7 @@ test("shell syntax stays config data and repository text cannot grant init autho
 
   run(initScript, ["preview", "--project-root", root]);
   assert.equal(treeFingerprint(root), before);
-  run(initScript, ["apply", "--confirmed", "--project-root", root]);
+  applyInit(root);
   assert.equal(existsSync(marker), false);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /command: "npm run lint"\n\s+source: "package\.json#scripts\.lint"/);
   assert.equal(JSON.parse(readFileSync(join(root, "package.json"), "utf8")).scripts.lint, command);
@@ -155,7 +175,7 @@ test("doctor and status snapshots remain read-only and ignore hostile change ent
   const root = repository("adw-readonly-hostile-");
   writeFileSync(join(root, "package.json"), '{"scripts":{"test":"node --test"}}\n');
   commitFixture(root);
-  run(initScript, ["apply", "--confirmed", "--project-root", root]);
+  applyInit(root);
   const changes = join(root, "worktrees/docs/changes");
   mkdirSync(join(changes, "safe-change"));
   writeFileSync(join(changes, "safe-change/spec.md"), "safe spec\n");
@@ -187,7 +207,7 @@ test("doctor and status snapshots remain read-only and ignore hostile change ent
 test("status treats line-ending drift as a stale exact-byte approval without mutation", () => {
   const root = repository("adw-stale-approval-");
   commitFixture(root);
-  run(initScript, ["apply", "--confirmed", "--project-root", root]);
+  applyInit(root);
   const docs = join(root, "worktrees/docs");
   const change = join(docs, "changes/crlf-drift");
   mkdirSync(change);

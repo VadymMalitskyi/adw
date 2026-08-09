@@ -6,7 +6,7 @@
 - Split reusable `.adw/local.yaml` validation and rendering from project initialization so init and contributor onboarding enforce the same non-secret local configuration contract.
 - Make Claude Code's managed-development policy sandbox-first: auto-allow arbitrary sandbox-confined Bash, remove the redundant generated Bash allow catalog, and classify external, destructive, provider, and MCP operations through a fail-closed managed hook backed by static ask/deny rules.
 - Drop support for project schemas 1–4, plan schema 1, approval schema 1, and every bundled migration from previous ADW releases.
-- Make `adw:update` a read-only exact-schema compatibility check; unsupported projects now require fresh initialization or separately reviewed manual replacement.
+- Make `adw:update` reject unsupported schemas while previewing and digest-binding atomic repair of current-schema managed-container and permission files after plugin upgrades.
 - Add project schema 5 and the `managed-development` agent permission profile.
 - Auto-approve routine workspace edits, builds, tests, and local Git work while prompting for external writes and forbidding force-push, merge, release, publish, and deployment commands.
 - Generate Codex exec-policy/config files and Claude Code sandbox/permission settings; bake root-owned Claude policy and MCP/Bash classification hooks into managed devcontainers.
@@ -14,10 +14,13 @@
 - Add project schema 4 with optional work-tracker workflow policy and committed payload-profile references.
 - Add plan schema 2 with digest-bound effective components, validation, and tracker policy.
 - Add deterministic project-policy resolution, work-item profile and payload validation, schema-3-to-4 migration, diagnostics, and contract coverage.
+- Add one bundled YAML 1.2 and full draft-2020-12 schema path that reads exact artifact bytes itself, rejects duplicate keys and placeholders, and replaces divergent regex readers.
+- Make init approval-digest binding unconditional, add symlink-safe atomic writes and rollback, disable repository hooks, and fix default-branch and wildcard-workspace discovery.
+- Make doctor routing agent-aware and split managed-container failures into actionable checks; make status invalidate incomplete approval input sets before reporting validation.
+- Restrict DNS to configured resolvers, harden force-push and unknown-provider classification, verify managed allowlist digests, and add generated-image security CI.
+- Remove the dead TypeScript helper mirror and legacy migration/status aliases; generate the self-contained helper deterministically from one runtime source.
 
 All notable changes to this private plugin are documented here.
-
-## Unreleased
 
 - Add read-only `adw:investigate` with bounded observability queries, deployed-code inspection, deterministic severity guidance, and schema-validated incident reports.
 - Keep webhook receipt, agent supervision, and notification delivery outside ADW while defining exact JSON output for an authorized external runner.

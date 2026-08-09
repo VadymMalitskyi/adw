@@ -67,6 +67,18 @@ test("project schema v5 supports optional provider-neutral capability configurat
   assert.equal(invalidCapability.valid, false);
   assert.ok(invalidCapability.errors.some(({ path, keyword }) => path === "/integrations/release_manager" && keyword === "additionalProperties"));
 
+  for (const [field, value] of [["branch", "adw-docs"], ["worktree", "worktrees/adw-docs"]]) {
+    const configurableOnlyInAppearance = structuredClone(base);
+    configurableOnlyInAppearance.documentation[field] = value;
+    const invalidLocation = await validateArtifact("project", configurableOnlyInAppearance);
+    assert.equal(invalidLocation.valid, false);
+    assert.ok(invalidLocation.errors.some(({ path, keyword }) => path === `/documentation/${field}` && keyword === "const"));
+  }
+
+  const placeholder = structuredClone(base);
+  placeholder.validation.default = ["<replace with a verified command>"];
+  assert.equal((await validateArtifact("project", placeholder)).valid, false);
+
 });
 
 test("project schema v5 requires the managed-development permission profile", async () => {
@@ -159,6 +171,15 @@ test("invalid values return actionable JSON pointers and contract-specific error
   assert(plan.errors.some((error) => error.path === "/tasks/0/affected_paths/0"));
   assert(plan.errors.some((error) => error.keyword === "sequence"));
   assert(plan.errors.some((error) => error.keyword === "documentation"));
+  const placeholderPlan = structuredClone({
+    schema: 2,
+    change_id: "placeholder",
+    summary: "bad",
+    effective_policy: { components: [], unowned_paths: [], project_policy_digest: "c".repeat(64), required_validation: [] },
+    tasks: [{ id: 1, title: "x", description: "x", affected_paths: ["src"], restrictions: [], validation: [{ command: "<exact command>", cwd: ".", timeout_ms: 1000, required: true, source: "manifest" }] }],
+    documentation: { impact: "none", files: [] },
+  });
+  assert.equal((await validateArtifact("plan", placeholderPlan)).valid, false);
 });
 
 test("approval lifecycle preserves superseded evidence and rejects ambiguous state", async () => {

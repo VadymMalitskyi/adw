@@ -67,29 +67,59 @@ function withinProject(projectRoot, path) {
   return path === projectRoot || path.startsWith(`${projectRoot}${sep}`);
 }
 
+function compareText(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function sortedDirectoryEntries(directory) {
+  return readdirSync(directory, { withFileTypes: true })
+    .sort((left, right) => compareText(left.name, right.name));
+}
+
+function workspacePattern(workspace) {
+  if (typeof workspace !== "string") return null;
+  const normalized = workspace.trim().replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/$/, "");
+  if (!normalized || normalized.startsWith("/") || normalized.split("/").includes("..") || /[{}\[\]]/.test(normalized)) return null;
+  let expression = "";
+  for (let index = 0; index < normalized.length; index += 1) {
+    const character = normalized[index];
+    if (character === "*" && normalized[index + 1] === "*") {
+      expression += ".*";
+      index += 1;
+    } else if (character === "*") expression += "[^/]*";
+    else if (character === "?") expression += "[^/]";
+    else expression += character.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+  }
+  return new RegExp(`^${expression}$`);
+}
+
+function workspaceMatchers(manifest) {
+  const workspaces = Array.isArray(manifest?.workspaces) ? manifest.workspaces : manifest?.workspaces?.packages;
+  return (workspaces ?? []).map(workspacePattern).filter(Boolean);
+}
+
 function componentRoots(projectRoot) {
   const roots = new Set([projectRoot]);
   const packagePath = join(projectRoot, "package.json");
   if (existsSync(packagePath)) {
     const manifest = readJson(packagePath, "package.json");
     const workspaces = Array.isArray(manifest.workspaces) ? manifest.workspaces : manifest.workspaces?.packages;
-    for (const workspace of workspaces ?? []) {
-      if (typeof workspace !== "string" || /[*?\[\]{}]/.test(workspace)) continue;
+    for (const workspace of (workspaces ?? []).filter((value) => typeof value === "string" && !/[*?{}\[\]]/.test(value))) {
       const target = resolve(projectRoot, workspace);
       if (withinProject(projectRoot, target) && target !== projectRoot && existsSync(target) && lstatSync(target).isDirectory() && !lstatSync(target).isSymbolicLink()) roots.add(target);
     }
   }
   function visit(directory, depth) {
     if (depth > 4) return;
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    for (const entry of sortedDirectoryEntries(directory)) {
       if (!entry.isDirectory() || entry.isSymbolicLink() || IGNORED_DIRECTORIES.has(entry.name)) continue;
       const target = join(directory, entry.name);
-      if ([...MANIFESTS].some((name) => existsSync(join(target, name))) || readdirSync(target, { withFileTypes: true }).some((child) => child.isFile() && DOTNET_PROJECT_EXTENSION.test(child.name))) roots.add(target);
+      if ([...MANIFESTS].some((name) => existsSync(join(target, name))) || sortedDirectoryEntries(target).some((child) => child.isFile() && DOTNET_PROJECT_EXTENSION.test(child.name))) roots.add(target);
       visit(target, depth + 1);
     }
   }
   visit(projectRoot, 0);
-  return [...roots].sort((left, right) => relative(projectRoot, left).localeCompare(relative(projectRoot, right)));
+  return [...roots].sort((left, right) => compareText(relative(projectRoot, left), relative(projectRoot, right)));
 }
 
 function shellQuote(value) {
@@ -163,7 +193,7 @@ function declaredRuntimeVersion(projectRoot, componentRoot, runtime) {
   const candidates = [];
   const workflows = join(projectRoot, ".github/workflows");
   if (existsSync(workflows) && lstatSync(workflows).isDirectory() && !lstatSync(workflows).isSymbolicLink()) {
-    for (const entry of readdirSync(workflows, { withFileTypes: true })) {
+    for (const entry of sortedDirectoryEntries(workflows)) {
       if (entry.isFile() && /\.ya?ml$/i.test(entry.name)) candidates.push(join(workflows, entry.name));
     }
   }
@@ -186,12 +216,9 @@ function declaredRuntimeVersion(projectRoot, componentRoot, runtime) {
 
 function scanSourceKinds(projectRoot) {
   const found = new Map();
-  let visited = 0;
   function visit(directory, depth) {
-    if (depth > 5 || visited >= 2000) return;
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      if (visited >= 2000) return;
-      visited += 1;
+    if (depth > 5) return;
+    for (const entry of sortedDirectoryEntries(directory)) {
       if (entry.isSymbolicLink() || IGNORED_DIRECTORIES.has(entry.name)) continue;
       const path = join(directory, entry.name);
       if (entry.isDirectory()) visit(path, depth + 1);
@@ -288,8 +315,7 @@ export function discoverDevelopmentEnvironment(projectRoot) {
   const roots = componentRoots(projectRoot);
   const rootPackagePath = join(projectRoot, "package.json");
   const rootPackage = existsSync(rootPackagePath) ? readJson(rootPackagePath, "package.json") : null;
-  const workspaceValues = Array.isArray(rootPackage?.workspaces) ? rootPackage.workspaces : rootPackage?.workspaces?.packages;
-  const exactWorkspaces = new Set((workspaceValues ?? []).filter((value) => typeof value === "string" && !/[*?\[\]{}]/.test(value)).map((value) => relative(projectRoot, resolve(projectRoot, value))));
+  const rootWorkspaceMatchers = workspaceMatchers(rootPackage);
   const rootNodeVersionFile = [".nvmrc", ".node-version"].map((name) => join(projectRoot, name)).find(existsSync);
   const rootNodeDeclared = rootPackage ? declaredRuntimeVersion(projectRoot, projectRoot, "node") : null;
   const rootNodeRequested = rootNodeVersionFile ? readFileSync(rootNodeVersionFile, "utf8").trim() : rootPackage?.engines?.node ?? rootNodeDeclared?.raw;
@@ -303,14 +329,16 @@ export function discoverDevelopmentEnvironment(projectRoot) {
       const manifest = readJson(packagePath, sourcePath(projectRoot, packagePath));
       const versionFile = [".nvmrc", ".node-version"].map((name) => join(componentRoot, name)).find(existsSync);
       const declared = declaredRuntimeVersion(projectRoot, componentRoot, "node");
-      const inheritedWorkspaceVersion = componentRoot !== projectRoot && exactWorkspaces.has(component) ? rootNodeRequested : null;
+      const isRootWorkspace = componentRoot !== projectRoot && rootWorkspaceMatchers.some((matcher) => matcher.test(component.replaceAll("\\", "/")));
+      const inheritedWorkspaceVersion = isRootWorkspace ? rootNodeRequested : null;
       const rawVersion = versionFile ? readFileSync(versionFile, "utf8").trim() : manifest.engines?.node ?? inheritedWorkspaceVersion ?? declared?.raw;
-      const version = numericVersion(rawVersion, "22").split(".")[0];
+      const parsedVersion = numericVersion(rawVersion, null);
+      const version = parsedVersion ? parsedVersion.split(".")[0] : null;
       const versionSource = versionFile ? sourcePath(projectRoot, versionFile) : manifest.engines?.node ? `${sourcePath(projectRoot, packagePath)}#engines.node` : inheritedWorkspaceVersion ? rootNodeSource : declared?.source ?? sourcePath(projectRoot, packagePath);
       runtimes.push({ name: "node", version, requested: rawVersion ?? null, source: versionSource, component });
       addUnique(systemPackages, "name", { name: "build-essential", source: sourcePath(projectRoot, packagePath) });
       dependencyFiles.push(packagePath);
-      if (componentRoot !== projectRoot && exactWorkspaces.has(component) && rootHasLockedInstall) {
+      if (isRootWorkspace && rootHasLockedInstall) {
         // The root lockfile-backed install covers this exact workspace.
       } else if (existsSync(join(componentRoot, "pnpm-lock.yaml"))) setupCommands.push({ command: inComponent(projectRoot, componentRoot, "corepack pnpm install --frozen-lockfile"), source: sourcePath(projectRoot, join(componentRoot, "pnpm-lock.yaml")) });
       else if (existsSync(join(componentRoot, "yarn.lock"))) setupCommands.push({ command: inComponent(projectRoot, componentRoot, "corepack yarn install --immutable"), source: sourcePath(projectRoot, join(componentRoot, "yarn.lock")) });
@@ -325,9 +353,11 @@ export function discoverDevelopmentEnvironment(projectRoot) {
       const versionFile = join(componentRoot, ".python-version");
       const pyproject = readText(pyprojectPath);
       const declared = declaredRuntimeVersion(projectRoot, componentRoot, "python");
-      const version = existsSync(versionFile) ? numericVersion(readFileSync(versionFile, "utf8"), "3.12") : pythonRequiresVersion(pyproject) ?? declared?.version ?? "3.12";
+      const versionFileValue = existsSync(versionFile) ? readFileSync(versionFile, "utf8").trim() : null;
+      const pythonRequirement = pyproject?.match(/^requires-python\s*=\s*["']([^"']+)["']/m)?.[1] ?? null;
+      const version = versionFileValue !== null ? numericVersion(versionFileValue, null) : pythonRequiresVersion(pyproject) ?? declared?.version ?? null;
       const versionSource = existsSync(versionFile) ? sourcePath(projectRoot, versionFile) : pythonRequiresVersion(pyproject) ? `${sourcePath(projectRoot, pyprojectPath)}#requires-python` : declared?.source ?? sourcePath(projectRoot, existsSync(pyprojectPath) ? pyprojectPath : pythonFiles[0]);
-      runtimes.push({ name: "python", version, requested: version, source: versionSource, component });
+      runtimes.push({ name: "python", version, requested: versionFileValue ?? pythonRequirement ?? declared?.raw ?? null, source: versionSource, component });
       for (const name of ["build-essential", "python-is-python3", "python3-dev", "python3-pip", "python3-venv"]) addUnique(systemPackages, "name", { name, source: existsSync(pyprojectPath) ? sourcePath(projectRoot, pyprojectPath) : sourcePath(projectRoot, pythonFiles[0]) });
       dependencyFiles.push(...pythonFiles, ...(existsSync(pyprojectPath) ? [pyprojectPath] : []));
       if (existsSync(join(componentRoot, "uv.lock"))) setupCommands.push({ command: inComponent(projectRoot, componentRoot, "python -m pip install --user uv && \"$HOME/.local/bin/uv\" sync --frozen"), source: sourcePath(projectRoot, join(componentRoot, "uv.lock")) });
@@ -386,7 +416,7 @@ export function discoverDevelopmentEnvironment(projectRoot) {
       else unresolved.push({ requirement: `Ruby runtime and locked dependencies in ${component}`, source: sourcePath(projectRoot, gemPath), reason: "both .ruby-version and Gemfile.lock are required for autonomous setup" });
     }
 
-    const dotnetProjectPath = readdirSync(componentRoot, { withFileTypes: true })
+    const dotnetProjectPath = sortedDirectoryEntries(componentRoot)
       .filter((entry) => entry.isFile() && DOTNET_PROJECT_EXTENSION.test(entry.name))
       .map((entry) => join(componentRoot, entry.name))
       .sort()[0];
@@ -440,9 +470,9 @@ export function discoverDevelopmentEnvironment(projectRoot) {
   return {
     schema: 1,
     runtimes,
-    selected_versions: Object.fromEntries([...selected].sort(([left], [right]) => left.localeCompare(right))),
+    selected_versions: Object.fromEntries([...selected].sort(([left], [right]) => compareText(left, right))),
     features,
-    system_packages: systemPackages.sort((left, right) => left.name.localeCompare(right.name) || left.source.localeCompare(right.source)),
+    system_packages: systemPackages.sort((left, right) => compareText(left.name, right.name) || compareText(left.source, right.source)),
     setup_commands: setupCommands,
     allowed_domains: domains,
     forward_ports: ports.sort((left, right) => left.port - right.port),
@@ -548,7 +578,12 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { agentTools 
   const marker = readJson(join(templateRoot, "adw-managed.json"), "managed devcontainer marker");
   marker.agent_tools = agentTools;
   marker.schema = 2;
+  marker.plugin_version = readJson(resolve(templateRoot, "../../.codex-plugin/plugin.json"), "Codex plugin manifest").version;
+  marker.codex_version = config.build.args.CODEX_VERSION;
+  marker.claude_code_version = config.build.args.CLAUDE_CODE_VERSION;
   marker.permission_profile = "managed-development";
+  marker.integration_domains = configuredIntegrationDomains;
+  marker.allowed_domains_sha256 = sha256(allowedDomains);
   marker.codex_rules_sha256 = sha256(CODEX_RULES);
   marker.claude_settings_sha256 = sha256(claudeSettings);
   marker.claude_hook_sha256 = sha256(readFileSync(join(templateRoot, "claude-permission-hook.mjs"), "utf8"));

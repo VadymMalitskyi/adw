@@ -15,7 +15,7 @@ Schema-5 projects can specialize the shared workflow without copying skills: aff
 ## Requirements
 
 - Node.js 20 or newer for the bundled internal helper.
-- Git with worktree support.
+- Git 2.42 or newer (`adw:init` uses orphan worktree creation introduced in Git 2.42).
 - Docker plus a Dev Containers client for the default managed execution profile.
 - A current Codex or Claude Code plugin manager.
 - Provider tooling only when an integration or external delivery is requested. Credentials remain in the provider, MCP client, CLI, or external credential store.

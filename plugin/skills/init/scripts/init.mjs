@@ -8,6 +8,7 @@ import {
   readFileSync,
   readdirSync,
   realpathSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -20,6 +21,7 @@ import {
   onboardingSummary,
 } from "./onboarding.mjs";
 import { renderLocalConfiguration } from "../../../lib/local-configuration.mjs";
+import { applyAtomicWrites, parseYaml, validateArtifact } from "../../../lib/adw-helper.mjs";
 import { PERMISSION_PROFILE, permissionProjectFiles } from "../../../execution/managed-development.mjs";
 
 const ROUTING_START = "<!-- ADW:START -->";
@@ -139,8 +141,12 @@ function ignoreBlock(original) {
 function defaultBranch(projectRoot) {
   const remote = git(projectRoot, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"], { allowFailure: true });
   if (remote.status === 0) return remote.stdout.replace(/^origin\//, "");
-  const current = git(projectRoot, ["symbolic-ref", "--quiet", "--short", "HEAD"], { allowFailure: true });
-  return current.status === 0 ? current.stdout : "main";
+  for (const candidate of ["main", "master"]) {
+    if (git(projectRoot, ["show-ref", "--verify", "--quiet", `refs/heads/${candidate}`], { allowFailure: true }).status === 0) return candidate;
+  }
+  const configured = git(projectRoot, ["config", "--get", "init.defaultBranch"], { allowFailure: true });
+  if (configured.status === 0 && configured.stdout) return configured.stdout;
+  throw new Error("cannot determine the default branch from origin/HEAD, a local main/master branch, or init.defaultBranch");
 }
 
 function packageRunner(projectRoot, componentRoot = projectRoot) {
@@ -175,40 +181,23 @@ function detectCommands(projectRoot, componentPath = ".") {
       }
     }
   }
-  if (commands.length === 0) commands.push({
-    command: "<unresolved>",
-    source: "unresolved: no supported manifest or task-runner target proves a validation command",
-    required: false,
-  });
   return commands;
 }
 
 function discoverComponents(projectRoot) {
   const candidates = new Set();
-  const rootPackage = join(projectRoot, "package.json");
-  if (existsSync(rootPackage)) {
-    let manifest;
-    try { manifest = JSON.parse(readFileSync(rootPackage, "utf8")); }
-    catch (error) { throw new Error(`cannot inspect package.json: ${error.message}`); }
-    const workspaces = Array.isArray(manifest.workspaces) ? manifest.workspaces : manifest.workspaces?.packages;
-    for (const workspace of workspaces ?? []) {
-      if (typeof workspace !== "string" || /[*?[\]{}]/.test(workspace)) continue;
-      const target = resolve(projectRoot, workspace);
-      if (target !== projectRoot && existsSync(target) && lstatSync(target).isDirectory()) candidates.add(relative(projectRoot, target));
+  const ignored = new Set([".git", ".adw", ".devcontainer", "node_modules", "worktrees", "dist", "build", "coverage", "vendor"]);
+  const manifests = ["package.json", "Makefile", "makefile", "pyproject.toml", "go.mod", "Cargo.toml", "pom.xml", "build.gradle", "build.gradle.kts", "Gemfile"];
+  function visit(directory, depth) {
+    if (depth > 4) return;
+    for (const entry of readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0)) {
+      if (!entry.isDirectory() || entry.isSymbolicLink() || ignored.has(entry.name)) continue;
+      const target = join(directory, entry.name);
+      if (manifests.some((name) => existsSync(join(target, name))) || readdirSync(target).some((name) => /\.(?:csproj|fsproj|vbproj)$/.test(name))) candidates.add(relative(projectRoot, target));
+      visit(target, depth + 1);
     }
   }
-  for (const parentName of ["apps", "packages", "services"]) {
-    const parent = join(projectRoot, parentName);
-    if (!existsSync(parent) || !lstatSync(parent).isDirectory() || lstatSync(parent).isSymbolicLink()) continue;
-    for (const entry of readdirSync(parent, { withFileTypes: true })) {
-      if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
-      const componentPath = `${parentName}/${entry.name}`;
-      const componentRoot = join(projectRoot, componentPath);
-      if (["package.json", "Makefile", "makefile", "pyproject.toml"].some((name) => existsSync(join(componentRoot, name)))) {
-        candidates.add(componentPath);
-      }
-    }
-  }
+  visit(projectRoot, 0);
   if (candidates.size === 0) return [{ name: "app", path: ".", commands: detectCommands(projectRoot) }];
   const used = new Set();
   return [...candidates].sort().map((path) => {
@@ -280,7 +269,7 @@ function projectConfiguration(projectRoot, execution, onboarding) {
     lines.push(`    path: ${yamlScalar(component.path)}`);
     if (!(components.length === 1 && component.path === ".")) {
       lines.push("    validation:");
-      lines.push("      default:");
+      lines.push(component.commands.length === 0 ? "      default: []" : "      default:");
       for (const item of component.commands) {
         lines.push(`        - command: ${yamlScalar(item.command)}`);
         lines.push(`          source: ${yamlScalar(item.source)}`);
@@ -292,7 +281,7 @@ function projectConfiguration(projectRoot, execution, onboarding) {
   }
   lines.push("");
   lines.push("validation:");
-  lines.push("  default:");
+  lines.push(commands.length === 0 ? "  default: []" : "  default:");
   for (const item of commands) {
     lines.push(`    - command: ${yamlScalar(item.command)}`);
     lines.push(`      source: ${yamlScalar(item.source)}`);
@@ -420,21 +409,24 @@ function docsPlan(projectRoot) {
   return { action: branchExists ? "attach" : "create", path: "worktrees/docs", branch: "docs" };
 }
 
-function writeChangedFiles(projectRoot, files) {
-  for (const file of files) {
-    if (file.before === file.after) continue;
-    const destination = join(projectRoot, file.path);
-    mkdirSync(dirname(destination), { recursive: true });
-    writeFileSync(destination, file.after, "utf8");
-  }
+async function writeChangedFiles(projectRoot, files) {
+  const changed = files.filter((file) => file.before !== file.after);
+  if (changed.length === 0) return;
+  for (const file of changed) assertWritableProjectPath(projectRoot, file.path);
+  await applyAtomicWrites(projectRoot, changed.map((file) => ({
+    path: file.path,
+    content: file.after,
+    expected_content: existsSync(join(projectRoot, file.path)) ? file.before : null,
+  })));
 }
 
 function initializeDocs(projectRoot, plan) {
   const docsPath = join(projectRoot, plan.path);
   if (plan.action === "reuse") return;
   mkdirSync(dirname(docsPath), { recursive: true });
-  if (plan.action === "attach") git(projectRoot, ["worktree", "add", docsPath, "docs"]);
-  else git(projectRoot, ["worktree", "add", "--orphan", "-b", "docs", docsPath]);
+  if (plan.action === "create") git(projectRoot, ["var", "GIT_AUTHOR_IDENT"]);
+  if (plan.action === "attach") git(projectRoot, ["-c", "core.hooksPath=/dev/null", "worktree", "add", docsPath, "docs"]);
+  else git(projectRoot, ["-c", "core.hooksPath=/dev/null", "worktree", "add", "--orphan", "-b", "docs", docsPath]);
   if (plan.action !== "create") return;
   const architecture = readFileSync(join(pluginRoot, "templates/architecture.md"), "utf8");
   const codeHead = git(projectRoot, ["rev-parse", "HEAD"], { allowFailure: true });
@@ -447,8 +439,17 @@ function initializeDocs(projectRoot, plan) {
   writeFileSync(join(docsPath, "components/.gitkeep"), "", "utf8");
   writeFileSync(join(docsPath, "changes/.gitkeep"), "", "utf8");
   writeFileSync(join(docsPath, "SYNC.yaml"), `code_branch: ${yamlScalar(branch)}\nreviewed_through: ${yamlScalar(reviewedThrough)}\nupdated_at: null\n`, "utf8");
-  git(projectRoot, ["add", "README.md", "architecture.md", "components/.gitkeep", "changes/.gitkeep", "SYNC.yaml"], { cwd: docsPath });
-  git(projectRoot, ["commit", "-m", "Initialize ADW docs branch"], { cwd: docsPath });
+  git(projectRoot, ["-c", "core.hooksPath=/dev/null", "add", "README.md", "architecture.md", "components/.gitkeep", "changes/.gitkeep", "SYNC.yaml"], { cwd: docsPath });
+  git(projectRoot, ["-c", "core.hooksPath=/dev/null", "commit", "-m", "Initialize ADW docs branch"], { cwd: docsPath });
+}
+
+function rollbackDocsInitialization(projectRoot, plan) {
+  if (plan.action === "reuse") return;
+  const docsPath = join(projectRoot, plan.path);
+  git(projectRoot, ["worktree", "remove", "--force", docsPath], { allowFailure: true });
+  if (existsSync(docsPath)) rmSync(docsPath, { recursive: true, force: true });
+  git(projectRoot, ["worktree", "prune"], { allowFailure: true });
+  if (plan.action === "create") git(projectRoot, ["branch", "-D", plan.branch], { allowFailure: true });
 }
 
 function previewDigest(projectRoot, files, docs, execution, onboarding) {
@@ -493,6 +494,7 @@ try {
   const onboarding = loadOnboarding(args.onboardingPath, pluginRoot);
   validateOnboardingProjectReferences(projectRoot, onboarding);
   const existingConfig = existsSync(join(projectRoot, "adw.yaml"));
+  if (existingConfig && (lstatSync(join(projectRoot, "adw.yaml")).isSymbolicLink() || !lstatSync(join(projectRoot, "adw.yaml")).isFile())) throw new Error("adw.yaml must be a regular non-symlink file");
   if (existingConfig && args.onboardingPath) throw new Error("onboarding cannot replace an existing adw.yaml; use an explicit reviewed configuration change");
   if (existingConfig && args.execution) throw new Error("--execution cannot replace an existing adw.yaml; use a separately reviewed manual replacement or infrastructure change");
   if (args.execution && onboarding.execution && args.execution !== onboarding.execution.isolation) throw new Error("--execution conflicts with the onboarding execution choice");
@@ -500,17 +502,23 @@ try {
     ? { isolation: "existing-configuration", action: "preserve", required: false, reopen_required: false }
     : resolveExecution(projectRoot, args.execution ?? onboarding.execution?.isolation);
   const files = plannedFiles(projectRoot, execution, onboarding);
+  const plannedConfig = files.find(({ path }) => path === "adw.yaml")?.after ?? readFileSync(join(projectRoot, "adw.yaml"), "utf8");
+  const projectValidation = await validateArtifact("project", parseYaml(plannedConfig, "adw.yaml"));
+  if (!projectValidation.valid) throw new Error(`adw.yaml is invalid: ${projectValidation.errors.map((item) => `${item.path} ${item.message}`).join("; ")}`);
   const docs = docsPlan(projectRoot);
   const approvedPreviewDigest = previewDigest(projectRoot, files, docs, execution, onboarding);
   if (args.action === "preview") {
     process.stdout.write(`${JSON.stringify({ mode: "preview", preview_digest: approvedPreviewDigest, ...summarize(projectRoot, files, docs, execution, onboarding) }, null, 2)}\n`);
   } else {
-    if (args.onboardingPath && args.previewDigest !== approvedPreviewDigest) throw new Error("apply requires the exact --preview-digest shown for the reviewed onboarding preview");
-    // Ignore rules must exist before any local state or worktree is created.
-    writeChangedFiles(projectRoot, files.filter((file) => file.path === ".gitignore"));
-    mkdirSync(join(projectRoot, ".adw/cache"), { recursive: true });
-    writeChangedFiles(projectRoot, files.filter((file) => file.path !== ".gitignore"));
-    initializeDocs(projectRoot, docs);
+    if (args.previewDigest !== approvedPreviewDigest) throw new Error("apply requires the exact --preview-digest shown for the reviewed initialization preview");
+    try {
+      initializeDocs(projectRoot, docs);
+      mkdirSync(join(projectRoot, ".adw/cache"), { recursive: true });
+      await writeChangedFiles(projectRoot, files);
+    } catch (error) {
+      rollbackDocsInitialization(projectRoot, docs);
+      throw error;
+    }
     process.stdout.write(`${JSON.stringify({ mode: "apply", preview_digest: approvedPreviewDigest, ...summarize(projectRoot, files, { ...docs, action: docs.action === "reuse" ? "reuse" : "ready" }, execution, onboarding) }, null, 2)}\n`);
   }
 } catch (error) {

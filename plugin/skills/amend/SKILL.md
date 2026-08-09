@@ -21,7 +21,7 @@ Invalidate the active approval before changing approved intent, preserve its evi
 
 ## Verify and invalidate first
 
-1. Read every current approval input as exact bytes and validate the parsed plan and optional integration artifact with the helper.
+1. Read every current approval input as exact bytes, then independently load the plan and optional integration artifact through the helper's `load-artifact-file` command.
 2. Validate schema-2 `approval.json` and require `status: "active"`. Invoke `verify-approval-bundle` with the exact ordered inputs and the approval's recorded pre-approval `docs_commit`.
 3. Confirm directly from Git that the recorded `docs_commit` contains every exact input and is an ancestor of the current docs-branch head. Stop on any mismatch; do not rewrite questionable evidence.
 4. Create a superseded approval object by preserving every original approval field and adding:
@@ -41,7 +41,7 @@ This ordering ensures interruption cannot leave changed intent paired with an ac
 4. Keep the plan as one contiguous sequence numbered from 1. Update affected paths, anchors, restrictions, and each structured validation descriptor (`command`, `cwd`, `timeout_ms`, `required`, `source`) to match the amendment.
 5. Reconcile the specification and plan documentation declarations. Require files for `update` or `new` and an empty list for `none`.
 6. Preserve the amendment reason in the superseded approval evidence. Also summarize the changed scope and rationale in the specification's Decisions section so future readers do not need chat history.
-7. Parse and validate the amended plan and optional integration artifact with the bundled helper. Preserve canonical `requirement_fields` names and recompute `requirements_digest` with `digest-requirements` only after verified external reads. Check for placeholders and ensure all acceptance criteria remain covered.
+7. Load and validate the amended plan and optional integration artifact with the bundled helper's `load-artifact-file` command. Preserve canonical `requirement_fields` names and recompute `requirements_digest` with `digest-requirements` only after verified external reads. Check for placeholders and ensure all acceptance criteria remain covered.
 8. Review the diff and commit only the amended approval inputs on the docs branch. Leave `approval.json` superseded. Do not compute or create a replacement approval.
 9. Report the reason, invalidated digest, history path, lifecycle commit, artifact commit, material changes, documentation impact, and exact validation commands. Stop and require a fresh `adw:approve` interaction.
 

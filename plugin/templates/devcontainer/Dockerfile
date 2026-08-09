@@ -45,8 +45,9 @@ COPY .devcontainer/project-requirements.json /etc/adw/project-requirements.json
 RUN printf '%s\n' "$ADW_AGENT_TOOLS" > /etc/adw/agent-tools \
     && chown root:root /etc/adw/agent-tools /etc/adw/allowed-domains.txt /etc/adw/codex.rules /etc/adw/project-requirements.json /etc/claude-code/managed-settings.d/20-adw.json /usr/local/bin/adw-claude-permission-hook /usr/local/bin/adw-init-firewall /usr/local/bin/adw-post-create /usr/local/bin/adw-project-setup \
     && chmod 0444 /etc/adw/agent-tools /etc/adw/allowed-domains.txt /etc/adw/codex.rules /etc/adw/project-requirements.json /etc/claude-code/managed-settings.d/20-adw.json \
-    && chmod 0500 /usr/local/bin/adw-claude-permission-hook /usr/local/bin/adw-init-firewall /usr/local/bin/adw-post-create \
+    && chmod 0500 /usr/local/bin/adw-init-firewall /usr/local/bin/adw-post-create \
     && chmod 0555 /usr/local/bin/adw-project-setup \
+    && chmod 0555 /usr/local/bin/adw-claude-permission-hook \
     && (gpasswd -d vscode sudo 2>/dev/null || true) \
     && rm -f /etc/sudoers.d/vscode \
     && printf '%s\n' \

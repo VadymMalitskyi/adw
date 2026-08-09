@@ -20,7 +20,14 @@ test("Codex loads ADW exec rules and applies the strictest matching decision", {
     { argv: ["gh", "pr", "view", "1"], decision: "allow" },
     { argv: ["git", "push", "origin", "main"], decision: "prompt" },
     { argv: ["gh", "api", "repos/example/project"], decision: "prompt" },
+    { argv: ["glab", "repo", "view"], decision: "prompt" },
+    { argv: ["datadog-ci", "synthetics", "run-tests"], decision: "prompt" },
     { argv: ["git", "push", "--force", "origin", "main"], decision: "forbidden" },
+    { argv: ["git", "push", "--mirror", "origin"], decision: "forbidden" },
+    // Prefix policy cannot classify arbitrary later refspecs, but the generic push
+    // rule must still prevent these variants from running without approval.
+    { argv: ["git", "push", "origin", "main", "--force"], decision: "prompt" },
+    { argv: ["git", "push", "origin", "+main"], decision: "prompt" },
     { argv: ["gh", "pr", "merge", "1"], decision: "forbidden" },
   ];
   for (const { argv, decision } of cases) {

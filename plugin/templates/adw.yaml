@@ -22,12 +22,7 @@ components:
     path: .
 
 validation:
-  default:
-    - command: "<replace with a verified command>"
-      source: "<manifest, task runner, CI workflow, or existing documentation>"
-      cwd: .
-      timeout_ms: 120000
-      required: true
+  default: []
 
 # Optional. Omit this block for lightweight projects.
 # integrations:

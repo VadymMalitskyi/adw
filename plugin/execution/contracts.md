@@ -6,10 +6,12 @@ Treat the configured execution environment as an enforceable preflight, not docu
 
 Before any project or external mutation:
 
-1. Read `<project-root>/adw.yaml`.
-2. Validate it with the bundled helper against `project.v5.schema.json`.
-3. If validation fails, or `schema` is not exactly the number `5`, stop.
-4. Only after successful validation, read `execution.isolation`, `execution.enforcement`, and `execution.permissions.profile`.
+1. Invoke `node <plugin-root>/lib/adw-helper.mjs load-artifact-file` with JSON stdin `{ "project_root": "<project-root>", "path": "adw.yaml", "artifact": "project" }`. This command reads the exact file bytes itself, parses YAML 1.2 with duplicate-key rejection, validates the parsed value against the complete schema, and returns the parsed `data` plus its byte digest.
+2. Require exit code 0 and `ok: true`. Never ask the model, a regex scraper, or another ad-hoc reader to transcribe security-relevant YAML before validation.
+3. If validation fails, or `data.schema` is not exactly the number `5`, stop.
+4. Only from the successfully loaded `data`, read `execution.isolation`, `execution.enforcement`, and `execution.permissions.profile`.
+
+Use the same `load-artifact-file` command for every project-relative YAML artifact with its registered artifact name: `plan.yaml` as `plan`, `integrations.yaml` as `integration`, and work-item profiles as `work-item-profile`. Preserve raw bytes separately when an approval digest binds them. `SYNC.yaml` has no artifact schema and may be parsed only by the helper's exported `parseYaml` function in bundled scripts.
 
 Earlier project schemas are unsupported:
 
@@ -27,7 +29,7 @@ Keep the agent CLIs pinned, run as a non-root user, keep Codex's workspace sandb
 
 Never mount the Docker socket, host home, SSH directory, global cloud credentials, or global agent configuration. Use distinct named volumes for Codex, Claude, and provider authentication. Treat those volumes as sensitive and repository-scoped.
 
-The root-owned allowed-domain file is baked into the image. Adding a project tool, MCP server, or integration domain requires a reviewed edit and container rebuild; authentication never widens the allowlist. DNS allowlisting reduces exposure but does not prevent exfiltration to an allowed service or through DNS, so least-privilege provider identities and server-side protections remain required.
+The root-owned allowed-domain file is baked into the image. Adding a project tool, MCP server, or integration domain requires a reviewed edit and container rebuild; authentication never widens the allowlist. Permit DNS only to the resolvers configured inside the container, use bounded resolution attempts, and remain fail-closed when a required domain cannot be resolved. DNS allowlisting reduces exposure but does not prevent exfiltration to an allowed or co-hosted service, so least-privilege provider identities and server-side protections remain required.
 
 ## Project-owned containers
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -33,17 +33,17 @@ test("managed template pins agents, runs non-root, scopes credentials, and denie
   assert.match(config.build.args.CLAUDE_CODE_VERSION, /^\d+\.\d+\.\d+$/);
   assert.equal(marker.codex_version, config.build.args.CODEX_VERSION);
   assert.equal(marker.claude_code_version, config.build.args.CLAUDE_CODE_VERSION);
-  assert.equal(marker.project_requirements_sha256, createHash("sha256").update(readFileSync(join(templateRoot, "project-requirements.json"))).digest("hex"));
-  assert.equal(marker.project_setup_sha256, createHash("sha256").update(readFileSync(join(templateRoot, "project-setup.sh"))).digest("hex"));
-  assert.match(marker.codex_rules_sha256, /^[0-9a-f]{64}$/);
-  assert.match(marker.claude_settings_sha256, /^[0-9a-f]{64}$/);
-  assert.match(marker.claude_hook_sha256, /^[0-9a-f]{64}$/);
+  for (const key of ["allowed_domains_sha256", "codex_rules_sha256", "claude_settings_sha256", "claude_hook_sha256", "project_requirements_sha256", "project_setup_sha256"]) {
+    assert.equal(marker[key], undefined, `template must not carry stale generated digest ${key}`);
+  }
   assert.match(dockerfile, /@openai\/codex@\$\{CODEX_VERSION\}/);
   assert.match(dockerfile, /@anthropic-ai\/claude-code@\$\{CLAUDE_CODE_VERSION\}/);
   assert.match(dockerfile, /case "\$ADW_AGENT_TOOLS" in/);
   assert.match(dockerfile, /npm install -g "\$\{agent_packages\[@\]\}"/);
   assert.match(dockerfile, /> \/etc\/adw\/agent-tools/);
   assert.match(dockerfile, /chmod 0444 \/etc\/adw\/agent-tools/);
+  assert.match(dockerfile, /chmod 0555 \/usr\/local\/bin\/adw-claude-permission-hook/);
+  assert.doesNotMatch(dockerfile, /chmod 0500 [^\n]*adw-claude-permission-hook/);
   assert.doesNotMatch(dockerfile, /npm install -g "@openai\/codex@\$\{CODEX_VERSION\}" "@anthropic-ai\/claude-code@\$\{CLAUDE_CODE_VERSION\}"/);
   const postCreate = readFileSync(join(templateRoot, "post-create.sh"), "utf8");
   assert.match(postCreate, /cat \/etc\/adw\/agent-tools/);
@@ -55,6 +55,18 @@ test("managed template pins agents, runs non-root, scopes credentials, and denie
   assert.doesNotMatch(configText, /docker\.sock|\.ssh|\.aws|\.azure|\.config\/gcloud|localEnv:HOME/i);
   assert.match(config.postStartCommand, /adw-init-firewall/);
   assert.ok(config.postCreateCommand.indexOf("adw-init-firewall") < config.postCreateCommand.indexOf("adw-project-setup"));
+  assert.equal(config.runArgs.includes("--privileged"), false);
+  assert.equal(config.runArgs.includes("--network=host"), false);
+  assert.equal(config.runArgs.includes("--pid=host"), false);
+  assert.deepEqual(config.runArgs.filter((argument) => argument.startsWith("--cap-add=")).sort(), [
+    "--cap-add=NET_ADMIN",
+    "--cap-add=NET_RAW",
+    "--cap-add=SETGID",
+    "--cap-add=SETUID",
+    "--cap-add=SYS_ADMIN",
+    "--cap-add=SYS_CHROOT",
+    "--cap-add=SYS_PTRACE",
+  ]);
 });
 
 test("managed development files scope agent tools, credentials, extensions, environment, and domains", async (t) => {
@@ -95,6 +107,8 @@ test("managed development files scope agent tools, credentials, extensions, envi
       assert.equal(marker.agent_tools, profile);
       assert.equal(marker.project_requirements_sha256, createHash("sha256").update(generated.files.get("project-requirements.json")).digest("hex"));
       assert.equal(marker.project_setup_sha256, createHash("sha256").update(generated.files.get("project-setup.sh")).digest("hex"));
+      assert.equal(marker.allowed_domains_sha256, createHash("sha256").update(generated.files.get("allowed-domains.txt")).digest("hex"));
+      assert.deepEqual(marker.integration_domains, ["tracker.example.com"]);
       assert.ok(allowedDomains.has("tracker.example.com"));
       assert.equal([...allowedDomains].filter((domain) => domain === "tracker.example.com").length, 1);
 
@@ -129,7 +143,19 @@ test("managed firewall scripts are valid shell and establish deny-by-default bef
   assert.match(firewall, /ip6tables -P OUTPUT DROP/);
   assert.match(firewall, /claude\) verification_domain="api\.anthropic\.com"/);
   assert.match(firewall, /codex\|both\) verification_domain="api\.openai\.com"/);
+  assert.match(firewall, /awk '\$1 == "nameserver"/);
+  assert.match(firewall, /dig \+short \+time="\$dns_timeout" \+tries=1 @"\$resolver"/);
+  assert.match(firewall, /iptables -A OUTPUT -p udp -d "\$resolver" --dport 53 -j ACCEPT/);
+  assert.match(firewall, /iptables -A OUTPUT -p tcp -d "\$resolver" --dport 53 -j ACCEPT/);
+  assert.doesNotMatch(firewall, /^iptables -A OUTPUT -p (?:udp|tcp) --dport 53 -j ACCEPT$/m);
+  assert.match(firewall, /failed to resolve required domain after \$\{dns_attempts\} attempts/);
+  assert.match(firewall, /adw-firewall-refresh\.log/);
   assert.doesNotMatch(firewall, /iptables -P OUTPUT ACCEPT/);
+});
+
+test("managed shell templates pass shellcheck when it is available", { skip: spawnSync("shellcheck", ["--version"], { encoding: "utf8" }).status === 0 ? false : "shellcheck is not installed" }, () => {
+  const result = spawnSync("shellcheck", ["--severity=warning", join(templateRoot, "init-firewall.sh"), join(templateRoot, "post-create.sh")], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stdout || result.stderr);
 });
 
 test("init derives a reviewable project-specific development environment from repository evidence", () => {
@@ -171,7 +197,7 @@ test("init derives a reviewable project-specific development environment from re
   assert.ok(preview.development_environment.unresolved.some(({ requirement }) => requirement === "compose services"));
   assert.ok(preview.development_environment.unresolved.some(({ requirement }) => requirement === "environment variable DATABASE_URL"));
 
-  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--project-root", root], { encoding: "utf8" });
+  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--project-root", root], { encoding: "utf8" });
   assert.equal(initialized.status, 0, initialized.stderr);
   const config = JSON.parse(readFileSync(join(root, ".devcontainer/devcontainer.json"), "utf8"));
   assert.equal(config.build.args.NODE_MAJOR, "20");
@@ -209,7 +235,10 @@ test("doctor blocks a required managed profile outside its runtime and passes it
   writeFileSync(join(root, "README.md"), "# fixture\n");
   git(root, "add", ".");
   git(root, "commit", "-q", "-m", "fixture");
-  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--project-root", root], { encoding: "utf8" });
+  const previewResult = spawnSync(process.execPath, [initScript, "preview", "--project-root", root], { encoding: "utf8" });
+  assert.equal(previewResult.status, 0, previewResult.stderr);
+  const preview = JSON.parse(previewResult.stdout);
+  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--project-root", root], { encoding: "utf8" });
   assert.equal(initialized.status, 0, initialized.stderr);
 
   const outside = spawnSync(process.execPath, [doctorScript, "--project-root", root], { encoding: "utf8" });
@@ -230,10 +259,13 @@ test("doctor blocks a required managed profile outside its runtime and passes it
     env: { ...process.env, ADW_MANAGED_DEVCONTAINER: "1" },
   });
   assert.equal(drifted.status, 1, drifted.stderr || drifted.stdout);
-  assert.equal(JSON.parse(drifted.stdout).checks.find(({ id }) => id === "execution:managed-files").status, "fail");
+  const driftedChecks = JSON.parse(drifted.stdout).checks;
+  assert.equal(driftedChecks.find(({ id }) => id === "execution:generated-files").status, "fail");
+  assert.equal(driftedChecks.find(({ id }) => id === "execution:managed-files").status, "pass");
+  assert.equal(driftedChecks.find(({ id }) => id === "execution:hardening").status, "pass");
 });
 
-test("doctor accepts every generated agent profile and rejects an unselected agent credential surface", async (t) => {
+test("single-agent and dual-agent onboarding initialize only selected routing and pass doctor", async (t) => {
   for (const profile of ["codex", "claude", "both"]) {
     await t.test(profile, () => {
       const root = mkdtempSync(join(tmpdir(), `adw-managed-doctor-${profile}-`));
@@ -243,17 +275,30 @@ test("doctor accepts every generated agent profile and rejects an unselected age
       writeFileSync(join(root, "README.md"), "# fixture\n");
       git(root, "add", ".");
       git(root, "commit", "-q", "-m", "fixture");
-      const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--project-root", root], { encoding: "utf8" });
+      const onboardingPath = join(root, "onboarding.json");
+      writeFileSync(onboardingPath, `${JSON.stringify({
+        schema: 1,
+        agents: profile === "both" ? ["codex", "claude"] : [profile],
+        execution: { isolation: "managed-devcontainer" },
+      }, null, 2)}\n`);
+      const previewResult = spawnSync(process.execPath, [initScript, "preview", "--onboarding", onboardingPath, "--project-root", root], { encoding: "utf8" });
+      assert.equal(previewResult.status, 0, previewResult.stderr || previewResult.stdout);
+      const preview = JSON.parse(previewResult.stdout);
+      const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--onboarding", onboardingPath, "--project-root", root], { encoding: "utf8" });
       assert.equal(initialized.status, 0, initialized.stderr);
 
-      const generated = managedDevelopmentFiles(root, templateRoot, { agentTools: profile });
-      for (const [name, contents] of generated.files) writeFileSync(join(root, ".devcontainer", name), contents);
       const doctor = spawnSync(process.execPath, [doctorScript, "--project-root", root], {
         encoding: "utf8",
         env: { ...process.env, ADW_MANAGED_DEVCONTAINER: "1" },
       });
       assert.equal(doctor.status, 0, doctor.stderr || doctor.stdout);
-      assert.equal(JSON.parse(doctor.stdout).checks.find(({ id }) => id === "execution:managed-files").status, "pass");
+      const snapshot = JSON.parse(doctor.stdout);
+      assert.equal(snapshot.checks.find(({ id }) => id === "execution:managed-files").status, "pass");
+      assert.deepEqual(snapshot.checks.filter(({ id }) => id.startsWith("routing:")).map(({ id }) => id), profile === "codex"
+        ? ["routing:AGENTS.md"]
+        : profile === "claude" ? ["routing:CLAUDE.md"] : ["routing:AGENTS.md", "routing:CLAUDE.md"]);
+      assert.equal(existsSync(join(root, "AGENTS.md")), profile !== "claude");
+      assert.equal(existsSync(join(root, "CLAUDE.md")), profile !== "codex");
 
       if (profile === "codex") {
         const configPath = join(root, ".devcontainer/devcontainer.json");
@@ -264,7 +309,17 @@ test("doctor accepts every generated agent profile and rejects an unselected age
           encoding: "utf8",
           env: { ...process.env, ADW_MANAGED_DEVCONTAINER: "1" },
         });
-        assert.equal(JSON.parse(drifted.stdout).checks.find(({ id }) => id === "execution:managed-files").status, "fail");
+        const driftedChecks = JSON.parse(drifted.stdout).checks;
+        assert.equal(driftedChecks.find(({ id }) => id === "execution:mounts").status, "fail");
+        assert.equal(driftedChecks.find(({ id }) => id === "execution:agent-profile").status, "pass");
+        assert.equal(driftedChecks.find(({ id }) => id === "execution:domains").status, "pass");
+
+        writeFileSync(join(root, ".devcontainer/allowed-domains.txt"), `${readFileSync(join(root, ".devcontainer/allowed-domains.txt"), "utf8")}evil.example.com\n`);
+        const domainDrift = spawnSync(process.execPath, [doctorScript, "--project-root", root], {
+          encoding: "utf8",
+          env: { ...process.env, ADW_MANAGED_DEVCONTAINER: "1" },
+        });
+        assert.equal(JSON.parse(domainDrift.stdout).checks.find(({ id }) => id === "execution:domains").status, "fail");
       }
     });
   }
