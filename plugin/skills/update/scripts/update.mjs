@@ -93,7 +93,7 @@ function repairPlan(root, project) {
   const agentTools = managedAgentTools(root);
   const generated = managedDevelopmentFiles(root, join(pluginRoot, "templates/devcontainer"), {
     agentTools,
-    webAccess: project.execution.web_access ?? "hosted-only",
+    webAccess: project.execution.web_access ?? (agentTools === "codex" ? "hosted-only" : "public-pages"),
     integrationDomains: existingIntegrationDomains(root),
   });
   const files = [];

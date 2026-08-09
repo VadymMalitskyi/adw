@@ -15,7 +15,7 @@ Preserve repository-owned content. Modify only the bounded ADW blocks, new ADW a
 3. Read `<plugin-root>/execution/contracts.md`, `<plugin-root>/integrations/contracts.md`, and `<plugin-root>/integrations/providers.json`. Run a baseline `node <plugin-root>/skills/init/scripts/init.mjs preview --project-root <project-root>` only to inspect repository-derived defaults. If `.devcontainer/devcontainer.json` exists, default to required `project-devcontainer` and preserve it. Otherwise recommend required `managed-devcontainer`. Offer `provider-sandbox` only with a clear explanation that it is the weaker portable profile and records `preferred` enforcement.
 4. Conduct an adaptive onboarding interview before preparing the reviewed preview. Ask in small related groups, explain defaults, skip irrelevant follow-ups, and never infer a team policy merely from repository layout or an available provider tool:
    - select Codex, Claude Code, or both; for a managed container this controls installed CLIs, extensions, credential volumes, checks, and agent network domains;
-   - choose `hosted-only` web access by default, which enables Codex live hosted search/page opening and Claude hosted `WebSearch` while preserving exact-domain container egress; when Claude Code is selected, offer `public-pages` only after explaining that local `WebFetch` then opens arbitrary public HTTPS pages and creates a bounded GET/HEAD channel that shell code can imitate to disclose data in URLs;
+   - choose `public-pages` web access by default when Claude Code is selected, explaining that its local `WebFetch` opens arbitrary public HTTPS pages through a bounded GET/HEAD channel that shell code can imitate to disclose data in URLs; offer `hosted-only` for projects that require exact-domain container egress;
    - confirm the execution profile, the generated `managed-development` provider permissions, and documentation delivery (`direct-push` or `pull-request`);
    - ask which `work_tracker`, `code_host`, `observability`, and `knowledge` capabilities are used, including none; for each selected capability collect a supported provider, `optional|required`, `read-only|read-write`, non-secret project or organization settings, preferred transport, and exact additional network domains needed in a managed container;
    - for a work tracker, ask whether changes require a binding, whether ADW may propose create-or-link or only link existing items, whether binding happens at plan or execute, one item versus a parent plus plan tasks, and the reviewed committed profile paths required by creation policy;
@@ -27,7 +27,7 @@ Preserve repository-owned content. Modify only the bounded ADW blocks, new ADW a
    {
      "schema": 1,
      "agents": ["codex", "claude"],
-     "web_access": "hosted-only",
+     "web_access": "public-pages",
      "execution": { "isolation": "managed-devcontainer" },
      "documentation": { "delivery": "direct-push" },
      "integrations": {},

@@ -70,9 +70,10 @@ test("Claude policy uses sandbox-first Bash plus explicit external-write review"
 
   const managed = JSON.parse(managedClaudeSettings());
   assert.deepEqual(managed.sandbox.network.allowedDomains, []);
-  assert.equal(managed.sandbox.network.allowManagedDomainsOnly, true);
+  assert.equal(managed.sandbox.network.allowManagedDomainsOnly, undefined);
   assert.equal(managed.sandbox.network.strictAllowlist, true);
   assert.equal(JSON.parse(managedClaudeSettings({ webAccess: "public-pages" })).sandbox.network.allowManagedDomainsOnly, undefined);
+  assert.equal(JSON.parse(managedClaudeSettings({ webAccess: "hosted-only" })).sandbox.network.allowManagedDomainsOnly, true);
   assert.throws(() => managedClaudeSettings({ webAccess: "unrestricted" }), /unsupported web access profile/);
   assert.equal(managed.hooks.PreToolUse.length, 2);
   assert.match(managed.hooks.PreToolUse[0].hooks[0].command, /adw-claude-permission-hook/);

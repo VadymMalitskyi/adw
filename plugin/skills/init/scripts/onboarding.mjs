@@ -229,7 +229,9 @@ function normalizeOnboarding(raw, pluginRoot) {
   const providers = readProviderRegistry(pluginRoot);
   const { integrations, networkDomains } = normalizeIntegrations(raw.integrations, providers);
   const agentTools = normalizeAgents(raw.agents);
-  const webAccess = raw.web_access === undefined ? "hosted-only" : enumValue(raw.web_access, WEB_ACCESS_MODES, "onboarding.web_access");
+  const webAccess = raw.web_access === undefined
+    ? (agentTools === "codex" ? "hosted-only" : "public-pages")
+    : enumValue(raw.web_access, WEB_ACCESS_MODES, "onboarding.web_access");
   if (agentTools === "codex" && webAccess === "public-pages") fail("onboarding.web_access", "public-pages applies only when Claude Code is selected; Codex page opening is hosted");
   const normalized = {
     schema: 1,
@@ -252,7 +254,7 @@ export function defaultOnboarding() {
   const onboarding = {
     schema: 1,
     agentTools: "both",
-    webAccess: "hosted-only",
+    webAccess: "public-pages",
     documentation: { delivery: "direct-push" },
     integrations: {},
     networkDomains: [],

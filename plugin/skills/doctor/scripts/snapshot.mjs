@@ -150,7 +150,7 @@ function managedDevcontainerChecks(projectRoot, execution) {
   const selectedAgents = profiles[marker?.agent_tools] ?? [];
   const selectedAgentSet = new Set(selectedAgents);
   const validAgentProfile = selectedAgents.length > 0 && configObject?.build?.args?.ADW_AGENT_TOOLS === marker?.agent_tools;
-  const expectedWebAccess = execution.web_access ?? "hosted-only";
+  const expectedWebAccess = execution.web_access ?? (marker?.agent_tools === "codex" ? "hosted-only" : "public-pages");
   const validWebAccess = ["hosted-only", "public-pages"].includes(marker?.web_access)
     && marker.web_access === expectedWebAccess
     && configObject?.build?.args?.ADW_WEB_ACCESS === marker.web_access;
@@ -202,7 +202,7 @@ function managedDevcontainerChecks(projectRoot, execution) {
     && /COPY \.devcontainer\/egress-proxy\.mjs \/usr\/local\/bin\/adw-egress-proxy/.test(dockerfile)
     && /useradd --system --no-create-home --shell \/usr\/sbin\/nologin adw-egress/.test(dockerfile)
     && /ARG ADW_AGENT_TOOLS=both/.test(dockerfile)
-    && /ARG ADW_WEB_ACCESS=hosted-only/.test(dockerfile)
+    && /ARG ADW_WEB_ACCESS=public-pages/.test(dockerfile)
     && /case "\$ADW_AGENT_TOOLS" in/.test(dockerfile)
     && /> \/etc\/adw\/agent-tools/.test(dockerfile)
     && /> \/etc\/adw\/web-access/.test(dockerfile)

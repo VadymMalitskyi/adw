@@ -2,7 +2,7 @@
   "schema": 2,
   "profile": "managed-devcontainer",
   "agent_tools": "both",
-  "web_access": "hosted-only",
+  "web_access": "public-pages",
   "codex_version": "0.146.1",
   "claude_code_version": "2.1.222",
   "plugin_version": "0.6.0",

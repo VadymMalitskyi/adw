@@ -173,7 +173,7 @@ export function mergeClaudeSettings(source = "") {
   return `${JSON.stringify({ $schema: settings.$schema ?? "https://json.schemastore.org/claude-code-settings.json", ...settings, permissions, sandbox }, null, 2)}\n`;
 }
 
-export function managedClaudeSettings({ allowedDomains = [], webAccess = "hosted-only" } = {}) {
+export function managedClaudeSettings({ allowedDomains = [], webAccess = "public-pages" } = {}) {
   if (!["hosted-only", "public-pages"].includes(webAccess)) throw new Error(`unsupported web access profile: ${webAccess}`);
   const settings = JSON.parse(mergeClaudeSettings());
   settings.sandbox.network = {

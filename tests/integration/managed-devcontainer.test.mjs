@@ -100,16 +100,16 @@ test("managed development files scope agent tools, credentials, extensions, envi
       const claudeSettings = JSON.parse(generated.files.get("claude-settings.json"));
       const claudeSandbox = claudeSettings.sandbox;
       assert.deepEqual(new Set(claudeSandbox.network.allowedDomains), allowedDomains);
-      assert.equal(claudeSandbox.network.allowManagedDomainsOnly, true);
+      assert.equal(claudeSandbox.network.allowManagedDomainsOnly, profile === "codex" ? true : undefined);
       assert.equal(claudeSandbox.network.strictAllowlist, true);
       assert.equal(claudeSandbox.autoAllowBashIfSandboxed, true);
       assert.deepEqual(claudeSettings.permissions.allow, ["WebSearch"]);
       assert.equal(claudeSettings.hooks.PreToolUse.length, 2);
 
       assert.equal(config.build.args.ADW_AGENT_TOOLS, profile);
-      assert.equal(config.build.args.ADW_WEB_ACCESS, "hosted-only");
+      assert.equal(config.build.args.ADW_WEB_ACCESS, profile === "codex" ? "hosted-only" : "public-pages");
       assert.equal(marker.agent_tools, profile);
-      assert.equal(marker.web_access, "hosted-only");
+      assert.equal(marker.web_access, profile === "codex" ? "hosted-only" : "public-pages");
       assert.equal(marker.project_requirements_sha256, createHash("sha256").update(generated.files.get("project-requirements.json")).digest("hex"));
       assert.equal(marker.project_setup_sha256, createHash("sha256").update(generated.files.get("project-setup.sh")).digest("hex"));
       assert.equal(marker.allowed_domains_sha256, createHash("sha256").update(generated.files.get("allowed-domains.txt")).digest("hex"));

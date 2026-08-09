@@ -36,7 +36,7 @@ test("missing answers use a fresh dual-agent default", () => {
   assert.deepEqual({ ...first, digest: "<digest>" }, {
     schema: 1,
     agentTools: "both",
-    webAccess: "hosted-only",
+    webAccess: "public-pages",
     documentation: { delivery: "direct-push" },
     integrations: {},
     networkDomains: [],
