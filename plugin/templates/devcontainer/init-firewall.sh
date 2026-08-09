@@ -3,6 +3,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 readonly domains_file="/etc/adw/allowed-domains.txt"
+readonly agent_tools_file="/etc/adw/agent-tools"
 readonly ipset_name="adw-allowed-egress"
 readonly entry_timeout=900
 readonly refresh_interval=120
@@ -13,6 +14,15 @@ if [ "${#allowed_domains[@]}" -eq 0 ]; then
   echo "[adw-firewall] no allowed domains configured; refusing to start" >&2
   exit 1
 fi
+
+case "$(cat "$agent_tools_file")" in
+  codex|both) verification_domain="api.openai.com" ;;
+  claude) verification_domain="api.anthropic.com" ;;
+  *)
+    echo "[adw-firewall] invalid agent tools profile" >&2
+    exit 1
+    ;;
+esac
 
 resolve_domains() {
   local domain ips ip
@@ -76,8 +86,8 @@ if curl --connect-timeout 3 -sS https://example.com >/dev/null 2>&1; then
   echo "[adw-firewall] verification failed: unlisted egress succeeded" >&2
   exit 1
 fi
-if ! curl --connect-timeout 5 -sS https://api.openai.com >/dev/null 2>&1; then
-  echo "[adw-firewall] verification failed: api.openai.com is unreachable" >&2
+if ! curl --connect-timeout 5 -sS "https://${verification_domain}" >/dev/null 2>&1; then
+  echo "[adw-firewall] verification failed: ${verification_domain} is unreachable" >&2
   exit 1
 fi
 echo "[adw-firewall] strict egress policy active"

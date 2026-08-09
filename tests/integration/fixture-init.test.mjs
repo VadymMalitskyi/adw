@@ -69,7 +69,7 @@ test("empty repository initializes unresolved commands, docs records, and a mana
   const preview = runInit(root, "preview");
   assert.equal(preview.mode, "preview");
   assert.equal(preview.docs.action, "create");
-  assert.deepEqual(preview.devcontainer, { isolation: "managed-devcontainer", action: "create", required: true, reopen_required: true });
+  assert.deepEqual(preview.devcontainer, { isolation: "managed-devcontainer", action: "create", required: true, reopen_required: true, agent_tools: "both" });
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), statusBefore);
 
   runInit(root, "apply", true);
@@ -108,7 +108,7 @@ test("empty repository initializes unresolved commands, docs records, and a mana
 test("provider sandbox is an explicit initialization choice and creates no container", () => {
   const root = copyFixture("empty-repo");
   const preview = runInit(root, "preview", false, 0, "provider-sandbox");
-  assert.deepEqual(preview.devcontainer, { isolation: "provider-sandbox", action: "none", required: false, reopen_required: false });
+  assert.deepEqual(preview.devcontainer, { isolation: "provider-sandbox", action: "none", required: false, reopen_required: false, agent_tools: "both" });
   runInit(root, "apply", true, 0, "provider-sandbox");
   assert.equal(existsSync(join(root, ".devcontainer")), false);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /execution:\n  isolation: provider-sandbox\n  enforcement: preferred/);

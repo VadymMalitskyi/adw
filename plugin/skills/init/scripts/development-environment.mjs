@@ -34,6 +34,17 @@ const ECOSYSTEM_DOMAINS = {
   ruby: ["rubygems.org", "index.rubygems.org"],
 };
 
+const AGENT_TOOL_PROFILES = new Map([
+  ["codex", ["codex"]],
+  ["claude", ["claude"]],
+  ["both", ["codex", "claude"]],
+]);
+
+const AGENT_DOMAINS = {
+  codex: ["api.openai.com", "auth.openai.com", "chatgpt.com"],
+  claude: ["api.anthropic.com", "claude.ai", "console.anthropic.com"],
+};
+
 function readText(path) {
   return existsSync(path) ? readFileSync(path, "utf8") : null;
 }
@@ -412,6 +423,25 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function selectedAgentTools(profile) {
+  const selected = AGENT_TOOL_PROFILES.get(profile);
+  if (!selected) throw new Error(`unsupported agent tools profile: ${profile}`);
+  return selected;
+}
+
+function normalizedIntegrationDomains(domains) {
+  if (!Array.isArray(domains)) throw new Error("integrationDomains must be an array");
+  const normalized = domains.map((domain) => {
+    if (typeof domain !== "string") throw new Error("integration domains must be strings");
+    const value = domain.trim().toLowerCase();
+    if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(value)) {
+      throw new Error(`invalid integration domain: ${domain}`);
+    }
+    return value;
+  });
+  return [...new Set(normalized)].sort();
+}
+
 function setupScript(requirements) {
   const lines = [
     "#!/usr/bin/env bash",
@@ -432,24 +462,53 @@ function setupScript(requirements) {
   return `${lines.join("\n")}\n`;
 }
 
-export function managedDevelopmentFiles(projectRoot, templateRoot) {
+export function managedDevelopmentFiles(projectRoot, templateRoot, { agentTools = "both", integrationDomains = [] } = {}) {
+  const selectedAgents = selectedAgentTools(agentTools);
+  const selectedAgentSet = new Set(selectedAgents);
+  const configuredIntegrationDomains = normalizedIntegrationDomains(integrationDomains);
   const requirements = discoverDevelopmentEnvironment(projectRoot);
   const requirementsText = stableJson(requirements);
   const projectSetup = setupScript(requirements);
   const config = readJson(join(templateRoot, "devcontainer.json"), "managed devcontainer template");
+  config.build.args.ADW_AGENT_TOOLS = agentTools;
   const nodeVersion = requirements.selected_versions.node;
   if (nodeVersion) config.build.args.NODE_MAJOR = nodeVersion.split(".")[0];
   const aptPackages = [...new Set(requirements.system_packages.map(({ name }) => name))].sort();
   config.build.args.ADW_PROJECT_APT_PACKAGES = aptPackages.join(" ");
   if (Object.keys(requirements.features).length > 0) config.features = requirements.features;
   if (requirements.forward_ports.length > 0) config.forwardPorts = requirements.forward_ports.map(({ port }) => port);
+  config.mounts = config.mounts.filter((mount) => {
+    if (mount.includes("target=/home/vscode/.codex")) return selectedAgentSet.has("codex");
+    if (mount.includes("target=/home/vscode/.claude")) return selectedAgentSet.has("claude");
+    return true;
+  });
+  config.customizations.vscode.extensions = config.customizations.vscode.extensions.filter((extension) => {
+    if (extension === "openai.chatgpt") return selectedAgentSet.has("codex");
+    if (extension === "anthropic.claude-code") return selectedAgentSet.has("claude");
+    return true;
+  });
+  if (!selectedAgentSet.has("claude")) {
+    delete config.containerEnv.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC;
+    delete config.containerEnv.DISABLE_AUTOUPDATER;
+  }
   config.postCreateCommand = "sudo /usr/local/bin/adw-init-firewall && sudo /usr/local/bin/adw-post-create && /usr/local/bin/adw-project-setup";
 
-  let dockerfile = readFileSync(join(templateRoot, "Dockerfile"), "utf8");
+  const dockerfile = readFileSync(join(templateRoot, "Dockerfile"), "utf8");
   const allowedBase = readFileSync(join(templateRoot, "allowed-domains.txt"), "utf8").trimEnd();
-  const generatedDomains = requirements.allowed_domains.filter((domain) => !allowedBase.split(/\r?\n/).some((line) => line.trim() === domain));
-  const allowedDomains = `${allowedBase}${generatedDomains.length > 0 ? `\n\n# Project dependency sources detected by adw:init\n${generatedDomains.join("\n")}` : ""}\n`;
+  const includedDomains = new Set(allowedBase.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith("#")));
+  const domainSections = [];
+  const addDomainSection = (heading, domains) => {
+    const unique = [...new Set(domains)].filter((domain) => !includedDomains.has(domain));
+    if (unique.length === 0) return;
+    unique.forEach((domain) => includedDomains.add(domain));
+    domainSections.push(`# ${heading}\n${unique.join("\n")}`);
+  };
+  addDomainSection("Selected agent inference and authentication", selectedAgents.flatMap((agent) => AGENT_DOMAINS[agent]));
+  addDomainSection("Explicitly configured integrations", configuredIntegrationDomains);
+  addDomainSection("Project dependency sources detected by adw:init", requirements.allowed_domains);
+  const allowedDomains = `${allowedBase}${domainSections.length > 0 ? `\n\n${domainSections.join("\n\n")}` : ""}\n`;
   const marker = readJson(join(templateRoot, "adw-managed.json"), "managed devcontainer marker");
+  marker.agent_tools = agentTools;
   marker.requirements_schema = requirements.schema;
   marker.project_requirements_sha256 = sha256(requirementsText);
   marker.project_setup_sha256 = sha256(projectSetup);

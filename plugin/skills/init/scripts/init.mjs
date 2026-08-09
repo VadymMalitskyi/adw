@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
@@ -13,6 +14,12 @@ import {
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { discoverDevelopmentEnvironment, managedDevelopmentFiles } from "./development-environment.mjs";
+import {
+  loadOnboarding,
+  onboardingDigest,
+  onboardingSummary,
+  renderLocalConfiguration,
+} from "./onboarding.mjs";
 
 const ROUTING_START = "<!-- ADW:START -->";
 const ROUTING_END = "<!-- ADW:END -->";
@@ -35,6 +42,8 @@ function parseArguments(argv) {
     else if (value === "--confirmed") args.confirmed = true;
     else if (value === "--project-root") args.projectRoot = argv[++index];
     else if (value === "--execution") args.execution = argv[++index];
+    else if (value === "--onboarding") args.onboardingPath = argv[++index];
+    else if (value === "--preview-digest") args.previewDigest = argv[++index];
     else fail(`unknown argument: ${value}`);
   }
   if (!args.projectRoot) fail("--project-root is required");
@@ -63,6 +72,19 @@ function assertProjectRoot(input) {
   return root;
 }
 
+function validateOnboardingProjectReferences(projectRoot, onboarding) {
+  const tracker = onboarding.workflows?.work_tracker;
+  for (const field of ["profile", "child_profile"]) {
+    const configured = tracker?.[field];
+    if (!configured) continue;
+    const target = resolve(projectRoot, configured);
+    const relativeTarget = relative(projectRoot, target);
+    if (relativeTarget === ".." || relativeTarget.startsWith(`..${sep}`) || !existsSync(target) || lstatSync(target).isSymbolicLink() || !lstatSync(target).isFile()) {
+      throw new Error(`onboarding work_tracker.${field} must reference an existing non-symlink project file: ${configured}`);
+    }
+  }
+}
+
 function replaceManagedBlock(original, start, end, body) {
   const startIndex = original.indexOf(start);
   const endIndex = original.indexOf(end);
@@ -79,14 +101,25 @@ function replaceManagedBlock(original, start, end, body) {
   return `${original}${original.endsWith("\n") ? "" : "\n"}${body}\n`;
 }
 
-function routingBlock() {
-  return [
+function routingBlock(conventions = {}) {
+  const lines = [
     ROUTING_START,
     "## ADW workflow routing",
     "",
     "Use the installed `adw` plugin for project workflows. Start with `adw:status` to reconstruct state, `adw:plan` for substantial changes, and `adw:quick` only for low-risk local changes. Keep ADW context and change records in the configured `worktrees/docs` checkout; do not copy plugin skills into this repository.",
-    ROUTING_END,
-  ].join("\n");
+  ];
+  const entries = [
+    ["Branches", conventions.branches],
+    ["Pull requests", conventions.pull_requests],
+    ["Work items", conventions.work_items],
+  ].filter(([, value]) => value);
+  if (entries.length > 0) {
+    lines.push("", "## Project workflow conventions", "");
+    for (const [label, value] of entries) lines.push(`- ${label}: ${value}`);
+    lines.push("", "These conventions do not authorize external writes, merging, deployment, release, or bypassing ADW approval and validation requirements.");
+  }
+  lines.push(ROUTING_END);
+  return lines.join("\n");
 }
 
 function ignoreBlock(original) {
@@ -190,7 +223,33 @@ function yamlScalar(value) {
   return JSON.stringify(String(value));
 }
 
-function projectConfiguration(projectRoot, execution) {
+function appendIntegrations(lines, integrations) {
+  const entries = Object.entries(integrations ?? {});
+  if (entries.length === 0) return;
+  lines.push("", "integrations:");
+  for (const [capability, integration] of entries) {
+    lines.push(`  ${capability}:`);
+    for (const field of ["provider", "requirement", "transport", "access"]) {
+      if (integration[field] !== undefined) lines.push(`    ${field}: ${yamlScalar(integration[field])}`);
+    }
+    const settings = Object.entries(integration.settings ?? {});
+    if (settings.length > 0) {
+      lines.push("    settings:");
+      for (const [key, value] of settings) lines.push(`      ${yamlScalar(key)}: ${yamlScalar(value)}`);
+    }
+  }
+}
+
+function appendWorkflows(lines, workflows) {
+  const tracker = workflows?.work_tracker;
+  if (!tracker) return;
+  lines.push("", "workflows:", "  work_tracker:");
+  for (const field of ["binding", "ensure", "stage", "cardinality", "profile", "child_profile"]) {
+    if (tracker[field] !== undefined) lines.push(`    ${field}: ${yamlScalar(tracker[field])}`);
+  }
+}
+
+function projectConfiguration(projectRoot, execution, onboarding) {
   const components = discoverComponents(projectRoot);
   const commands = detectCommands(projectRoot);
   const lines = [
@@ -205,7 +264,7 @@ function projectConfiguration(projectRoot, execution) {
     "  branch: docs",
     "  worktree: worktrees/docs",
     "  sync_marker: SYNC.yaml",
-    "  delivery: direct-push",
+    `  delivery: ${onboarding.documentation.delivery}`,
     "",
     "execution:",
     `  isolation: ${execution}`,
@@ -238,6 +297,8 @@ function projectConfiguration(projectRoot, execution) {
     lines.push("      timeout_ms: 120000");
     lines.push(`      required: ${item.required}`);
   }
+  appendIntegrations(lines, onboarding.integrations);
+  appendWorkflows(lines, onboarding.workflows);
   return `${lines.join("\n")}\n`;
 }
 
@@ -268,9 +329,12 @@ function resolveExecution(projectRoot, requested) {
   };
 }
 
-function managedDevcontainerFiles(projectRoot) {
+function managedDevcontainerFiles(projectRoot, onboarding) {
   const templateRoot = join(pluginRoot, "templates/devcontainer");
-  const generated = managedDevelopmentFiles(projectRoot, templateRoot);
+  const generated = managedDevelopmentFiles(projectRoot, templateRoot, {
+    agentTools: onboarding.agentTools,
+    integrationDomains: onboarding.networkDomains,
+  });
   return [...generated.files].map(([name, content]) => ({
     path: `.devcontainer/${name}`,
     before: "",
@@ -279,22 +343,31 @@ function managedDevcontainerFiles(projectRoot) {
   }));
 }
 
-function plannedFiles(projectRoot, execution) {
+function plannedFiles(projectRoot, execution, onboarding) {
   const files = [];
-  for (const name of ["AGENTS.md", "CLAUDE.md"]) {
+  const routingFiles = onboarding.agentTools === "codex"
+    ? ["AGENTS.md"]
+    : onboarding.agentTools === "claude" ? ["CLAUDE.md"] : ["AGENTS.md", "CLAUDE.md"];
+  for (const name of routingFiles) {
     const path = join(projectRoot, name);
     const before = readOrEmpty(path);
-    const after = replaceManagedBlock(before, ROUTING_START, ROUTING_END, routingBlock());
+    const after = replaceManagedBlock(before, ROUTING_START, ROUTING_END, routingBlock(onboarding.conventions));
     files.push({ path: name, before, after, action: existsSync(path) ? "update-managed-block" : "create" });
   }
   const ignorePath = join(projectRoot, ".gitignore");
   const ignoreBefore = readOrEmpty(ignorePath);
   const ignoreAfter = replaceManagedBlock(ignoreBefore, IGNORE_START, IGNORE_END, ignoreBlock(ignoreBefore));
   files.push({ path: ".gitignore", before: ignoreBefore, after: ignoreAfter, action: existsSync(ignorePath) ? "update-managed-block" : "create" });
+  const localPath = join(projectRoot, ".adw/local.yaml");
+  const localBefore = readOrEmpty(localPath);
+  const hasLocalAnswers = Object.keys(onboarding.local.identity).length > 0 || Object.keys(onboarding.local.integrations).length > 0;
+  if (existsSync(localPath) && hasLocalAnswers) throw new Error("onboarding local settings cannot replace an existing .adw/local.yaml; preserve or update it through a separate reviewed local change");
+  const localAfter = existsSync(localPath) ? localBefore : renderLocalConfiguration(onboarding);
+  files.push({ path: ".adw/local.yaml", before: localBefore, after: localAfter, action: existsSync(localPath) ? "preserve-local" : "create-local" });
   const configPath = join(projectRoot, "adw.yaml");
   if (!existsSync(configPath)) {
-    files.push({ path: "adw.yaml", before: "", after: projectConfiguration(projectRoot, execution.isolation), action: "create" });
-    if (execution.isolation === "managed-devcontainer") files.push(...managedDevcontainerFiles(projectRoot));
+    files.push({ path: "adw.yaml", before: "", after: projectConfiguration(projectRoot, execution.isolation, onboarding), action: "create" });
+    if (execution.isolation === "managed-devcontainer") files.push(...managedDevcontainerFiles(projectRoot, onboarding));
   }
   return files;
 }
@@ -362,17 +435,38 @@ function initializeDocs(projectRoot, plan) {
   git(projectRoot, ["commit", "-m", "Initialize ADW docs branch"], { cwd: docsPath });
 }
 
-function summarize(projectRoot, files, docs, execution) {
+function previewDigest(projectRoot, files, docs, execution, onboarding) {
+  const codeHead = git(projectRoot, ["rev-parse", "HEAD"], { allowFailure: true });
+  const payload = {
+    project_root: realpathSync(projectRoot),
+    code_head: codeHead.status === 0 ? codeHead.stdout : null,
+    files: files.map(({ path, action, before, after }) => ({ path, action, before, after })),
+    docs,
+    docs_template: readFileSync(join(pluginRoot, "templates/architecture.md"), "utf8"),
+    execution,
+    onboarding_digest: onboardingDigest(onboarding),
+  };
+  return createHash("sha256").update("ADW-INIT-PREVIEW-V1\0").update(JSON.stringify(payload)).digest("hex");
+}
+
+function selectedAgentNames(agentTools) {
+  if (agentTools === "codex") return "Codex";
+  if (agentTools === "claude") return "Claude Code";
+  return "Codex and Claude Code";
+}
+
+function summarize(projectRoot, files, docs, execution, onboarding) {
   return {
     ok: true,
     writes: files.filter((file) => file.before !== file.after).map((file) => ({ path: file.path, action: file.action })),
     unchanged: files.filter((file) => file.before === file.after).map((file) => file.path),
     local_state: [".adw/local.yaml", ".adw/cache/"],
     docs,
-    devcontainer: execution,
+    devcontainer: { ...execution, agent_tools: onboarding.agentTools },
+    onboarding: onboardingSummary(onboarding),
     development_environment: execution.isolation === "managed-devcontainer" ? discoverDevelopmentEnvironment(projectRoot) : null,
     next_steps: execution.reopen_required
-      ? ["commit the reviewed initialization files", "rebuild and reopen the repository in the devcontainer", "authenticate Codex, Claude Code, and required provider tools inside their project-scoped volumes", "install ADW inside the container and run adw:doctor"]
+      ? ["commit the reviewed initialization files", "rebuild and reopen the repository in the devcontainer", `authenticate ${selectedAgentNames(onboarding.agentTools)} and required provider tools inside their project-scoped volumes`, "install ADW inside the container and run adw:doctor"]
       : ["run adw:doctor to verify the selected provider sandbox"],
   };
 }
@@ -380,31 +474,28 @@ function summarize(projectRoot, files, docs, execution) {
 try {
   const args = parseArguments(process.argv.slice(2));
   const projectRoot = assertProjectRoot(args.projectRoot);
+  const onboarding = loadOnboarding(args.onboardingPath, pluginRoot);
+  validateOnboardingProjectReferences(projectRoot, onboarding);
   const existingConfig = existsSync(join(projectRoot, "adw.yaml"));
+  if (existingConfig && args.onboardingPath) throw new Error("onboarding cannot replace an existing adw.yaml; use an explicit reviewed configuration change");
   if (existingConfig && args.execution) throw new Error("--execution cannot replace an existing adw.yaml; use an explicit reviewed migration or infrastructure change");
+  if (args.execution && onboarding.execution && args.execution !== onboarding.execution.isolation) throw new Error("--execution conflicts with the onboarding execution choice");
   const execution = existingConfig
     ? { isolation: "existing-configuration", action: "preserve", required: false, reopen_required: false }
-    : resolveExecution(projectRoot, args.execution);
-  const files = plannedFiles(projectRoot, execution);
+    : resolveExecution(projectRoot, args.execution ?? onboarding.execution?.isolation);
+  const files = plannedFiles(projectRoot, execution, onboarding);
   const docs = docsPlan(projectRoot);
+  const approvedPreviewDigest = previewDigest(projectRoot, files, docs, execution, onboarding);
   if (args.action === "preview") {
-    process.stdout.write(`${JSON.stringify({ mode: "preview", ...summarize(projectRoot, files, docs, execution) }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ mode: "preview", preview_digest: approvedPreviewDigest, ...summarize(projectRoot, files, docs, execution, onboarding) }, null, 2)}\n`);
   } else {
+    if (args.onboardingPath && args.previewDigest !== approvedPreviewDigest) throw new Error("apply requires the exact --preview-digest shown for the reviewed onboarding preview");
     // Ignore rules must exist before any local state or worktree is created.
     writeChangedFiles(projectRoot, files.filter((file) => file.path === ".gitignore"));
     mkdirSync(join(projectRoot, ".adw/cache"), { recursive: true });
-    const localConfig = join(projectRoot, ".adw/local.yaml");
-    if (!existsSync(localConfig)) writeFileSync(localConfig, [
-      "# Machine-local ADW settings. This file is ignored by Git.",
-      "# Credentials belong in provider clients or credential stores, never here.",
-      "# integrations:",
-      "#   work_tracker:",
-      "#     transport: auto",
-      "",
-    ].join("\n"), "utf8");
     writeChangedFiles(projectRoot, files.filter((file) => file.path !== ".gitignore"));
     initializeDocs(projectRoot, docs);
-    process.stdout.write(`${JSON.stringify({ mode: "apply", ...summarize(projectRoot, files, { ...docs, action: docs.action === "reuse" ? "reuse" : "ready" }, execution) }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ mode: "apply", preview_digest: approvedPreviewDigest, ...summarize(projectRoot, files, { ...docs, action: docs.action === "reuse" ? "reuse" : "ready" }, execution, onboarding) }, null, 2)}\n`);
   }
 } catch (error) {
   fail(error.message);

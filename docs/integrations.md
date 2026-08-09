@@ -27,6 +27,8 @@ Each configured capability has one requirement mode:
 
 Omitting integrations is equivalent to the current lightweight workflow. Configuration contains non-secret project facts such as provider, organization, project, repository, access policy, and requirement mode. Machine-local transport preferences may live in ignored `.adw/local.yaml`.
 
+During `adw:init`, the onboarding interview can populate these shared capability entries and their exact managed-container network domains. Personal display information, account hints, and transport preferences remain local-only. Initialization validates provider/capability compatibility and prepares configuration, but it does not install a transport, authenticate, contact business data, or perform an external write; `adw:doctor` verifies availability after the selected execution environment is active.
+
 ## Transport resolution
 
 An adapter may use a native connected tool, MCP server, authenticated CLI, or direct API. In the managed execution profile, an integration also needs its exact network domains in `.devcontainer/allowed-domains.txt`. Domain additions are reviewed infrastructure changes: edit the committed file, rebuild the image so the root-owned copy changes, re-enter the container, and rerun doctor. Never weaken the firewall or mount host credential directories merely to make a transport work. ADW detects the available operations and access level instead of assuming that a configured server can read or write everything. A project may constrain transport choice, but committed workflow artifacts do not contain credentials.

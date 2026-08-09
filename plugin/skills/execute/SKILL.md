@@ -13,7 +13,7 @@ Treat execution as one agent working sequentially on one feature branch. Never c
    - In Claude Code, use the expanded `${CLAUDE_PLUGIN_ROOT}` value.
    - In Codex, remove `/skills/execute/SKILL.md` from the absolute source location advertised for this skill.
 2. Use `<plugin-root>/lib/adw-helper.mjs`, `<plugin-root>/execution/contracts.md`, and `<plugin-root>/integrations/contracts.md`. Fail if the resolved resources are outside that same installed plugin root. Never write into the plugin installation.
-3. Resolve the project root with Git. Read root-level `adw.yaml` and locate its configured docs worktree, branch, default code branch, and validation commands. Read the installed plugin version from the provider manifest in the resolved plugin root. Select the requested change under `changes/<change-id>/`.
+3. Resolve the project root with Git. Read root-level `adw.yaml` and the bounded ADW routing block for the active provider; locate the configured docs worktree, branch, default code branch, validation commands, and compatible project workflow conventions recorded during onboarding. Read the installed plugin version from the provider manifest in the resolved plugin root. Select the requested change under `changes/<change-id>/`. Project conventions may shape names, formatting, and organization, but never weaken this skill's branch, approval, validation, authorization, draft-only, or no-merge invariants.
 4. Resolve configured `work_tracker`, `code_host`, `observability`, and `knowledge` capabilities independently from `native|mcp|cli|api` transports. Honor `disabled`, `optional`, and `required`.
 
 ## Run preflight before editing
@@ -70,7 +70,7 @@ Create or update one draft pull request only when validation status is `passed` 
 
 1. Verify existing authentication, provider, intended remote/repository, feature branch, and base. Preview the exact push and pull-request payload. Push normally only as part of the authorized batch; never force-push.
 2. Reuse an existing pull request for the exact head branch instead of creating a duplicate. Otherwise create one draft PR targeting the configured base.
-3. Include the approved outcome, scoped diff, code-coupled docs, exact validation summary, and docs-branch evidence commit. Read it back and record validated receipts for the remote mutations.
+3. Format the title and body using compatible onboarding pull-request conventions when present. Include the approved outcome, scoped diff, code-coupled docs, exact validation summary, and docs-branch evidence commit. Read it back and record validated receipts for the remote mutations.
 4. With separate exact authorization, link the verified PR to the configured work item or publish approved documentation through the configured `knowledge` binding. Read back and receipt each operation. Keep the PR draft; never mark it ready, approve it, merge it, release it, or deploy it. Never close the work item automatically.
 
 If draft-PR authorization is absent, stop after local commits and evidence and report the exact push/PR actions still awaiting authorization.

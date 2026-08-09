@@ -10,7 +10,7 @@ Create an exact, reviewable `spec.md`, `plan.yaml`, and optional `integrations.y
 ## Resolve the project and plugin
 
 1. Find the project root that contains `adw.yaml`; do not assume the current directory is the root.
-2. Read `adw.yaml` and require `documentation.mode: branch`, the configured docs branch, and a root-relative docs worktree path. Require that worktree to be attached to the configured branch.
+2. Read `adw.yaml` and the bounded ADW routing block for the active provider. Require `documentation.mode: branch`, the configured docs branch, and a root-relative docs worktree path. Require that worktree to be attached to the configured branch. Honor compatible onboarding work-item and pull-request organization conventions, but never treat them as external-write authorization or let them weaken planning, binding, approval, or safety requirements.
 3. Resolve the installed plugin root without using the project directory:
    - In Claude Code, use the expanded `${CLAUDE_PLUGIN_ROOT}` value.
    - In Codex, start from the absolute source location advertised for this loaded `SKILL.md` and remove `/skills/plan/SKILL.md`.
