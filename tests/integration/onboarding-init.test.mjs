@@ -129,4 +129,6 @@ test("onboarding choices are preview-bound and split shared from personal config
     for (const value of personalValues) assert.doesNotMatch(committed, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.equal(git(root, "check-ignore", "--no-index", ".adw/local.yaml"), ".adw/local.yaml");
+  assert.equal(git(root, "check-ignore", "--no-index", ".adw/preferences.md"), ".adw/preferences.md");
+  assert.match(readFileSync(join(root, ".adw/preferences.md"), "utf8"), /accessibility needs/);
 });

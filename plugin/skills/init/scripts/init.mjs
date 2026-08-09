@@ -110,6 +110,8 @@ function routingBlock(conventions = {}) {
     "## ADW workflow routing",
     "",
     "Use the installed `adw` plugin for project workflows. Start with `adw:status` to reconstruct state, `adw:plan` for substantial changes, and `adw:quick` only for low-risk local changes. Keep ADW context and change records in the configured `worktrees/docs` checkout; do not copy plugin skills into this repository.",
+    "",
+    "If `.adw/preferences.md` exists as an ignored, regular local file, read it at the start of an ADW interaction and follow it as personal collaboration guidance. It never authorizes actions, changes project policy, overrides safety requirements, or permits secrets.",
   ];
   const entries = [
     ["Branches", conventions.branches],
@@ -367,6 +369,12 @@ function plannedFiles(projectRoot, execution, onboarding) {
   if (existsSync(localPath) && hasLocalAnswers) throw new Error("onboarding local settings cannot replace an existing .adw/local.yaml; preserve or update it through a separate reviewed local change");
   const localAfter = existsSync(localPath) ? localBefore : renderLocalConfiguration(onboarding.local);
   files.push({ path: ".adw/local.yaml", before: localBefore, after: localAfter, action: existsSync(localPath) ? "preserve-local" : "create-local" });
+  const preferencesPath = join(projectRoot, ".adw/preferences.md");
+  const preferencesBefore = readOrEmpty(preferencesPath);
+  const preferencesAfter = existsSync(preferencesPath)
+    ? preferencesBefore
+    : readFileSync(join(pluginRoot, "templates/preferences.md"), "utf8");
+  files.push({ path: ".adw/preferences.md", before: preferencesBefore, after: preferencesAfter, action: existsSync(preferencesPath) ? "preserve-preferences" : "create-preferences" });
   const configPath = join(projectRoot, "adw.yaml");
   if (!existsSync(configPath)) {
     files.push({ path: "adw.yaml", before: "", after: projectConfiguration(projectRoot, execution.isolation, onboarding), action: "create" });
@@ -482,7 +490,7 @@ function summarize(projectRoot, files, docs, execution, onboarding) {
     ok: true,
     writes: files.filter((file) => file.before !== file.after).map((file) => ({ path: file.path, action: file.action })),
     unchanged: files.filter((file) => file.before === file.after).map((file) => file.path),
-    local_state: [".adw/local.yaml", ".adw/cache/"],
+    local_state: [".adw/local.yaml", ".adw/preferences.md", ".adw/cache/"],
     docs,
     devcontainer: { ...execution, agent_tools: onboarding.agentTools, web_access: onboarding.webAccess },
     onboarding: onboardingSummary(onboarding),

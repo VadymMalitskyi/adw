@@ -27,6 +27,8 @@ Ask only for optional contributor-local values:
 
 Do not ask for or accept credentials, tokens, cookies, private keys, or secret-like fields. Credentials stay in provider clients or credential stores. Do not ask the contributor to choose agents, isolation, documentation delivery, shared integrations, workflow policy, network domains, or conventions; those are already committed project decisions.
 
+Tell the contributor that `.adw/preferences.md` is their optional ignored free-form profile for collaboration needs such as accessibility, concise answers, decision-making style, or progress updates. It is not a shared policy, authorization source, or place for secrets. If it does not exist, offer the short template after onboarding; do not overwrite an existing profile.
+
 Serialize the complete desired local state to a secure temporary JSON file outside the repository:
 
 ```json

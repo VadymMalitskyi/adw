@@ -24,6 +24,7 @@ Preserve repository-owned content. Modify only the bounded ADW blocks, new ADW a
    - ask which optional services the team actually uses—issue tracker, code host, observability, or knowledge base—and say why: this lets ADW check availability and propose the right safe actions. “None” is a valid answer. For each selected service, collect only non-secret project or organization settings, expected access, preferred transport, and any exact additional network domains;
    - for a work tracker, ask whether changes require a binding, whether ADW may propose create-or-link or only link existing items, whether binding happens at plan or execute, one item versus a parent plus plan tasks, and the reviewed committed profile paths required by creation policy;
    - ask for concise branch, pull-request, and work-item conventions. Reject conventions that conflict with ADW invariants: external writes always need fresh authorization, pull requests remain draft-only, and ADW never automatically approves, merges, deploys, releases, or force-pushes;
+   - explain that initialization also creates ignored `.adw/preferences.md`, a short free-form personal collaboration profile. It is for accessibility needs, preferred answer length, decision-making style, and progress-update preferences; it is never committed, shared team policy, authorization, or a place for secrets. Offer to help write it after initialization, but do not require personal disclosure during setup;
    - optionally collect a display name, email, task-tracker account hint, per-capability account hint, and local transport preference. Explain that these values are stored only in ignored `.adw/local.yaml`, are not credentials, and will not be committed or used to authenticate. Prefer provider identity `self` after authentication over a display-name guess.
 5. Normalize the answers into a temporary JSON file outside the repository using onboarding schema 1. Never place passwords, tokens, cookies, authorization headers, API keys, or other secrets in it. Use this shape, omitting unused optional objects:
 
@@ -53,14 +54,14 @@ The internal script must:
 
 - preserve all bytes outside `<!-- ADW:START -->` / `<!-- ADW:END -->` blocks in `AGENTS.md` and `CLAUDE.md`;
 - preserve all bytes outside `# ADW:START` / `# ADW:END` in `.gitignore` and avoid duplicate `.adw/` or `/worktrees/` rules;
-- ignore local paths before creating `.adw/local.yaml`, `.adw/cache/`, or `worktrees/docs`;
+- ignore local paths before creating `.adw/local.yaml`, `.adw/preferences.md`, `.adw/cache/`, or `worktrees/docs`;
 - retain an existing `adw.yaml` for separately reviewed manual replacement instead of overwriting it;
 - cite every detected validation command to a manifest or task-runner target and mark unknown commands unresolved and optional;
 - create an orphan `docs` branch only when absent, attach an existing branch, and reuse an existing correct worktree;
 - initialize only concise docs-branch context and commit that branch without disturbing the code checkout;
 - create the bundled managed `.devcontainer/` only when absent and selected; preserve every byte of an existing project devcontainer;
    - install and validate the pinned Codex and Claude Code CLIs in a managed container, with matching project-scoped volumes, editor extensions, root-owned profile, marker, and least-privilege agent domains;
-- validate onboarding provider/capability compatibility and keep reviewed shared integration and tracker policy in `adw.yaml`, concise compatible conventions in bounded routing blocks, and personal non-secret identity or account hints only in ignored `.adw/local.yaml`;
+- validate onboarding provider/capability compatibility and keep reviewed shared integration and tracker policy in `adw.yaml`, concise compatible conventions in bounded routing blocks, and personal non-secret identity or account hints only in ignored `.adw/local.yaml`; create the ignored free-form `.adw/preferences.md` profile without reading it into committed artifacts;
 - bind onboarding apply to the exact preview digest and reject stale answers, source evidence, templates, targets, or docs actions before writing;
 - derive managed-container runtimes and dependency setup only from supported manifests, lockfiles, version files, Compose port declarations, environment templates, and explicit onboarding runtime choices for detected but unpinned languages, recording the source of every decision in `.devcontainer/project-requirements.json`;
 - generate only curated setup commands, activate the outbound firewall before running them, hash the requirements and setup script in the managed marker, and report ambiguous or unpinned needs without guessing;

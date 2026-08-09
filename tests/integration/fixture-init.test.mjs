@@ -103,6 +103,7 @@ test("empty repository initializes an empty validation set, docs records, and a 
     ".devcontainer/project-setup.sh",
   ]);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /^schema: 5$/m);
+  assert.match(readFileSync(join(root, ".adw/preferences.md"), "utf8"), /private ADW profile/);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /permissions:\n    profile: managed-development/);
   assert.equal(existsSync(join(root, ".codex/config.toml")), true);
   assert.equal(existsSync(join(root, ".codex/rules/adw.rules")), true);

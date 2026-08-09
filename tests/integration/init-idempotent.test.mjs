@@ -95,7 +95,7 @@ test("init previews without writes and applies idempotent bounded changes", () =
   assert.doesNotMatch(config, /release/);
   assert.deepEqual(readFileSync(join(root, ".devcontainer/devcontainer.json")), devcontainerBefore);
 
-  const stablePaths = ["AGENTS.md", "CLAUDE.md", ".gitignore", "adw.yaml", ".adw/local.yaml", "worktrees/docs/README.md", "worktrees/docs/architecture.md", "worktrees/docs/SYNC.yaml"];
+  const stablePaths = ["AGENTS.md", "CLAUDE.md", ".gitignore", "adw.yaml", ".adw/local.yaml", ".adw/preferences.md", "worktrees/docs/README.md", "worktrees/docs/architecture.md", "worktrees/docs/SYNC.yaml"];
   const stableBytes = new Map(stablePaths.map((path) => [path, readFileSync(join(root, path))]));
   const docsHead = git(root, "-C", join(root, "worktrees/docs"), "rev-parse", "HEAD");
   const repeated = run(root, "apply", true);
