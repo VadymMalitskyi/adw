@@ -116,7 +116,7 @@ function permissionChecks(projectRoot, execution) {
       const current = JSON.parse(readFileSync(settingsPath, "utf8"));
       valid = valid && JSON.stringify(current) === JSON.stringify(JSON.parse(mergeClaudeSettings(JSON.stringify(current))));
     } catch { valid = false; }
-    checks.push(check("permissions:claude", valid ? "pass" : "fail", valid ? "Claude Code uses accept-edits, sandboxed Bash, and ADW allow/ask/deny rules" : "Claude Code permission configuration is missing, unsafe, or drifted"));
+    checks.push(check("permissions:claude", valid ? "pass" : "fail", valid ? "Claude Code auto-allows sandboxed Bash and uses ADW semantic hooks plus ask/deny backstops" : "Claude Code permission configuration is missing, unsafe, or drifted"));
   }
   return checks;
 }

@@ -99,18 +99,6 @@ export function mergeCodexConfig(source = "") {
   return ensureCodexAppApproval(source).replace(/^\n+/, "");
 }
 
-export const CLAUDE_ALLOW = [
-  "Bash(git add *)", "Bash(git commit *)", "Bash(git switch -c *)", "Bash(git switch --create *)",
-  "Bash(npm test *)", "Bash(npm run build *)", "Bash(npm run check *)", "Bash(npm run lint *)", "Bash(npm run test *)", "Bash(npm run typecheck *)",
-  "Bash(dotnet build *)", "Bash(dotnet format *)", "Bash(dotnet restore *)", "Bash(dotnet test *)",
-  "Bash(cargo build *)", "Bash(cargo check *)", "Bash(cargo clippy *)", "Bash(cargo fmt *)", "Bash(cargo test *)",
-  "Bash(go build *)", "Bash(go fmt *)", "Bash(go test *)", "Bash(go vet *)",
-  "Bash(pytest *)", "Bash(ruff *)", "Bash(mypy *)", "Bash(make build *)", "Bash(make check *)", "Bash(make lint *)", "Bash(make test *)",
-  "Bash(gh auth status *)", "Bash(gh repo view *)", "Bash(gh pr checks *)", "Bash(gh pr diff *)", "Bash(gh pr list *)", "Bash(gh pr status *)", "Bash(gh pr view *)",
-  "Bash(gh issue list *)", "Bash(gh issue status *)", "Bash(gh issue view *)", "Bash(gh run list *)", "Bash(gh run view *)", "Bash(gh run watch *)", "Bash(gh workflow list *)", "Bash(gh workflow view *)",
-  "Bash(az boards query *)", "Bash(az boards work-item show *)", "Bash(az repos pr list *)", "Bash(az repos pr show *)",
-];
-
 export const CLAUDE_ASK = [
   "Bash(git push *)", "Bash(gh api *)",
   "Bash(gh pr close *)", "Bash(gh pr comment *)", "Bash(gh pr create *)", "Bash(gh pr edit *)", "Bash(gh pr ready *)", "Bash(gh pr reopen *)", "Bash(gh pr review *)",
@@ -118,6 +106,11 @@ export const CLAUDE_ASK = [
   "Bash(gh run cancel *)", "Bash(gh run delete *)", "Bash(gh run rerun *)", "Bash(gh workflow disable *)", "Bash(gh workflow enable *)", "Bash(gh workflow run *)",
   "Bash(az boards work-item create *)", "Bash(az boards work-item delete *)", "Bash(az boards work-item update *)", "Bash(az repos pr create *)", "Bash(az repos pr update *)", "Bash(az devops invoke *)",
   "Bash(git branch -D *)", "Bash(git checkout -- *)", "Bash(git restore --worktree *)", "Bash(rm -rf *)",
+  "Bash(npm run release *)", "Bash(npm run publish *)", "Bash(npm run deploy *)", "Bash(pnpm run release *)", "Bash(pnpm run publish *)", "Bash(pnpm run deploy *)",
+  "Bash(yarn run release *)", "Bash(yarn run publish *)", "Bash(yarn run deploy *)", "Bash(bun run release *)", "Bash(bun run publish *)", "Bash(bun run deploy *)",
+  "Bash(docker push *)", "Bash(ssh *)", "Bash(scp *)", "Bash(sftp *)",
+  "Bash(curl * -X POST *)", "Bash(curl * -X PUT *)", "Bash(curl * -X PATCH *)", "Bash(curl * -X DELETE *)",
+  "Bash(curl * --data *)", "Bash(curl * --upload-file *)", "Bash(wget * --post-data *)", "Bash(wget * --post-file *)",
 ];
 
 export const CLAUDE_DENY = [
@@ -142,10 +135,13 @@ export function mergeClaudeSettings(source = "") {
   if (!settings || typeof settings !== "object" || Array.isArray(settings)) throw new Error(".claude/settings.json must contain one JSON object");
   const permissions = settings.permissions && typeof settings.permissions === "object" && !Array.isArray(settings.permissions) ? { ...settings.permissions } : {};
   if (permissions.defaultMode && permissions.defaultMode !== "acceptEdits") throw new Error(`.claude/settings.json permissions.defaultMode=${JSON.stringify(permissions.defaultMode)} conflicts with ${PERMISSION_PROFILE}`);
-  if ((permissions.allow ?? []).some((rule) => rule === "Bash" || rule === "Bash(*)" || /^mcp__\*$/.test(rule))) throw new Error(".claude/settings.json contains a broad allow rule that conflicts with managed external-write review");
+  if (permissions.allow !== undefined && !Array.isArray(permissions.allow)) throw new Error(".claude/settings.json permissions.allow must be an array");
+  if ((permissions.allow ?? []).some((rule) => /^mcp__\*$/.test(rule))) throw new Error(".claude/settings.json contains a broad MCP allow rule that conflicts with managed external-write review");
   permissions.defaultMode = "acceptEdits";
   permissions.disableBypassPermissionsMode = "disable";
-  permissions.allow = union(permissions.allow, CLAUDE_ALLOW);
+  const nonBashAllows = (permissions.allow ?? []).filter((rule) => typeof rule === "string" && !/^Bash(?:\(|$)/.test(rule));
+  if (nonBashAllows.length > 0) permissions.allow = nonBashAllows;
+  else delete permissions.allow;
   permissions.ask = union(permissions.ask, CLAUDE_ASK);
   permissions.deny = union(permissions.deny, CLAUDE_DENY);
   const sandbox = settings.sandbox && typeof settings.sandbox === "object" && !Array.isArray(settings.sandbox) ? { ...settings.sandbox } : {};

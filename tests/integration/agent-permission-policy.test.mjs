@@ -4,7 +4,6 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
-  CLAUDE_ALLOW,
   CLAUDE_ASK,
   CLAUDE_DENY,
   CODEX_RULES,
@@ -36,25 +35,24 @@ test("Codex policy keeps workspace development automatic and external effects ga
   assert.doesNotMatch(CODEX_RULES, /\["npm", "run"\], decision = "allow"/);
 });
 
-test("Claude policy uses accept-edits plus sandbox and preserves explicit external-write review", () => {
-  const merged = JSON.parse(mergeClaudeSettings('{"env":{"EXAMPLE":"1"}}'));
+test("Claude policy uses sandbox-first Bash plus explicit external-write review", () => {
+  const merged = JSON.parse(mergeClaudeSettings('{"env":{"EXAMPLE":"1"},"permissions":{"allow":["Bash(custom-tool *)","mcp__docs__get_*"]}}'));
   assert.equal(merged.env.EXAMPLE, "1");
   assert.equal(merged.permissions.defaultMode, "acceptEdits");
   assert.equal(merged.permissions.disableBypassPermissionsMode, "disable");
   assert.equal(merged.sandbox.enabled, true);
   assert.equal(merged.sandbox.failIfUnavailable, true);
+  assert.equal(merged.sandbox.autoAllowBashIfSandboxed, true);
   assert.equal(merged.sandbox.allowUnsandboxedCommands, false);
-  for (const rule of CLAUDE_ALLOW) assert.ok(merged.permissions.allow.includes(rule));
   for (const rule of CLAUDE_ASK) assert.ok(merged.permissions.ask.includes(rule));
   for (const rule of CLAUDE_DENY) assert.ok(merged.permissions.deny.includes(rule));
   assert.ok(merged.permissions.ask.includes("Bash(gh api *)"));
-  assert.ok(merged.permissions.allow.includes("Bash(az boards work-item show *)"));
+  assert.deepEqual(merged.permissions.allow, ["mcp__docs__get_*"]);
   assert.ok(merged.permissions.ask.includes("Bash(az boards work-item update *)"));
   assert.ok(merged.permissions.deny.includes("Bash(git push --force *)"));
-  assert.ok(!merged.permissions.allow.includes("Bash"));
   assert.ok(!merged.permissions.allow.includes("mcp__*"));
   assert.throws(() => mergeClaudeSettings('{"permissions":{"defaultMode":"bypassPermissions"}}'), /conflicts/);
-  assert.throws(() => mergeClaudeSettings('{"permissions":{"allow":["Bash"]}}'), /broad allow/);
+  assert.throws(() => mergeClaudeSettings('{"permissions":{"allow":["mcp__*"]}}'), /broad MCP allow/);
 
   const managed = JSON.parse(managedClaudeSettings());
   assert.deepEqual(managed.sandbox.network.allowedDomains, []);
@@ -69,14 +67,24 @@ function hookDecision(tool_name, tool_input = {}) {
   return result.stdout ? JSON.parse(result.stdout).hookSpecificOutput.permissionDecision : null;
 }
 
-test("Claude managed hook allows named reads, asks for unknown writes, and denies forbidden effects", () => {
+test("Claude managed hook allows sandboxed local work, asks for external effects, and denies forbidden effects", () => {
   assert.equal(hookDecision("mcp__github__get_file_contents"), "allow");
   assert.equal(hookDecision("mcp__azure_devops__wit_query_by_wiql"), "allow");
   assert.equal(hookDecision("mcp__github__create_pull_request"), "ask");
   assert.equal(hookDecision("mcp__custom__opaque_operation"), "ask");
-  assert.equal(hookDecision("Bash", { command: "git status" }), null);
+  assert.equal(hookDecision("Bash", { command: "git status" }), "allow");
+  assert.equal(hookDecision("Bash", { command: "dotnet tool restore && dotnet test" }), "allow");
   assert.equal(hookDecision("Bash", { command: "git status && git push origin main" }), "ask");
+  assert.equal(hookDecision("Bash", { command: "gh label create urgent --color ff0000" }), "ask");
+  assert.equal(hookDecision("Bash", { command: "env FOO=bar gh pr view 42" }), "allow");
+  assert.equal(hookDecision("Bash", { command: "gh --repo acme/repo pr view 42" }), "allow");
+  assert.equal(hookDecision("Bash", { command: "bash -lc 'gh label create urgent --color ff0000'" }), "ask");
+  assert.equal(hookDecision("Bash", { command: "curl -X POST https://api.github.com/repos/acme/repo/issues" }), "ask");
+  assert.equal(hookDecision("Bash", { command: "npm run release" }), "ask");
+  assert.equal(hookDecision("Bash", { command: "rm -rf build" }), "ask");
   assert.equal(hookDecision("Bash", { command: "git push --force origin main" }), "deny");
+  assert.equal(hookDecision("Bash", { command: "git reset --hard HEAD~1" }), "deny");
+  assert.equal(hookDecision("Bash", { command: "gh auth token" }), "deny");
   assert.equal(hookDecision("Bash", { command: "npm publish" }), "deny");
   const malformed = spawnSync(process.execPath, [hook], { input: "not-json", encoding: "utf8" });
   assert.equal(malformed.status, 2);

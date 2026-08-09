@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Make Claude Code's managed-development policy sandbox-first: auto-allow arbitrary sandbox-confined Bash, remove the redundant generated Bash allow catalog, and classify external, destructive, provider, and MCP operations through a fail-closed managed hook backed by static ask/deny rules.
 - Drop support for project schemas 1–4, plan schema 1, approval schema 1, and every bundled migration from previous ADW releases.
 - Make `adw:update` a read-only exact-schema compatibility check; unsupported projects now require fresh initialization or separately reviewed manual replacement.
 - Add project schema 5 and the `managed-development` agent permission profile.

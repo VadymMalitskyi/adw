@@ -92,6 +92,9 @@ test("empty repository initializes unresolved commands, docs records, and a mana
   assert.equal(existsSync(join(root, ".codex/config.toml")), true);
   assert.equal(existsSync(join(root, ".codex/rules/adw.rules")), true);
   assert.equal(existsSync(join(root, ".claude/settings.json")), true);
+  const claudeProjectSettings = JSON.parse(readFileSync(join(root, ".claude/settings.json"), "utf8"));
+  assert.equal(claudeProjectSettings.permissions.allow, undefined);
+  assert.equal(claudeProjectSettings.sandbox.autoAllowBashIfSandboxed, true);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /execution:\n  isolation: managed-devcontainer\n  enforcement: required/);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /command: "<unresolved>"[\s\S]*required: false/);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /source: "unresolved: no supported manifest or task-runner target proves a validation command"/);

@@ -16,7 +16,7 @@ For `required`, stop before reads that execute project code and before every mut
 
 ## Managed-container invariants
 
-Keep the agent CLIs pinned, run as a non-root user, keep Codex's workspace sandbox enabled, enable Claude Code's inner Bash sandbox, and apply the fail-closed egress policy before agent work. The `managed-development` profile auto-approves routine local development, prompts for external writes, and forbids force-push/merge/release/deploy paths. Do not use bypass/danger-full-access modes as the normal ADW path.
+Keep the agent CLIs pinned, run as a non-root user, keep Codex's workspace sandbox enabled, enable Claude Code's inner Bash sandbox, and apply the fail-closed egress policy before agent work. The `managed-development` profile auto-approves Bash that remains inside the enforced sandbox, uses semantic hooks plus static backstops to prompt for external writes and unknown integrations, and forbids force-push/destructive-history/merge/release/deploy paths. Do not use bypass/danger-full-access modes as the normal ADW path.
 
 Never mount the Docker socket, host home, SSH directory, global cloud credentials, or global agent configuration. Use distinct named volumes for Codex, Claude, and provider authentication. Treat those volumes as sensitive and repository-scoped.
 

@@ -83,9 +83,13 @@ test("managed development files scope agent tools, credentials, extensions, envi
         .split(/\r?\n/)
         .map((line) => line.trim())
         .filter((line) => line && !line.startsWith("#")));
-      const claudeSandbox = JSON.parse(generated.files.get("claude-settings.json")).sandbox;
+      const claudeSettings = JSON.parse(generated.files.get("claude-settings.json"));
+      const claudeSandbox = claudeSettings.sandbox;
       assert.deepEqual(new Set(claudeSandbox.network.allowedDomains), allowedDomains);
       assert.equal(claudeSandbox.network.allowManagedDomainsOnly, true);
+      assert.equal(claudeSandbox.autoAllowBashIfSandboxed, true);
+      assert.equal(claudeSettings.permissions.allow, undefined);
+      assert.equal(claudeSettings.hooks.PreToolUse.length, 2);
 
       assert.equal(config.build.args.ADW_AGENT_TOOLS, profile);
       assert.equal(marker.agent_tools, profile);
