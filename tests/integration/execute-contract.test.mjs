@@ -42,6 +42,16 @@ test("execute is one-agent sequential execution with guarded paths and commands"
   assert.match(execute, /Never create per-task worktrees, parallel implementation branches, integration branches, unplanned tickets, or multiple pull requests/);
 });
 
+test("execute records and verifies an immutable branch base before resume", () => {
+  assert.match(execute, /Start ADW execution <change-id>/);
+  assert.match(execute, /ADW-Base-Commit: <40-hex-commit>/);
+  assert.match(execute, /marker commit's sole parent to equal `ADW-Base-Commit`/);
+  assert.match(execute, /Require exactly one reachable commit with that subject and those three trailers/);
+  assert.match(execute, /configured default branch to contain the recorded base/);
+  assert.match(execute, /Use the verified `ADW-Base-Commit` as the exact base everywhere below/);
+  assert.doesNotMatch(execute, /descend from the recorded base(?! everywhere)/);
+});
+
 test("the helper behavior required by execute rejects drift and preserves failed checks", async () => {
   const commit = "a".repeat(40);
   const inputs = [

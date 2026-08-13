@@ -30,6 +30,36 @@ test("command execution preserves nonzero exits, signals, and timeouts", async (
   assert.equal(timed.signal, "SIGTERM");
 });
 
+test("timeouts terminate stubborn descendants and do not wait on inherited stdio", { skip: process.platform === "win32" }, async () => {
+  const descendantProgram = "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);";
+  const parentProgram = [
+    "const { spawn } = require('node:child_process');",
+    `const descendant = spawn(process.execPath, ['-e', ${JSON.stringify(descendantProgram)}], { stdio: ['ignore', 'inherit', 'inherit'] });`,
+    "process.stdout.write(`descendant:${descendant.pid}\\n`);",
+    "process.on('SIGTERM', () => {});",
+    "setInterval(() => {}, 1000);",
+  ].join(" ");
+  const encodedProgram = Buffer.from(parentProgram).toString("base64");
+  const command = `${JSON.stringify(process.execPath)} -e "eval(Buffer.from('${encodedProgram}', 'base64').toString())"`;
+  const started = Date.now();
+  // Leave enough startup time for the nested Node process under parallel suite
+  // load; the assertion still bounds termination after this configured timeout.
+  const timeoutMs = 500;
+  const timed = await runValidationCommand({ command, timeout_ms: timeoutMs, required: true }, process.cwd());
+
+  assert.equal(timed.timed_out, true);
+  assert.ok(Date.now() - started < timeoutMs + 1000, `timeout took ${Date.now() - started}ms`);
+  const descendantPid = Number(/descendant:(\d+)/.exec(timed.summary)?.[1]);
+  assert.ok(Number.isInteger(descendantPid), timed.summary);
+  await assert.rejects(async () => {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      try { process.kill(descendantPid, 0); }
+      catch (error) { if (error.code === "ESRCH") return Promise.reject(error); throw error; }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }, { code: "ESRCH" });
+});
+
 test("recorded output is redacted and bounded", () => {
   const evidence = recordValidation({ ...base, commands: [{ command: "test", cwd: ".", exit_code: 1, signal: null, timed_out: false, duration_ms: 1, summary: `token=supersecret\n${"x".repeat(5000)}`, required: true }], deferred: [] });
   assert(!evidence.commands[0].summary.includes("supersecret"));

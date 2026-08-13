@@ -2,7 +2,7 @@
 // Generated as a dependency-free Node.js 20+ runtime bundle for ADW skills.
 import { createHash, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
-import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { link, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
@@ -23,6 +23,8 @@ export const ARTIFACT_SCHEMAS = Object.freeze({
 const BUNDLE_DOMAIN = Buffer.from("ADW-APPROVAL-BUNDLE-V2\0", "utf8");
 const REQUIREMENTS_DOMAIN = Buffer.from("ADW-INTEGRATION-REQUIREMENTS-V1\0", "utf8");
 const AUTHORIZATION_DOMAIN = Buffer.from("ADW-EXTERNAL-AUTHORIZATION-V1\0", "utf8");
+const VALIDATION_TERMINATION_GRACE_MS = 250;
+const VALIDATION_PIPE_CLOSE_GRACE_MS = 100;
 const schemaCache = new Map();
 const validatorCache = new WeakMap();
 const ajv = new Ajv2020({ allErrors: true, strict: true, addUsedSchema: false });
@@ -411,17 +413,70 @@ export async function runValidationCommand(input, cwd) {
   const started = Date.now();
   if (input.timeout_ms !== undefined && (!Number.isInteger(input.timeout_ms) || input.timeout_ms < 1)) throw new InputError("timeout_ms must be a positive integer");
   return await new Promise((done) => {
-    const child = spawn(input.command, { cwd, shell: true, stdio: ["ignore", "pipe", "pipe"] });
+    const useProcessGroup = process.platform !== "win32";
+    const child = spawn(input.command, { cwd, shell: true, stdio: ["ignore", "pipe", "pipe"], detached: useProcessGroup });
     let stdout = "";
     let stderr = "";
     let timedOut = false;
     let settled = false;
-    const finish = (result) => { if (settled) return; settled = true; if (timer) clearTimeout(timer); done(result); };
-    const timer = input.timeout_ms ? setTimeout(() => { timedOut = true; child.kill("SIGTERM"); }, input.timeout_ms) : undefined;
+    let exitCode = null;
+    let exitSignal = null;
+    let timeoutTimer;
+    let escalationTimer;
+    let forceFinishTimer;
+    const clearTimers = () => {
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (escalationTimer) clearTimeout(escalationTimer);
+      if (forceFinishTimer) clearTimeout(forceFinishTimer);
+    };
+    const result = (error) => ({
+      command: input.command,
+      cwd,
+      exit_code: error ? 1 : exitCode,
+      signal: error ? null : exitSignal,
+      timed_out: timedOut,
+      duration_ms: Date.now() - started,
+      summary: redactAndBound(error?.message ?? (`${stdout}${stderr}`.trim() || (exitSignal ? `terminated by ${exitSignal}` : ""))),
+      required: input.required !== false
+    });
+    const finish = (error) => { if (settled) return; settled = true; clearTimers(); done(result(error)); };
+    const signalTree = (signal) => {
+      try {
+        if (useProcessGroup && child.pid !== undefined) process.kill(-child.pid, signal);
+        else child.kill(signal);
+      } catch (error) {
+        if (error.code !== "ESRCH") stderr += `${stderr ? "\n" : ""}could not send ${signal}: ${error.message}`;
+      }
+    };
+    const processTreeExists = () => {
+      if (!useProcessGroup || child.pid === undefined) return child.exitCode === null && child.signalCode === null;
+      try { process.kill(-child.pid, 0); return true; }
+      catch (error) { return error.code !== "ESRCH"; }
+    };
+    timeoutTimer = input.timeout_ms ? setTimeout(() => {
+      timedOut = true;
+      signalTree("SIGTERM");
+      escalationTimer = setTimeout(() => {
+        signalTree("SIGKILL");
+        // Descendants can keep the inherited pipes open after the shell exits. Do
+        // not let those pipes make the validation promise unbounded.
+        child.stdout.destroy();
+        child.stderr.destroy();
+        forceFinishTimer = setTimeout(() => {
+          exitSignal ??= "SIGKILL";
+          finish();
+        }, VALIDATION_PIPE_CLOSE_GRACE_MS);
+      }, VALIDATION_TERMINATION_GRACE_MS);
+    }, input.timeout_ms) : undefined;
     child.stdout.setEncoding("utf8").on("data", (chunk) => { stdout += chunk; });
     child.stderr.setEncoding("utf8").on("data", (chunk) => { stderr += chunk; });
-    child.on("error", (error) => finish({ command: input.command, cwd, exit_code: 1, signal: null, timed_out: timedOut, duration_ms: Date.now() - started, summary: redactAndBound(error.message), required: input.required !== false }));
-    child.on("close", (code, signal) => finish({ command: input.command, cwd, exit_code: code, signal, timed_out: timedOut, duration_ms: Date.now() - started, summary: redactAndBound(`${stdout}${stderr}`.trim() || (signal ? `terminated by ${signal}` : "")), required: input.required !== false }));
+    child.on("error", (error) => finish(error));
+    child.on("exit", (code, signal) => { exitCode = code; exitSignal = signal; });
+    child.on("close", (code, signal) => {
+      exitCode = code;
+      exitSignal = signal;
+      if (!timedOut || !processTreeExists()) finish();
+    });
   });
 }
 
@@ -491,18 +546,27 @@ export async function applyAtomicWrites(projectRoot, operations) {
         const currentStat = await lstat(destination);
         if (!destinationStat || currentStat.isSymbolicLink() || currentStat.dev !== destinationStat.dev || currentStat.ino !== destinationStat.ino) throw new AtomicWriteError(`destination changed while atomic writes were prepared: ${operation.path}`);
         backup = resolve(transaction, `old-${index}`);
-        await rename(destination, backup);
+        // Preserve the old inode for rollback without first removing its
+        // destination name. The following rename can therefore replace the
+        // destination atomically instead of exposing an absent-path window.
+        await link(destination, backup);
+        const backupStat = await lstat(backup);
+        const latestStat = await lstat(destination);
+        if (backupStat.isSymbolicLink() || latestStat.isSymbolicLink() || backupStat.dev !== destinationStat.dev || backupStat.ino !== destinationStat.ino || latestStat.dev !== destinationStat.dev || latestStat.ino !== destinationStat.ino) throw new AtomicWriteError(`destination changed while atomic writes were prepared: ${operation.path}`);
       } catch (error) {
         if (error.code !== "ENOENT") throw error;
         if (destinationStat) throw new AtomicWriteError(`destination changed while atomic writes were prepared: ${operation.path}`);
       }
-      originals.push({ destination, backup });
+      const original = { destination, backup, committed: false };
+      originals.push(original);
       await rename(staged, destination);
+      original.committed = true;
     }
   } catch (error) {
     for (const original of originals.reverse()) {
-      await rm(original.destination, { force: true });
+      if (!original.committed) continue;
       if (original.backup) await rename(original.backup, original.destination);
+      else await rm(original.destination, { force: true });
     }
     if (error instanceof InputError || error instanceof PathError || error instanceof AtomicWriteError) throw error;
     throw new AtomicWriteError(error.message, { cause: error });

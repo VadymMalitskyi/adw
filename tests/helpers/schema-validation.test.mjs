@@ -24,6 +24,18 @@ test("project schema v5 supports optional provider-neutral capability configurat
   const publicPages = structuredClone(base);
   publicPages.execution.web_access = "public-pages";
   assert.deepEqual(await validateArtifact("project", publicPages), { valid: true, errors: [] });
+  const selectedRuntime = structuredClone(base);
+  selectedRuntime.development = { runtime_versions: { dotnet: "8", node: "22.1.0" } };
+  assert.deepEqual(await validateArtifact("project", selectedRuntime), { valid: true, errors: [] });
+  const invalidRuntime = structuredClone(selectedRuntime);
+  invalidRuntime.development.runtime_versions.dotnet = "latest";
+  assert.ok((await validateArtifact("project", invalidRuntime)).errors.some(({ path, keyword }) => path === "/development/runtime_versions/dotnet" && keyword === "pattern"));
+  const unknownRuntime = structuredClone(selectedRuntime);
+  unknownRuntime.development.runtime_versions.php = "8.4";
+  assert.ok((await validateArtifact("project", unknownRuntime)).errors.some(({ path, keyword }) => path === "/development/runtime_versions/php" && keyword === "additionalProperties"));
+  const pullRequestDelivery = structuredClone(base);
+  pullRequestDelivery.documentation.delivery = "pull-request";
+  assert.ok((await validateArtifact("project", pullRequestDelivery)).errors.some(({ path, keyword }) => path === "/documentation/delivery" && keyword === "const"));
   const unrestrictedWeb = structuredClone(base);
   unrestrictedWeb.execution.web_access = "unrestricted";
   const invalidWeb = await validateArtifact("project", unrestrictedWeb);

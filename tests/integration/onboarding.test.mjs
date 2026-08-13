@@ -63,7 +63,7 @@ test("normalizes supported project and local onboarding answers", () => {
     agents: ["claude", "codex"],
     web_access: "public-pages",
     execution: { isolation: "managed-devcontainer" },
-    documentation: { delivery: "pull-request" },
+    documentation: { delivery: "direct-push" },
     integrations: {
       work_tracker: {
         provider: "github",
@@ -111,7 +111,7 @@ test("normalizes supported project and local onboarding answers", () => {
   assert.equal(onboarding.agentTools, "both");
   assert.equal(onboarding.webAccess, "public-pages");
   assert.deepEqual(onboarding.execution, { isolation: "managed-devcontainer" });
-  assert.deepEqual(onboarding.documentation, { delivery: "pull-request" });
+  assert.deepEqual(onboarding.documentation, { delivery: "direct-push" });
   assert.deepEqual(onboarding.networkDomains, ["api.github.com", "github.com"]);
   assert.equal("network_domains" in onboarding.integrations.work_tracker, false);
   assert.deepEqual(Object.keys(onboarding.integrations.work_tracker.settings), ["owner", "repository"]);
@@ -183,6 +183,7 @@ test("rejects invalid agents, unknown fields, and secret-like keys recursively",
   assert.throws(() => load(base({ agents: ["codex", "codex"] })), /duplicate agent/);
   assert.throws(() => load(base({ agents: ["cursor"] })), /codex, claude/);
   assert.throws(() => load(base({ web_access: "unrestricted" })), /hosted-only, public-pages/);
+  assert.throws(() => load(base({ documentation: { delivery: "pull-request" } })), /direct-push/);
   assert.throws(() => load(base({ surprise: true })), /surprise.*not supported/);
   assert.throws(() => load(base({ local: { identity: { display_name: "Ada", access_token: "do-not-store" } } })), /credential-like keys are forbidden/);
   assert.throws(() => load(base({ integrations: { code_host: { provider: "github", requirement: "required", settings: { nested: { api_key: "x" } } } } })), /api_key.*credential-like/);

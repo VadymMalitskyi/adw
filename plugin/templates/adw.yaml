@@ -17,6 +17,12 @@ execution:
   permissions:
     profile: managed-development
 
+# Optional. Persist versions chosen during initialization when the repository
+# does not declare a sufficiently precise runtime version itself.
+# development:
+#   runtime_versions:
+#     dotnet: "8"
+
 components:
   app:
     path: .

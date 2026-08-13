@@ -28,6 +28,17 @@ test("Codex policy keeps workspace development automatic and external effects ga
   assert.match(merged, /\[apps\._default\]\ndefault_tools_approval_mode = "writes"/);
   assert.match(merged, /model = "gpt-test"/);
   assert.equal(mergeCodexConfig(merged), merged);
+  const repairedPartial = mergeCodexConfig([
+    "# ADW:MANAGED-DEVELOPMENT:START",
+    'approval_policy = "on-request"',
+    "# ADW:MANAGED-DEVELOPMENT:END",
+    'model = "gpt-test"',
+    "",
+  ].join("\n"));
+  assert.equal((repairedPartial.match(/# ADW:MANAGED-DEVELOPMENT:START/g) ?? []).length, 1);
+  assert.equal((repairedPartial.match(/# ADW:MANAGED-DEVELOPMENT:END/g) ?? []).length, 1);
+  assert.match(repairedPartial, /# ADW:MANAGED-DEVELOPMENT:START\napproval_policy = "on-request"\nsandbox_mode = "workspace-write"\nweb_search = "live"\n# ADW:MANAGED-DEVELOPMENT:END/);
+  assert.equal(mergeCodexConfig(repairedPartial), repairedPartial);
   assert.throws(() => mergeCodexConfig('approval_policy = "never"\n'), /conflicts/);
   assert.throws(() => mergeCodexConfig('profile = "unsafe"\n[profiles.unsafe]\napproval_policy = "never"\n'), /active profile.*conflicts/);
   assert.throws(() => mergeCodexConfig('sandbox_mode = "danger-full-access"\n'), /conflicts/);
@@ -92,8 +103,18 @@ test("Claude managed hook allows sandboxed local work, asks for external effects
   assert.equal(hookDecision("mcp__github__get_or_create_pull_request"), "ask");
   assert.equal(hookDecision("mcp__custom__opaque_operation"), "ask");
   assert.equal(hookDecision("Bash", { command: "git status" }), "allow");
+  assert.equal(hookDecision("Bash", { command: 'git "status" --short' }), "allow");
+  assert.equal(hookDecision("Bash", { command: 'echo "$HOME"' }), "allow");
   assert.equal(hookDecision("Bash", { command: "dotnet tool restore && dotnet test" }), "allow");
   assert.equal(hookDecision("Bash", { command: "git status && git push origin main" }), "ask");
+  assert.equal(hookDecision("Bash", { command: 'git "push" origin main' }), "ask");
+  assert.equal(hookDecision("Bash", { command: "git pu\\sh origin main" }), "ask");
+  assert.equal(hookDecision("Bash", { command: "git pu\\\nsh origin main" }), "ask");
+  assert.equal(hookDecision("Bash", { command: "git -C /workspace push origin main" }), "ask");
+  assert.equal(hookDecision("Bash", { command: 'git "$ADW_GIT_ACTION" origin main' }), "ask");
+  assert.equal(hookDecision("Bash", { command: "git p origin main" }), "ask");
+  assert.equal(hookDecision("Bash", { command: "echo $(git push origin main)" }), "ask");
+  assert.equal(hookDecision("Bash", { command: "echo `git push origin main`" }), "ask");
   assert.equal(hookDecision("Bash", { command: "gh label create urgent --color ff0000" }), "ask");
   assert.equal(hookDecision("Bash", { command: "glab repo view" }), "ask");
   assert.equal(hookDecision("Bash", { command: "datadog-ci synthetics run-tests" }), "ask");
@@ -103,7 +124,20 @@ test("Claude managed hook allows sandboxed local work, asks for external effects
   assert.equal(hookDecision("Bash", { command: "curl -X POST https://api.github.com/repos/acme/repo/issues" }), "ask");
   assert.equal(hookDecision("Bash", { command: "npm run release" }), "ask");
   assert.equal(hookDecision("Bash", { command: "rm -rf build" }), "ask");
+  assert.equal(hookDecision("Bash", { command: "rm -fr build" }), "ask");
+  assert.equal(hookDecision("Bash", { command: "rm -f -r build" }), "ask");
+  assert.equal(hookDecision("Bash", { command: "rm --force --recursive build" }), "ask");
+  assert.equal(hookDecision("Bash", { command: "/bin/rm -fr build" }), "ask");
+  assert.equal(hookDecision("Bash", { command: "echo $(rm -fr build)" }), "ask");
   assert.equal(hookDecision("Bash", { command: "git push --force origin main" }), "deny");
+  assert.equal(hookDecision("Bash", { command: 'git "push" --"force" origin main' }), "deny");
+  assert.equal(hookDecision("Bash", { command: "git pu\\sh --fo\\rce origin main" }), "deny");
+  assert.equal(hookDecision("Bash", { command: "git push --for\\\nce origin main" }), "deny");
+  assert.equal(hookDecision("Bash", { command: "git -C /workspace push --force origin main" }), "deny");
+  assert.equal(hookDecision("Bash", { command: 'git push --for""ce origin main' }), "deny");
+  assert.equal(hookDecision("Bash", { command: "echo $(git push --force origin main)" }), "deny");
+  assert.equal(hookDecision("Bash", { command: "echo `git push --force origin main`" }), "deny");
+  assert.equal(hookDecision("Bash", { command: 'git push "$ADW_PUSH_OPTION" origin main' }), "deny");
   assert.equal(hookDecision("Bash", { command: "git push origin main --force" }), "deny");
   assert.equal(hookDecision("Bash", { command: "git push --force-with-lease=main origin main" }), "deny");
   assert.equal(hookDecision("Bash", { command: "git push -uf origin main" }), "deny");

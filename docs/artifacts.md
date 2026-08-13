@@ -2,7 +2,7 @@
 
 ## Code branch
 
-- `adw.yaml`: committed shared configuration and workflow schema.
+- `adw.yaml`: committed shared configuration and workflow schema, including any runtime versions explicitly chosen during initialization.
 - `adw/work-items/*.yaml`: optional committed project-owned tracker payload profiles referenced by schema-5 workflow policy.
 - `.codex/config.toml`, `.codex/rules/adw.rules`, and `.claude/settings.json`: selected-provider adapters for schema-5 `managed-development` permissions.
 - `.adw/local.yaml`: optional ignored machine-local values created during project initialization or through a contributor's digest-bound `adw:onboard` preview.

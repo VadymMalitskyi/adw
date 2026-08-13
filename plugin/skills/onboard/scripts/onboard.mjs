@@ -121,10 +121,11 @@ function docsPlan(root, documentation) {
   const local = git(root, ["show-ref", "--verify", "--quiet", branchRef], { allowFailure: true });
   if (local.status === 0) return { action: "attach-local", path: documentation.worktree, branch: documentation.branch };
 
+  const remoteNames = git(root, ["remote"]).stdout.split("\n").filter(Boolean);
+  const configuredRefs = new Set(remoteNames.map((remote) => `refs/remotes/${remote}/${documentation.branch}`));
   const remoteRefs = git(root, ["for-each-ref", "--format=%(refname)", "refs/remotes"]).stdout
     .split("\n")
-    .filter(Boolean)
-    .filter((ref) => ref.endsWith(`/${documentation.branch}`) && !ref.endsWith("/HEAD"));
+    .filter((ref) => configuredRefs.has(ref));
   if (remoteRefs.length === 0) fail(`no local or remote-tracking ${documentation.branch} branch is available; fetch the configured docs branch and rerun adw:onboard`);
   if (remoteRefs.length > 1) fail(`multiple remotes expose ${documentation.branch}; choose and create the local tracking branch before onboarding`);
   return {

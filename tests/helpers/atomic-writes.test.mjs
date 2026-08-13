@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -22,10 +22,20 @@ test("failed multi-file atomic writes restore every previous artifact", async ()
   await mkdir(join(root, "config"));
   await writeFile(join(root, "config/one"), "old-one");
   await writeFile(join(root, "config/two"), "old-two");
+  const originalOne = await stat(join(root, "config/one"));
   await assert.rejects(applyAtomicWrites(root, [
     { path: "config/one", content: "new-one", expected_content: "old-one" },
     { path: "config/two", content: "new-two", expected_content: "stale-value" },
   ]), /precondition failed/);
   assert.equal(await readFile(join(root, "config/one"), "utf8"), "old-one");
   assert.equal(await readFile(join(root, "config/two"), "utf8"), "old-two");
+  assert.equal((await stat(join(root, "config/one"))).ino, originalOne.ino);
+});
+
+test("existing destinations are replaced atomically instead of being renamed away first", async () => {
+  const source = await readFile(new URL("../../src/helpers/runtime-bundle.mjs", import.meta.url), "utf8");
+  const implementation = source.slice(source.indexOf("export async function applyAtomicWrites"), source.indexOf("class CodedError"));
+  assert.match(implementation, /await link\(destination, backup\)/);
+  assert.match(implementation, /await rename\(staged, destination\)/);
+  assert.doesNotMatch(implementation, /await rename\(destination, backup\)/);
 });

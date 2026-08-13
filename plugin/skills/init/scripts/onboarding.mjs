@@ -11,7 +11,7 @@ import {
 const AGENTS = new Set(["codex", "claude"]);
 const CAPABILITY_SET = new Set(CAPABILITIES);
 const EXECUTION_MODES = new Set(["managed-devcontainer", "project-devcontainer", "provider-sandbox"]);
-const DOCUMENTATION_DELIVERIES = new Set(["direct-push", "pull-request"]);
+const DOCUMENTATION_DELIVERIES = new Set(["direct-push"]);
 const REQUIREMENTS = new Set(["disabled", "optional", "required"]);
 const TRANSPORTS = new Set(["auto", "native", "mcp", "cli", "api"]);
 const ACCESS_MODES = new Set(["read-only", "read-write"]);

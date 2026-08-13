@@ -30,7 +30,7 @@ function run(root, ...args) {
 
 test("onboarding choices are preview-bound and split shared from personal configuration", () => {
   const root = project();
-  writeFileSync(join(root, "App.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>\n");
+  writeFileSync(join(root, "App.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\" />\n");
   git(root, "add", "App.csproj");
   git(root, "commit", "-q", "-m", "add unpinned dotnet fixture");
   const answersPath = join(root, "onboarding.json");
@@ -41,7 +41,7 @@ test("onboarding choices are preview-bound and split shared from personal config
     web_access: "hosted-only",
     execution: { isolation: "managed-devcontainer" },
     development: { runtime_versions: { dotnet: "8" } },
-    documentation: { delivery: "pull-request" },
+    documentation: { delivery: "direct-push" },
     integrations: {
       work_tracker: {
         provider: "github",
@@ -88,7 +88,7 @@ test("onboarding choices are preview-bound and split shared from personal config
   const preview = JSON.parse(previewResult.stdout);
   assert.match(preview.preview_digest, /^[0-9a-f]{64}$/);
   assert.equal(preview.devcontainer.agent_tools, "both");
-  assert.equal(preview.onboarding.documentation_delivery, "pull-request");
+  assert.equal(preview.onboarding.documentation_delivery, "direct-push");
   assert.equal(preview.onboarding.web_access, "hosted-only");
   assert.equal(preview.devcontainer.web_access, "hosted-only");
   assert.deepEqual(preview.onboarding.runtime_versions, { dotnet: "8" });
@@ -108,7 +108,8 @@ test("onboarding choices are preview-bound and split shared from personal config
   assert.equal(existsSync(join(root, ".codex/rules/adw.rules")), true);
   assert.equal(existsSync(join(root, ".claude/settings.json")), true);
   const projectConfig = readFileSync(join(root, "adw.yaml"), "utf8");
-  assert.match(projectConfig, /delivery: pull-request/);
+  assert.match(projectConfig, /delivery: direct-push/);
+  assert.match(projectConfig, /development:\n  runtime_versions:\n    dotnet: "8"/);
   assert.match(projectConfig, /work_tracker:[\s\S]*provider: "github"[\s\S]*requirement: "required"/);
   assert.match(projectConfig, /ensure: "link-only"/);
   const routing = readFileSync(join(root, "AGENTS.md"), "utf8");
@@ -120,7 +121,7 @@ test("onboarding choices are preview-bound and split shared from personal config
   assert.deepEqual(containerConfig.customizations.vscode.extensions, ["openai.chatgpt", "anthropic.claude-code"]);
   assert.ok(containerConfig.mounts.some((mount) => mount.includes(".codex")));
   assert.ok(containerConfig.mounts.some((mount) => mount.includes(".claude")));
-  assert.equal(containerConfig.features["ghcr.io/devcontainers/features/dotnet:1"].version, "8.0");
+  assert.equal(containerConfig.features["ghcr.io/devcontainers/features/dotnet:1"].version, "8");
   assert.match(readFileSync(join(root, ".devcontainer/allowed-domains.txt"), "utf8"), /^tracker\.example\.com$/m);
 
   const local = readFileSync(join(root, ".adw/local.yaml"), "utf8");

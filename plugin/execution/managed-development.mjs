@@ -113,7 +113,13 @@ export function mergeCodexConfig(source = "") {
     }
   }
   const missing = CODEX_ROOT_SETTINGS.filter((line) => !topLevelTomlValue(source, line.split(" = ")[0]));
-  if (missing.length > 0) source = `${CODEX_START}\n${missing.join("\n")}\n${CODEX_END}\n${source.replace(/^\n+/, "")}`;
+  if (missing.length > 0 && source.includes(CODEX_START)) {
+    const end = source.indexOf(CODEX_END);
+    const separator = source.slice(0, end).endsWith("\n") ? "" : "\n";
+    source = `${source.slice(0, end)}${separator}${missing.join("\n")}\n${source.slice(end)}`;
+  } else if (missing.length > 0) {
+    source = `${CODEX_START}\n${missing.join("\n")}\n${CODEX_END}\n${source.replace(/^\n+/, "")}`;
+  }
   return ensureCodexAppApproval(source).replace(/^\n+/, "");
 }
 

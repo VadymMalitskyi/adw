@@ -20,7 +20,26 @@
         "branch": { "const": "docs" },
         "worktree": { "const": "worktrees/docs" },
         "sync_marker": { "const": "SYNC.yaml" },
-        "delivery": { "enum": ["direct-push", "pull-request"] }
+        "delivery": { "const": "direct-push" }
+      },
+      "additionalProperties": false
+    },
+    "development": {
+      "type": "object",
+      "properties": {
+        "runtime_versions": {
+          "type": "object",
+          "properties": {
+            "node": { "$ref": "#/$defs/runtimeVersion" },
+            "python": { "$ref": "#/$defs/runtimeVersion" },
+            "go": { "$ref": "#/$defs/runtimeVersion" },
+            "rust": { "$ref": "#/$defs/runtimeVersion" },
+            "java": { "$ref": "#/$defs/runtimeVersion" },
+            "ruby": { "$ref": "#/$defs/runtimeVersion" },
+            "dotnet": { "$ref": "#/$defs/runtimeVersion" }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },
@@ -85,6 +104,10 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "runtimeVersion": {
+      "type": "string",
+      "pattern": "^\\d+(?:\\.\\d+){0,2}$"
+    },
     "command": {
       "type": "object",
       "required": ["command", "source"],

@@ -13,7 +13,7 @@ ADW does not provide a backward-compatibility or migration lifecycle. The instal
 Run `adw:update` to validate the project and preview managed-file repair:
 
 1. It reads the installed plugin version.
-2. It parses and validates root `adw.yaml` through the bundled YAML 1.2 and schema validator without rewriting the file.
+2. It parses and validates root `adw.yaml` through the bundled YAML 1.2 and schema validator without rewriting the file, including any initialization-selected `development.runtime_versions` needed to reproduce the managed container. For schema-5 projects initialized before that optional field was persisted, update recovers only explicitly onboarding-sourced versions from consistent `.devcontainer/project-requirements.json` evidence and otherwise stops for a manual configuration correction.
 3. For provider-sandbox and project-owned-container profiles it normally reports an empty write set.
 4. For a managed container it deterministically regenerates current release `.devcontainer/` and selected-agent permission bytes, showing changed paths and a preview digest. `apply --confirmed --preview-digest <digest>` atomically repairs exactly those reviewed files.
 5. It rejects invalid configuration without modifying project or historical artifacts.

@@ -264,9 +264,13 @@ function projectConfiguration(projectRoot, execution, onboarding) {
     `  web_access: ${onboarding.webAccess}`,
     "  permissions:",
     `    profile: ${PERMISSION_PROFILE}`,
-    "",
-    "components:",
   ];
+  const runtimeVersions = Object.entries(onboarding.development?.runtimeVersions ?? {});
+  if (runtimeVersions.length > 0) {
+    lines.push("", "development:", "  runtime_versions:");
+    for (const [runtime, version] of runtimeVersions) lines.push(`    ${runtime}: ${yamlScalar(version)}`);
+  }
+  lines.push("", "components:");
   for (const component of components) {
     lines.push(`  ${component.name}:`);
     lines.push(`    path: ${yamlScalar(component.path)}`);

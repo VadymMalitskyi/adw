@@ -164,6 +164,15 @@ test("onboarding refuses missing docs branches and secret-like answers", () => {
   assert.equal(existsSync(join(missing.checkout, ".adw/local.yaml")), false);
   assert.equal(git(missing.checkout, "branch", "--list", "docs"), "");
 
+  const nestedOnly = fixture({ docs: false });
+  git(nestedOnly.checkout, "switch", "-q", "-c", "feature/docs");
+  git(nestedOnly.checkout, "push", "-q", "-u", "origin", "feature/docs");
+  git(nestedOnly.checkout, "switch", "-q", "main");
+  const nestedAnswers = writeAnswers(nestedOnly.parent, "nested.json", { schema: 1 });
+  const nestedResult = run(nestedOnly.checkout, "preview", "--answers", nestedAnswers);
+  assert.equal(nestedResult.status, 2);
+  assert.match(nestedResult.stderr, /no local or remote-tracking docs branch is available/);
+
   const configured = fixture();
   const secret = writeAnswers(configured.parent, "secret.json", { schema: 1, api_token: "forbidden" });
   const secretResult = run(configured.checkout, "preview", "--answers", secret);

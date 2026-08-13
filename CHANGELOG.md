@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Harden the Claude managed permission hook against quoted, escaped, dynamic, aliased, nested, and Git-global-option command obfuscation; unknown Git verbs now require approval.
+- Preserve initialization-selected runtime versions through managed-container repair, safely recovering consistent legacy evidence and failing closed on ambiguity.
+- Repair partial Codex managed blocks in place, match contributor docs refs exactly, and remove the unimplemented pull-request documentation-delivery option.
+- Terminate timed-out validation process groups with bounded escalation, atomically replace managed files without an absent-destination crash window, and record exact execution bases in durable branch metadata.
 - Add `adw:onboard` for repeatable contributor setup in initialized projects, with digest-bound personal configuration, safe fresh-clone attachment of an existing remote docs branch, and doctor/status-backed readiness reporting.
 - Split reusable `.adw/local.yaml` validation and rendering from project initialization so init and contributor onboarding enforce the same non-secret local configuration contract.
 - Make Claude Code's managed-development policy sandbox-first: auto-allow arbitrary sandbox-confined Bash, remove the redundant generated Bash allow catalog, and classify external, destructive, provider, and MCP operations through a fail-closed managed hook backed by static ask/deny rules.

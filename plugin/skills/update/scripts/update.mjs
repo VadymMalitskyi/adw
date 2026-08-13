@@ -13,6 +13,7 @@ import { managedDevelopmentFiles } from "../../init/scripts/development-environm
 
 const skillDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pluginRoot = resolve(skillDirectory, "../..");
+const RUNTIMES = new Set(["node", "python", "go", "rust", "java", "ruby", "dotnet"]);
 
 function fail(message, details = {}) {
   process.stderr.write(`${JSON.stringify({ ok: false, error: message, ...details }, null, 2)}\n`);
@@ -88,6 +89,37 @@ function existingIntegrationDomains(root) {
   return domains;
 }
 
+function existingRuntimeVersions(root, project) {
+  if (project.development?.runtime_versions) return project.development.runtime_versions;
+  const text = readOptional(root, ".devcontainer/project-requirements.json");
+  if (text === null) throw new Error("managed-devcontainer repair requires development.runtime_versions in adw.yaml or existing .devcontainer/project-requirements.json evidence");
+  let requirements;
+  try { requirements = JSON.parse(text); } catch (error) { throw new Error(`cannot recover initialization-selected runtime versions from project requirements: ${error.message}`); }
+  if (requirements?.schema !== 1 || !Array.isArray(requirements.runtimes) || requirements.selected_versions === null || typeof requirements.selected_versions !== "object" || Array.isArray(requirements.selected_versions)) {
+    throw new Error("cannot recover initialization-selected runtime versions from invalid project requirements; add development.runtime_versions to adw.yaml");
+  }
+  for (const [name, selected] of Object.entries(requirements.selected_versions)) {
+    const matchingEvidence = requirements.runtimes.some((runtime) => runtime?.name === name && runtime.version === selected);
+    if (!RUNTIMES.has(name) || typeof selected !== "string" || !/^\d+(?:\.\d+){0,2}$/.test(selected) || !matchingEvidence) {
+      throw new Error("cannot recover initialization-selected runtime versions from invalid project requirements; add development.runtime_versions to adw.yaml");
+    }
+  }
+  const recovered = {};
+  for (const runtime of requirements.runtimes) {
+    if (!runtime || typeof runtime !== "object" || typeof runtime.source !== "string") continue;
+    const match = /^onboarding\.development\.runtime_versions\.([a-z]+)$/.exec(runtime.source);
+    if (!match) continue;
+    const name = match[1];
+    const selected = requirements.selected_versions[name];
+    if (!RUNTIMES.has(name) || typeof selected !== "string" || runtime.name !== name || runtime.version !== selected || !/^\d+(?:\.\d+){0,2}$/.test(selected)) {
+      throw new Error(`cannot safely recover initialization-selected ${name} runtime version; add development.runtime_versions.${name} to adw.yaml`);
+    }
+    if (recovered[name] && recovered[name] !== selected) throw new Error(`conflicting initialization-selected ${name} runtime versions; add development.runtime_versions.${name} to adw.yaml`);
+    recovered[name] = selected;
+  }
+  return Object.fromEntries(Object.entries(recovered).sort(([left], [right]) => left.localeCompare(right)));
+}
+
 function repairPlan(root, project) {
   if (project.execution.isolation !== "managed-devcontainer") return [];
   const agentTools = managedAgentTools(root);
@@ -95,6 +127,7 @@ function repairPlan(root, project) {
     agentTools,
     webAccess: project.execution.web_access ?? "public-pages",
     integrationDomains: existingIntegrationDomains(root),
+    runtimeVersions: existingRuntimeVersions(root, project),
   });
   const files = [];
   for (const [name, content] of generated.files) {

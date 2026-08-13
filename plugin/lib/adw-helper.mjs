@@ -14504,7 +14504,7 @@ var import__ = __toESM(require__(), 1);
 var import_yaml = __toESM(require_dist(), 1);
 import { createHash, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
-import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { link, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 var EXIT = Object.freeze({ OK: 0, INPUT: 2, SCHEMA_INVALID: 3, APPROVAL_INVALID: 4, VALIDATION_FAILED: 5, PATH_VIOLATION: 7, ATOMIC_WRITE_FAILED: 8, INTERNAL: 9 });
@@ -14521,6 +14521,8 @@ var ARTIFACT_SCHEMAS = Object.freeze({
 var BUNDLE_DOMAIN = Buffer.from("ADW-APPROVAL-BUNDLE-V2\0", "utf8");
 var REQUIREMENTS_DOMAIN = Buffer.from("ADW-INTEGRATION-REQUIREMENTS-V1\0", "utf8");
 var AUTHORIZATION_DOMAIN = Buffer.from("ADW-EXTERNAL-AUTHORIZATION-V1\0", "utf8");
+var VALIDATION_TERMINATION_GRACE_MS = 250;
+var VALIDATION_PIPE_CLOSE_GRACE_MS = 100;
 var schemaCache = /* @__PURE__ */ new Map();
 var validatorCache = /* @__PURE__ */ new WeakMap();
 var ajv = new import__.default({ allErrors: true, strict: true, addUsedSchema: false });
@@ -14899,20 +14901,67 @@ async function runValidationCommand(input, cwd) {
   const started = Date.now();
   if (input.timeout_ms !== void 0 && (!Number.isInteger(input.timeout_ms) || input.timeout_ms < 1)) throw new InputError("timeout_ms must be a positive integer");
   return await new Promise((done) => {
-    const child = spawn(input.command, { cwd, shell: true, stdio: ["ignore", "pipe", "pipe"] });
+    const useProcessGroup = process.platform !== "win32";
+    const child = spawn(input.command, { cwd, shell: true, stdio: ["ignore", "pipe", "pipe"], detached: useProcessGroup });
     let stdout = "";
     let stderr = "";
     let timedOut = false;
     let settled = false;
-    const finish = (result) => {
+    let exitCode = null;
+    let exitSignal = null;
+    let timeoutTimer;
+    let escalationTimer;
+    let forceFinishTimer;
+    const clearTimers = () => {
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (escalationTimer) clearTimeout(escalationTimer);
+      if (forceFinishTimer) clearTimeout(forceFinishTimer);
+    };
+    const result = (error) => ({
+      command: input.command,
+      cwd,
+      exit_code: error ? 1 : exitCode,
+      signal: error ? null : exitSignal,
+      timed_out: timedOut,
+      duration_ms: Date.now() - started,
+      summary: redactAndBound(error?.message ?? (`${stdout}${stderr}`.trim() || (exitSignal ? `terminated by ${exitSignal}` : ""))),
+      required: input.required !== false
+    });
+    const finish = (error) => {
       if (settled) return;
       settled = true;
-      if (timer) clearTimeout(timer);
-      done(result);
+      clearTimers();
+      done(result(error));
     };
-    const timer = input.timeout_ms ? setTimeout(() => {
+    const signalTree = (signal) => {
+      try {
+        if (useProcessGroup && child.pid !== void 0) process.kill(-child.pid, signal);
+        else child.kill(signal);
+      } catch (error) {
+        if (error.code !== "ESRCH") stderr += `${stderr ? "\n" : ""}could not send ${signal}: ${error.message}`;
+      }
+    };
+    const processTreeExists = () => {
+      if (!useProcessGroup || child.pid === void 0) return child.exitCode === null && child.signalCode === null;
+      try {
+        process.kill(-child.pid, 0);
+        return true;
+      } catch (error) {
+        return error.code !== "ESRCH";
+      }
+    };
+    timeoutTimer = input.timeout_ms ? setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
+      signalTree("SIGTERM");
+      escalationTimer = setTimeout(() => {
+        signalTree("SIGKILL");
+        child.stdout.destroy();
+        child.stderr.destroy();
+        forceFinishTimer = setTimeout(() => {
+          exitSignal ??= "SIGKILL";
+          finish();
+        }, VALIDATION_PIPE_CLOSE_GRACE_MS);
+      }, VALIDATION_TERMINATION_GRACE_MS);
     }, input.timeout_ms) : void 0;
     child.stdout.setEncoding("utf8").on("data", (chunk) => {
       stdout += chunk;
@@ -14920,8 +14969,16 @@ async function runValidationCommand(input, cwd) {
     child.stderr.setEncoding("utf8").on("data", (chunk) => {
       stderr += chunk;
     });
-    child.on("error", (error) => finish({ command: input.command, cwd, exit_code: 1, signal: null, timed_out: timedOut, duration_ms: Date.now() - started, summary: redactAndBound(error.message), required: input.required !== false }));
-    child.on("close", (code, signal) => finish({ command: input.command, cwd, exit_code: code, signal, timed_out: timedOut, duration_ms: Date.now() - started, summary: redactAndBound(`${stdout}${stderr}`.trim() || (signal ? `terminated by ${signal}` : "")), required: input.required !== false }));
+    child.on("error", (error) => finish(error));
+    child.on("exit", (code, signal) => {
+      exitCode = code;
+      exitSignal = signal;
+    });
+    child.on("close", (code, signal) => {
+      exitCode = code;
+      exitSignal = signal;
+      if (!timedOut || !processTreeExists()) finish();
+    });
   });
 }
 async function resolveProjectPath(projectRoot, explicitRelativePath) {
@@ -14993,18 +15050,24 @@ async function applyAtomicWrites(projectRoot, operations) {
         const currentStat = await lstat(destination);
         if (!destinationStat || currentStat.isSymbolicLink() || currentStat.dev !== destinationStat.dev || currentStat.ino !== destinationStat.ino) throw new AtomicWriteError(`destination changed while atomic writes were prepared: ${operation.path}`);
         backup = resolve(transaction, `old-${index}`);
-        await rename(destination, backup);
+        await link(destination, backup);
+        const backupStat = await lstat(backup);
+        const latestStat = await lstat(destination);
+        if (backupStat.isSymbolicLink() || latestStat.isSymbolicLink() || backupStat.dev !== destinationStat.dev || backupStat.ino !== destinationStat.ino || latestStat.dev !== destinationStat.dev || latestStat.ino !== destinationStat.ino) throw new AtomicWriteError(`destination changed while atomic writes were prepared: ${operation.path}`);
       } catch (error) {
         if (error.code !== "ENOENT") throw error;
         if (destinationStat) throw new AtomicWriteError(`destination changed while atomic writes were prepared: ${operation.path}`);
       }
-      originals.push({ destination, backup });
+      const original = { destination, backup, committed: false };
+      originals.push(original);
       await rename(staged, destination);
+      original.committed = true;
     }
   } catch (error) {
     for (const original of originals.reverse()) {
-      await rm(original.destination, { force: true });
+      if (!original.committed) continue;
       if (original.backup) await rename(original.backup, original.destination);
+      else await rm(original.destination, { force: true });
     }
     if (error instanceof InputError || error instanceof PathError || error instanceof AtomicWriteError) throw error;
     throw new AtomicWriteError(error.message, { cause: error });
