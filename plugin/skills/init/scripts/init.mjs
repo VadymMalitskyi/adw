@@ -354,9 +354,7 @@ function managedDevcontainerFiles(projectRoot, onboarding) {
 
 function plannedFiles(projectRoot, execution, onboarding) {
   const files = [];
-  const routingFiles = onboarding.agentTools === "codex"
-    ? ["AGENTS.md"]
-    : onboarding.agentTools === "claude" ? ["CLAUDE.md"] : ["AGENTS.md", "CLAUDE.md"];
+  const routingFiles = ["AGENTS.md", "CLAUDE.md"];
   for (const name of routingFiles) {
     const path = join(projectRoot, name);
     const before = readOrEmpty(path);
@@ -383,7 +381,7 @@ function plannedFiles(projectRoot, execution, onboarding) {
   if (!existsSync(configPath)) {
     files.push({ path: "adw.yaml", before: "", after: projectConfiguration(projectRoot, execution.isolation, onboarding), action: "create" });
     for (const path of [".codex/config.toml", ".codex/rules/adw.rules", ".claude/settings.json"]) assertWritableProjectPath(projectRoot, path);
-    for (const providerFile of permissionProjectFiles(onboarding.agentTools, (name) => readOrEmpty(join(projectRoot, name)))) {
+    for (const providerFile of permissionProjectFiles("both", (name) => readOrEmpty(join(projectRoot, name)))) {
       const before = readOrEmpty(join(projectRoot, providerFile.path));
       files.push({ path: providerFile.path, before, after: providerFile.content, action: before ? "merge-permission-policy" : "create-permission-policy" });
     }

@@ -15,7 +15,7 @@ Run `adw:update` to validate the project and preview managed-file repair:
 1. It reads the installed plugin version.
 2. It parses and validates root `adw.yaml` through the bundled YAML 1.2 and schema validator without rewriting the file, including any initialization-selected `development.runtime_versions` needed to reproduce the managed container. For schema-5 projects initialized before that optional field was persisted, update recovers only explicitly onboarding-sourced versions from consistent `.devcontainer/project-requirements.json` evidence and otherwise stops for a manual configuration correction.
 3. For provider-sandbox and project-owned-container profiles it normally reports an empty write set.
-4. For a managed container it deterministically regenerates current release `.devcontainer/` and selected-agent permission bytes, showing changed paths and a preview digest. `apply --confirmed --preview-digest <digest>` atomically repairs exactly those reviewed files.
+4. For a managed container it deterministically regenerates current release `.devcontainer/` and both agents' permission bytes, showing the changed paths for review. After plain approval, the skill passes its internally retained preview digest to `apply`, which atomically repairs exactly those reviewed files.
 5. It rejects invalid configuration without modifying project or historical artifacts.
 
 This repairs exact plugin-version marker drift and managed-template drift after ordinary plugin upgrades. If configuration from an older release is invalid, replace it through a separately reviewed initialization or manual configuration change. Preserve application code and repository-owned documentation; historical workflow evidence is not upgraded.

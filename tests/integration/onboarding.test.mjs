@@ -60,7 +60,6 @@ test("missing answers use a fresh dual-agent default", () => {
 
 test("normalizes supported project and local onboarding answers", () => {
   const onboarding = load(base({
-    agents: ["claude", "codex"],
     web_access: "public-pages",
     execution: { isolation: "managed-devcontainer" },
     documentation: { delivery: "direct-push" },
@@ -138,7 +137,6 @@ test("normalizes supported project and local onboarding answers", () => {
 
 test("summary exposes local field names without personal values", () => {
   const onboarding = load(base({
-    agents: ["codex"],
     integrations: {
       code_host: {
         provider: "github",
@@ -163,12 +161,10 @@ test("summary exposes local field names without personal values", () => {
 
 test("digest covers normalized values rather than answer formatting or key order", () => {
   const left = load(base({
-    agents: ["codex", "claude"],
     conventions: { branches: "Use feature branches.", pull_requests: "Use drafts." },
   }));
   const right = load({
     conventions: { pull_requests: "Use drafts.", branches: "Use feature branches." },
-    agents: ["claude", "codex"],
     schema: 1,
   });
   assert.equal(onboardingDigest(left), onboardingDigest(right));
@@ -178,10 +174,8 @@ test("digest covers normalized values rather than answer formatting or key order
   assert.throws(() => onboardingDigest({ schema: 1 }), /requires normalized/);
 });
 
-test("rejects invalid agents, unknown fields, and secret-like keys recursively", () => {
-  assert.throws(() => load(base({ agents: [] })), /agents.*non-empty/);
-  assert.throws(() => load(base({ agents: ["codex", "codex"] })), /duplicate agent/);
-  assert.throws(() => load(base({ agents: ["cursor"] })), /codex, claude/);
+test("rejects removed agent selection, unknown fields, and secret-like keys recursively", () => {
+  assert.throws(() => load(base({ agents: ["codex"] })), /agents.*not supported/);
   assert.throws(() => load(base({ web_access: "unrestricted" })), /hosted-only, public-pages/);
   assert.throws(() => load(base({ documentation: { delivery: "pull-request" } })), /direct-push/);
   assert.throws(() => load(base({ surprise: true })), /surprise.*not supported/);
@@ -212,6 +206,10 @@ test("enforces work-tracker workflow cross-field requirements", () => {
     integrations: { work_tracker: { provider: "github", requirement: "optional", access: "read-write" } },
     workflows: { work_tracker: workflow },
   })), /required binding requires a required/);
+  assert.throws(() => load(base({
+    integrations: { work_tracker: { provider: "github", requirement: "required", access: "read-write" } },
+    workflows: { work_tracker: { ...workflow, stage: "execute" } },
+  })), /stage.*plan/);
   assert.throws(() => load(base({
     integrations: { work_tracker: { provider: "github", requirement: "required", access: "read-only" } },
     workflows: { work_tracker: workflow },

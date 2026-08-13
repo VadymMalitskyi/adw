@@ -37,7 +37,6 @@ test("onboarding choices are preview-bound and split shared from personal config
   const personalValues = ["Ada Lovelace", "ada@example.invalid", "ada-tracker"];
   writeFileSync(answersPath, `${JSON.stringify({
     schema: 1,
-    agents: ["codex"],
     web_access: "hosted-only",
     execution: { isolation: "managed-devcontainer" },
     development: { runtime_versions: { dotnet: "8" } },

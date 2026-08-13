@@ -6,30 +6,35 @@
 - Preserve initialization-selected runtime versions through managed-container repair, safely recovering consistent legacy evidence and failing closed on ambiguity.
 - Repair partial Codex managed blocks in place, match contributor docs refs exactly, and remove the unimplemented pull-request documentation-delivery option.
 - Terminate timed-out validation process groups with bounded escalation, atomically replace managed files without an absent-destination crash window, and record exact execution bases in durable branch metadata.
-- Add `adw:onboard` for repeatable contributor setup in initialized projects, with digest-bound personal configuration, safe fresh-clone attachment of an existing remote docs branch, and doctor/status-backed readiness reporting.
-- Split reusable `.adw/local.yaml` validation and rendering from project initialization so init and contributor onboarding enforce the same non-secret local configuration contract.
-- Make Claude Code's managed-development policy sandbox-first: auto-allow arbitrary sandbox-confined Bash, remove the redundant generated Bash allow catalog, and classify external, destructive, provider, and MCP operations through a fail-closed managed hook backed by static ask/deny rules.
-- Drop support for project schemas 1–4, plan schema 1, approval schema 1, and every bundled migration from previous ADW releases.
-- Make `adw:update` reject unsupported schemas while previewing and digest-binding atomic repair of current-schema managed-container and permission files after plugin upgrades.
-- Add project schema 5 and the `managed-development` agent permission profile.
-- Auto-approve routine workspace edits, builds, tests, and local Git work while prompting for external writes and forbidding force-push, merge, release, publish, and deployment commands.
-- Generate Codex exec-policy/config files and Claude Code sandbox/permission settings; bake root-owned Claude policy and MCP/Bash classification hooks into managed devcontainers.
-- Add doctor/status permission evidence and adversarial cross-provider policy coverage.
-- Add project schema 4 with optional work-tracker workflow policy and committed payload-profile references.
-- Add plan schema 2 with digest-bound effective components, validation, and tracker policy.
-- Add deterministic project-policy resolution, work-item profile and payload validation, schema-3-to-4 migration, diagnostics, and contract coverage.
-- Add one bundled YAML 1.2 and full draft-2020-12 schema path that reads exact artifact bytes itself, rejects duplicate keys and placeholders, and replaces divergent regex readers.
-- Make init approval-digest binding unconditional, add symlink-safe atomic writes and rollback, disable repository hooks, and fix default-branch and wildcard-workspace discovery.
-- Make doctor routing agent-aware and split managed-container failures into actionable checks; make status invalidate incomplete approval input sets before reporting validation.
-- Restrict DNS to configured resolvers, harden force-push and unknown-provider classification, verify managed allowlist digests, and add generated-image security CI.
-- Remove the dead TypeScript helper mirror and legacy migration/status aliases; generate the self-contained helper deterministically from one runtime source.
+- Reconstruct quick-change state from standalone validation evidence, audit immutable approval history, and complete the documented artifact inventory.
+- Remove the unused onboarding agent-choice input and execute-stage work-item binding, clarify that managed initialization provisions both agents, and align Azure DevOps transport documentation with the provider registry.
+- Use the same plain-approval, internally retained preview-digest interaction for init, onboard, and update.
 
 All notable changes to this private plugin are documented here.
 
-- Add read-only `adw:investigate` with bounded observability queries, deployed-code inspection, deterministic severity guidance, and schema-validated incident reports.
-- Keep webhook receipt, agent supervision, and notification delivery outside ADW while defining exact JSON output for an authorized external runner.
-- Derive managed Dev Container runtimes, dependency setup, native packages, forwarded ports, and package-registry domains from supported project manifests and lockfiles.
-- Record evidence and unresolved requirements in a reviewable project requirements artifact, run only curated setup commands after firewall activation, and verify generated-file digests in `adw:doctor`.
+## 0.6.0 - 2026-08-10
+
+- Make Claude Code's managed-development policy sandbox-first, with a fail-closed managed hook backed by static ask/deny rules.
+- Auto-allow sandbox-confined work while prompting for external writes and forbidding force-push, merge, release, publish, and deployment commands across Codex and Claude Code.
+- Add `adw:onboard` with digest-bound personal configuration, safe attachment of an existing remote docs branch, and doctor/status-backed readiness reporting.
+- Add read-only `adw:investigate` with bounded observability queries and schema-validated incident reports.
+- Derive managed-container runtimes, dependency setup, native packages, ports, and package-registry domains from supported repository evidence.
+- Add digest-verified managed-file repair, stronger DNS and egress controls, agent-aware diagnostics, and adversarial cross-provider policy coverage.
+- Generate the self-contained helper deterministically from one runtime source and remove the legacy helper mirror.
+- Add schema-5 `managed-development` permissions and generated Codex and Claude Code policy files.
+
+## 0.5.0 - 2026-08-09
+
+- Drop support for project schemas 1–4, plan schema 1, approval schema 1, and all bundled migrations from previous releases.
+- Make the installed release's validators the artifact contract and reject unsupported schemas without rewriting historical evidence.
+
+## 0.4.0 - 2026-08-09
+
+- Add project schema 4 with optional work-tracker workflow policy and committed payload-profile references.
+- Add plan schema 2 with digest-bound effective components, validation, and tracker policy.
+- Add deterministic project-policy resolution, work-item profile and payload validation, diagnostics, and contract coverage.
+- Add one bundled YAML 1.2 and draft-2020-12 schema-validation path that reads exact artifact bytes and rejects duplicate keys and placeholders.
+- Add interactive initialization and evidence-derived managed development support for Node, Python, Go, Rust, Java, Ruby, and .NET projects.
 
 ## 0.3.0 - 2026-08-05
 

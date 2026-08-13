@@ -8,7 +8,6 @@ import {
   renderLocalConfiguration as renderMachineLocalConfiguration,
 } from "../../../lib/local-configuration.mjs";
 
-const AGENTS = new Set(["codex", "claude"]);
 const CAPABILITY_SET = new Set(CAPABILITIES);
 const EXECUTION_MODES = new Set(["managed-devcontainer", "project-devcontainer", "provider-sandbox"]);
 const DOCUMENTATION_DELIVERIES = new Set(["direct-push"]);
@@ -20,7 +19,7 @@ const RUNTIMES = new Set(["node", "python", "go", "rust", "java", "ruby", "dotne
 const WORKFLOW_VALUES = {
   binding: new Set(["optional", "required"]),
   ensure: new Set(["link-only", "create-or-link"]),
-  stage: new Set(["plan", "execute"]),
+  stage: new Set(["plan"]),
   cardinality: new Set(["one-per-change", "one-parent-plus-plan-tasks"]),
 };
 const SECRET_LIKE_KEY = /(?:password|passwd|token|api[_-]?key|secret|credential|authorization|cookie|private[_-]?key)/i;
@@ -98,20 +97,6 @@ function readProviderRegistry(pluginRoot) {
     });
   }
   return providers;
-}
-
-function normalizeAgents(value) {
-  if (value === undefined) return "both";
-  if (!Array.isArray(value) || value.length === 0) fail("onboarding.agents", "must be a non-empty array");
-  const seen = new Set();
-  for (const agent of value) {
-    enumValue(agent, AGENTS, "onboarding.agents[]");
-    if (seen.has(agent)) fail("onboarding.agents", `must not contain duplicate agent: ${agent}`);
-    seen.add(agent);
-  }
-  // Kept only to accept onboarding files produced by earlier ADW releases.
-  // Managed development always provisions both providers.
-  return "both";
 }
 
 function normalizeExecution(value) {
@@ -242,13 +227,13 @@ function normalizeDevelopment(value) {
 function normalizeOnboarding(raw, pluginRoot) {
   raw = object(raw, "onboarding");
   rejectSecretLikeKeys(raw);
-  rejectUnknown(raw, new Set(["schema", "agents", "web_access", "execution", "documentation", "development", "integrations", "workflows", "conventions", "local"]), "onboarding");
+  rejectUnknown(raw, new Set(["schema", "web_access", "execution", "documentation", "development", "integrations", "workflows", "conventions", "local"]), "onboarding");
   if (raw.schema !== 1) fail("onboarding.schema", "must equal 1");
   const providers = readProviderRegistry(pluginRoot);
   const { integrations, networkDomains } = normalizeIntegrations(raw.integrations, providers);
-  const agentTools = normalizeAgents(raw.agents);
+  const agentTools = "both";
   const webAccess = raw.web_access === undefined
-    ? (agentTools === "codex" ? "hosted-only" : "public-pages")
+    ? "public-pages"
     : enumValue(raw.web_access, WEB_ACCESS_MODES, "onboarding.web_access");
   const normalized = {
     schema: 1,

@@ -69,7 +69,7 @@ Do not encode external mutations as shell validation commands. Describe any expe
 
 For an existing external requirements source, read it and prepare `changes/<change-id>/integrations.yaml` with a stable binding and canonical `requirement_fields` names. Compute `requirements_digest` from their normalized values with the helper's `digest-requirements` command as defined by the integration contract.
 
-For a configured profile, draft only declared fields and invoke `validate-work-item-payload`; show its exact normalized payload before authorization. Requirement-bearing work items must be linked or created during `stage: plan`. `stage: execute` is limited to non-requirement-bearing operational child tasks; otherwise stop for amendment and fresh approval.
+For a configured profile, draft only declared fields and invoke `validate-work-item-payload`; show its exact normalized payload before authorization. Work items must be linked or created during `stage: plan` so requirement-bearing evidence is available before approval. Later non-requirement-bearing operational updates still require their own authorization and receipts.
 
 When the plan calls for a new work item, finish the local draft first. Then preview the exact provider target and payload and request separate explicit authorization. Only after authorization, create it with `adw:<project>:<change-id>:create-work-item`, read it back, write the binding, and preserve the validated receipt under `external-events/`. If creation is not authorized, continue without it only when the capability is optional; for a required binding, stop and report the unresolved action. Never create one external task per plan task by default; do so only when project configuration or the explicit plan selects those tasks.
 

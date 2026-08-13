@@ -55,21 +55,56 @@ async function changeSnapshot(changePath, changeId) {
   const integrationsPath = join(changePath, "integrations.yaml");
   const validationPath = join(changePath, "validation.json");
   const externalEventsPath = join(changePath, "external-events");
+  const approvalHistoryPath = join(changePath, "approval-history");
+  const plannedArtifactsPresent = [specPath, planPath, approvalPath, integrationsPath].some((path) => existsSync(path));
+  const workflow = plannedArtifactsPresent ? "planned" : existsSync(validationPath) ? "quick" : "unknown";
   const snapshot = {
     change_id: changeId,
+    workflow,
     artifacts: {
       spec: existsSync(specPath),
       plan: existsSync(planPath),
       approval: existsSync(approvalPath),
+      approval_history: 0,
       integrations: existsSync(integrationsPath),
       validation: existsSync(validationPath),
       external_events: existsSync(externalEventsPath) ? readdirSync(externalEventsPath).filter((name) => name.endsWith(".json")).length : 0,
     },
     approval: { state: "missing" },
+    approval_history: { total: 0, valid: 0, invalid: [] },
     validation: { state: "missing" },
     external_actions: { total: 0, valid: 0, invalid: [] },
     state: "draft",
   };
+  if (existsSync(approvalHistoryPath)) {
+    const directory = lstatSync(approvalHistoryPath);
+    if (directory.isSymbolicLink() || !directory.isDirectory()) {
+      snapshot.approval_history.invalid.push({ path: "approval-history", reason: "approval history must be a non-symlink directory" });
+    } else {
+      const names = readdirSync(approvalHistoryPath).filter((name) => name.endsWith(".json")).sort();
+      snapshot.artifacts.approval_history = names.length;
+      snapshot.approval_history.total = names.length;
+      for (const name of names) {
+        const path = join(approvalHistoryPath, name);
+        const entry = lstatSync(path);
+        if (entry.isSymbolicLink() || !entry.isFile()) {
+          snapshot.approval_history.invalid.push({ path: name, reason: "history entry must be a non-symlink JSON file" });
+          continue;
+        }
+        const parsed = readJson(path);
+        if (parsed.error) {
+          snapshot.approval_history.invalid.push({ path: name, reason: parsed.error });
+          continue;
+        }
+        const schema = await validateArtifact("approval", parsed.value);
+        const expectedName = typeof parsed.value?.digest === "string" ? `${parsed.value.digest}.json` : null;
+        if (!schema.valid) snapshot.approval_history.invalid.push({ path: name, reason: "approval history schema is invalid" });
+        else if (parsed.value.status !== "superseded") snapshot.approval_history.invalid.push({ path: name, reason: "approval history entry is not superseded" });
+        else if (name !== expectedName) snapshot.approval_history.invalid.push({ path: name, reason: "approval history filename does not match its digest" });
+        else snapshot.approval_history.valid += 1;
+      }
+    }
+  }
   if (existsSync(externalEventsPath)) {
     const names = readdirSync(externalEventsPath).filter((name) => name.endsWith(".json")).sort();
     snapshot.external_actions.total = names.length;
@@ -133,7 +168,8 @@ async function changeSnapshot(changePath, changeId) {
       };
     }
   }
-  if (snapshot.validation.state === "passed" && snapshot.approval.state === "active") snapshot.state = "validated";
+  if (snapshot.validation.state === "invalid") snapshot.state = "invalid";
+  else if (snapshot.validation.state === "passed" && (snapshot.approval.state === "active" || workflow === "quick")) snapshot.state = "validated";
   else if (snapshot.validation.state === "failed") snapshot.state = "validation-failed";
   else if (snapshot.approval.state === "active") snapshot.state = "approved";
   else if (snapshot.artifacts.spec || snapshot.artifacts.plan) snapshot.state = "planned";

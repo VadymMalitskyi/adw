@@ -61,6 +61,12 @@ test("project schema 5 and work-item profiles validate explicit workflow policy"
   const invalidChildProfile = await validateArtifact("project", missingChildProfile);
   assert.equal(invalidChildProfile.valid, false);
   assert(invalidChildProfile.errors.some(({ path }) => path === "/workflows/work_tracker/child_profile"));
+
+  const executeStage = project();
+  executeStage.workflows.work_tracker.stage = "execute";
+  const invalidStage = await validateArtifact("project", executeStage);
+  assert.equal(invalidStage.valid, false);
+  assert(invalidStage.errors.some(({ path, keyword }) => path === "/workflows/work_tracker/stage" && keyword === "const"));
 });
 
 test("effective policy selects the most-specific component and additive validation", () => {
@@ -158,6 +164,11 @@ test("plan schema 2 requires a digest-bound effective policy and sourced validat
     documentation: { impact: "none", files: [] },
   };
   assert.deepEqual(await validateArtifact("plan", plan), { valid: true, errors: [] });
+  const executeStage = structuredClone(plan);
+  executeStage.effective_policy.work_tracker.stage = "execute";
+  const invalidStage = await validateArtifact("plan", executeStage);
+  assert.equal(invalidStage.valid, false);
+  assert(invalidStage.errors.some(({ path, keyword }) => path === "/effective_policy/work_tracker/stage" && keyword === "const"));
   delete plan.tasks[0].validation[0].source;
   assert.equal((await validateArtifact("plan", plan)).valid, false);
 });

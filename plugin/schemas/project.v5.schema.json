@@ -91,7 +91,7 @@
           "properties": {
             "binding": { "enum": ["optional", "required"] },
             "ensure": { "enum": ["link-only", "create-or-link"] },
-            "stage": { "enum": ["plan", "execute"] },
+            "stage": { "const": "plan" },
             "cardinality": { "enum": ["one-per-change", "one-parent-plus-plan-tasks"] },
             "profile": { "type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+\\.ya?ml$" },
             "child_profile": { "type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+\\.ya?ml$" }

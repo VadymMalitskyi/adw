@@ -71,7 +71,7 @@ async function workTrackerPolicyChecks(projectRoot, project) {
   const tracker = project.integrations?.work_tracker;
   const validPolicy = ["optional", "required"].includes(policy.binding)
     && ["link-only", "create-or-link"].includes(policy.ensure)
-    && ["plan", "execute"].includes(policy.stage)
+    && policy.stage === "plan"
     && ["one-per-change", "one-parent-plus-plan-tasks"].includes(policy.cardinality)
     && tracker && tracker.requirement !== "disabled"
     && (policy.binding !== "required" || tracker.requirement === "required")
@@ -232,12 +232,12 @@ function managedDevcontainerChecks(projectRoot, execution) {
   const mountsMatch = scopedVolumes && agentMountsMatch;
   checks.push(check("execution:managed-files", "pass", "all required managed devcontainer files are present and readable"));
   checks.push(check("execution:managed-marker", validMarker ? "pass" : "fail", validMarker ? "managed marker schema, profile, permission profile, and plugin version match" : "managed marker schema, profile, permission profile, or plugin version is invalid"));
-  checks.push(check("execution:agent-profile", validAgentProfile ? "pass" : "fail", validAgentProfile ? `selected agent profile (${marker.agent_tools}) matches the container build` : "selected agent profile is missing, unsupported, or differs from the container build"));
+  checks.push(check("execution:agent-profile", validAgentProfile ? "pass" : "fail", validAgentProfile ? `recorded managed agent profile (${marker.agent_tools}) matches the container build` : "recorded managed agent profile is missing, unsupported, or differs from the container build"));
   checks.push(check("execution:agent-versions", versionsMatch ? "pass" : "fail", versionsMatch ? "pinned Codex and Claude Code versions match the managed marker" : "pinned Codex or Claude Code versions are invalid or differ from the managed marker"));
-  checks.push(check("execution:mounts", mountsMatch ? "pass" : "fail", mountsMatch ? "credential volumes are scoped to the selected agents" : "credential volumes are missing, not volumes, or expose an unselected agent"));
-  checks.push(check("execution:extensions", agentExtensionsMatch ? "pass" : "fail", agentExtensionsMatch ? "editor extensions match the selected agents" : "editor extensions do not match the selected agents"));
-  checks.push(check("execution:environment", claudeEnvironmentMatches ? "pass" : "fail", claudeEnvironmentMatches ? "agent-specific environment settings match the selected agents" : "Claude-specific environment settings are missing or exposed to an unselected profile"));
-  checks.push(check("execution:domains", agentDomainsPresent ? "pass" : "fail", agentDomainsPresent ? "required selected-agent domains are present and the allowlist matches its managed digest" : "required selected-agent domains are missing or the allowlist differs from its managed digest"));
+  checks.push(check("execution:mounts", mountsMatch ? "pass" : "fail", mountsMatch ? "credential volumes are scoped to the recorded managed agent profile" : "credential volumes are missing, not volumes, or exceed the recorded managed agent profile"));
+  checks.push(check("execution:extensions", agentExtensionsMatch ? "pass" : "fail", agentExtensionsMatch ? "editor extensions match the recorded managed agent profile" : "editor extensions do not match the recorded managed agent profile"));
+  checks.push(check("execution:environment", claudeEnvironmentMatches ? "pass" : "fail", claudeEnvironmentMatches ? "agent-specific environment settings match the recorded managed agent profile" : "Claude-specific environment settings are missing or exceed the recorded managed agent profile"));
+  checks.push(check("execution:domains", agentDomainsPresent ? "pass" : "fail", agentDomainsPresent ? "required managed-agent domains are present and the allowlist matches its managed digest" : "required managed-agent domains are missing or the allowlist differs from its managed digest"));
   checks.push(check("execution:hardening", hardening ? "pass" : "fail", hardening ? "managed devcontainer hardening is configured" : "managed devcontainer user, startup ordering, Dockerfile hardening, or setup command is invalid"));
   checks.push(check("execution:generated-files", generatedFilesMatch ? "pass" : "fail", generatedFilesMatch ? "generated project requirements and setup bytes match the managed marker" : "generated project requirements, setup bytes, schema, or package arguments differ from the managed marker"));
   checks.push(check("execution:permission-files", permissionFilesMatch ? "pass" : "fail", permissionFilesMatch ? "managed Codex and Claude permission payloads match their recorded digests" : "managed Codex or Claude permission payloads, installs, or recorded digests are invalid"));

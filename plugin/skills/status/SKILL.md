@@ -17,13 +17,15 @@ Keep the entire workflow read-only. Do not fetch, pull, checkout, repair, create
 4. Run `node <plugin-root>/skills/status/scripts/snapshot.mjs --project-root <project-root>`.
 5. Summarize configured and active execution isolation, doctor evidence, code branch, commit, dirty paths, docs worktree, docs commit, and docs dirty paths. Status may diagnose a required inactive environment but must not execute project code or mutate anything.
 6. For every `changes/<change-id>/` directory, report artifact presence and the reconstructed state:
+   - classify it as workflow `planned` when planning or approval artifacts exist, `quick` when standalone validation evidence exists without a planning bundle, or `unknown` otherwise;
+   - `draft` when the directory has no recognized intent or evidence, and `invalid` when present validation evidence is invalid;
    - `planned` when intent exists without a valid active approval;
    - `approved` only when schema-2 approval matches the exact current `spec.md`, `plan.yaml`, and optional `integrations.yaml` bytes;
    - `validation-failed` when required evidence failed;
-   - `validated` only when validation evidence is valid and passed.
+   - `validated` only when validation evidence is valid and passed, plus an active exact-byte approval for a planned workflow; quick workflows require no approval.
    Also summarize affected components, effective required validation, tracker policy, and whether current project-policy and profile digests still resolve to the approved snapshot. Report drift without modifying artifacts.
-7. Validate each `integrations.yaml` as artifact `integration` and each file under `external-events/` as artifact `external-action`. Summarize bindings, latest verified external actions, failed or uncertain receipts, and pending authorized-state reconciliation without exposing external content or secrets.
+7. Validate every non-symlink JSON file under `approval-history/` as a superseded approval whose filename matches its digest. Report valid and invalid lifecycle evidence independently from the current approval. Validate each `integrations.yaml` as artifact `integration` and each file under `external-events/` as artifact `external-action`. Summarize bindings, latest verified external actions, failed or uncertain receipts, and pending authorized-state reconciliation without exposing external content or secrets.
 8. For configured, non-disabled capabilities with an already authenticated read-only transport, read current requirement-bearing fields and relevant open draft pull-request state. Join objects by provider, external id, URL, or exact head branch. Report requirement drift separately from operational drift such as state or assignee. Required unavailability is a blocker; optional unavailability remains `not-queried`. Do not authenticate or write configuration.
-9. Call out stale approvals, requirement-bearing external drift, invalid artifacts, missing worktrees, dirty checkouts, failed validation, failed receipts, and ambiguous multiple active changes. Recommend the next ADW skill without taking that action.
+9. Call out stale approvals, invalid approval-history entries, requirement-bearing external drift, invalid artifacts, missing worktrees, dirty checkouts, failed validation, failed receipts, and ambiguous multiple active changes. Recommend the next ADW skill without taking that action.
 
 Resolve the bundled helper from the installed plugin root. Treat filesystem artifacts and Git as authoritative over prior conversation history.

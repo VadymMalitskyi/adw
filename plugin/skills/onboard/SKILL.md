@@ -60,8 +60,8 @@ Omit unused fields and capabilities. If `.adw/local.yaml` already exists, preser
 
 2. Report the redacted preview: local file action and field names, configured integration requirements, and whether the docs worktree will be reused, attached from a local branch, or attached from one unambiguous remote-tracking branch. Do not print personal values or the temporary file contents.
 3. Explain that onboarding never fetches, creates a shared docs branch, modifies `adw.yaml`, or changes committed files. Require both `.adw/local.yaml` and the configured docs worktree path to be ignored and untracked. If the docs ref is unavailable or ambiguous, stop with the script's remediation; do not invent or overwrite a branch.
-4. Ask for explicit confirmation of the exact preview digest. For `update-local`, separately confirm that `.adw/local.yaml` will be replaced and omitted fields cleared.
-5. After confirmation, run the same command with `apply --confirmed --preview-digest <digest>`. Add `--replace-local` only for an explicitly confirmed `update-local` action. Changed answers, project configuration, HEAD, refs, worktree state, or local file bytes invalidate the digest and require a new preview.
+4. Ask for plain explicit confirmation of the reviewed preview. Keep the preview digest internal; do not show, name, or ask the contributor to copy it. For `update-local`, separately confirm that `.adw/local.yaml` will be replaced and omitted fields cleared.
+5. After confirmation, run the same command with `apply --confirmed --preview-digest <internally-retained-preview-digest>`. Add `--replace-local` only for an explicitly confirmed `update-local` action. Changed answers, project configuration, HEAD, refs, worktree state, or local file bytes invalidate the digest and require a new preview.
 6. Remove the temporary answers file. Report whether the cleanup succeeded without exposing its contents.
 
 ## Verify readiness

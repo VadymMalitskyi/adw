@@ -80,6 +80,22 @@ test("doctor and status reconstruct initialized state without writes", async () 
     ],
   });
   writeFileSync(join(change, "approval.json"), `${JSON.stringify(approval, null, 2)}\n`);
+  const historical = createApprovalBundle({
+    approver: "older-reviewer",
+    approved_at: "2026-08-05T11:00:00Z",
+    plugin_version: "0.4.0",
+    docs_commit: planCommit,
+    inputs: [
+      { path: "spec.md", content: "older spec\n" },
+      { path: "plan.yaml", content: "older plan\n" },
+    ],
+  });
+  historical.status = "superseded";
+  historical.invalidated_at = "2026-08-05T11:30:00Z";
+  historical.invalidation_reason = "Acceptance behavior changed.";
+  mkdirSync(join(change, "approval-history"));
+  writeFileSync(join(change, `approval-history/${historical.digest}.json`), `${JSON.stringify(historical, null, 2)}\n`);
+  writeFileSync(join(change, "approval-history/wrong-name.json"), `${JSON.stringify(historical, null, 2)}\n`);
   git(docs, "add", "changes/sample-change/approval.json");
   git(docs, "commit", "-q", "-m", "Approve sample change");
   const approvalCommit = git(docs, "rev-parse", "HEAD");
@@ -110,7 +126,14 @@ test("doctor and status reconstruct initialized state without writes", async () 
   assert.equal(status.execution.active, true);
   assert.equal(status.docs.attached, true);
   assert.equal(status.changes.length, 1);
+  assert.equal(status.changes[0].workflow, "planned");
   assert.equal(status.changes[0].approval.state, "active");
+  assert.equal(status.changes[0].artifacts.approval_history, 2);
+  assert.deepEqual(status.changes[0].approval_history, {
+    total: 2,
+    valid: 1,
+    invalid: [{ path: "wrong-name.json", reason: "approval history filename does not match its digest" }],
+  });
   assert.equal(status.changes[0].validation.state, "passed");
   assert.equal(status.changes[0].state, "validated");
   assert.equal(status.draft_prs, undefined);
@@ -118,6 +141,29 @@ test("doctor and status reconstruct initialized state without writes", async () 
   assert.equal(fingerprint(root), beforeFingerprint);
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), codeStatusBefore);
   assert.equal(git(docs, "status", "--porcelain=v1", "--untracked-files=all"), docsStatusBefore);
+});
+
+test("status recognizes passed standalone quick-change evidence as validated", () => {
+  const root = fixture();
+  const docs = join(root, "worktrees/docs");
+  const change = join(docs, "changes/quick-2026-status-fix");
+  mkdirSync(change, { recursive: true });
+  const validation = recordValidation({
+    change_id: "quick-2026-status-fix",
+    plugin_version: "0.6.0",
+    code_commit: git(root, "rev-parse", "HEAD"),
+    docs_commit: git(docs, "rev-parse", "HEAD"),
+    recorded_at: "2026-08-13T12:05:00Z",
+    commands: [{ command: "npm test", cwd: ".", exit_code: 0, duration_ms: 10, summary: "passed", required: true }],
+  });
+  writeFileSync(join(change, "validation.json"), `${JSON.stringify(validation, null, 2)}\n`);
+
+  const status = run(statusScript, root);
+  assert.equal(status.changes.length, 1);
+  assert.equal(status.changes[0].workflow, "quick");
+  assert.equal(status.changes[0].approval.state, "missing");
+  assert.equal(status.changes[0].validation.state, "passed");
+  assert.equal(status.changes[0].state, "validated");
 });
 
 test("status reports an approval stale when exact plan bytes change", () => {

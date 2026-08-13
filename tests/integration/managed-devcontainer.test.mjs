@@ -321,38 +321,33 @@ test("doctor blocks a required managed profile outside its runtime and passes it
   assert.equal(driftedChecks.find(({ id }) => id === "execution:hardening").status, "pass");
 });
 
-test("legacy agent answers always initialize both provider routes and pass doctor", async (t) => {
-  for (const profile of ["codex", "claude", "both"]) {
-    await t.test(profile, () => {
-      const root = mkdtempSync(join(tmpdir(), `adw-managed-doctor-${profile}-`));
-      git(root, "init", "-q", "-b", "main");
-      git(root, "config", "user.name", "ADW Test");
-      git(root, "config", "user.email", "adw@example.invalid");
-      writeFileSync(join(root, "README.md"), "# fixture\n");
-      git(root, "add", ".");
-      git(root, "commit", "-q", "-m", "fixture");
-      const onboardingPath = join(root, "onboarding.json");
-      writeFileSync(onboardingPath, `${JSON.stringify({
-        schema: 1,
-        agents: profile === "both" ? ["codex", "claude"] : [profile],
-        execution: { isolation: "managed-devcontainer" },
-      }, null, 2)}\n`);
-      const previewResult = spawnSync(process.execPath, [initScript, "preview", "--onboarding", onboardingPath, "--project-root", root], { encoding: "utf8" });
-      assert.equal(previewResult.status, 0, previewResult.stderr || previewResult.stdout);
-      const preview = JSON.parse(previewResult.stdout);
-      const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--onboarding", onboardingPath, "--project-root", root], { encoding: "utf8" });
-      assert.equal(initialized.status, 0, initialized.stderr);
+test("initialization always creates both provider routes and passes doctor", () => {
+  const root = mkdtempSync(join(tmpdir(), "adw-managed-doctor-"));
+  git(root, "init", "-q", "-b", "main");
+  git(root, "config", "user.name", "ADW Test");
+  git(root, "config", "user.email", "adw@example.invalid");
+  writeFileSync(join(root, "README.md"), "# fixture\n");
+  git(root, "add", ".");
+  git(root, "commit", "-q", "-m", "fixture");
+  const onboardingPath = join(root, "onboarding.json");
+  writeFileSync(onboardingPath, `${JSON.stringify({
+    schema: 1,
+    execution: { isolation: "managed-devcontainer" },
+  }, null, 2)}\n`);
+  const previewResult = spawnSync(process.execPath, [initScript, "preview", "--onboarding", onboardingPath, "--project-root", root], { encoding: "utf8" });
+  assert.equal(previewResult.status, 0, previewResult.stderr || previewResult.stdout);
+  const preview = JSON.parse(previewResult.stdout);
+  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--onboarding", onboardingPath, "--project-root", root], { encoding: "utf8" });
+  assert.equal(initialized.status, 0, initialized.stderr);
 
-      const doctor = spawnSync(process.execPath, [doctorScript, "--project-root", root], {
-        encoding: "utf8",
-        env: { ...process.env, ADW_MANAGED_DEVCONTAINER: "1" },
-      });
-      assert.equal(doctor.status, 0, doctor.stderr || doctor.stdout);
-      const snapshot = JSON.parse(doctor.stdout);
-      assert.equal(snapshot.checks.find(({ id }) => id === "execution:managed-files").status, "pass");
-      assert.deepEqual(snapshot.checks.filter(({ id }) => id.startsWith("routing:")).map(({ id }) => id), ["routing:AGENTS.md", "routing:CLAUDE.md"]);
-      assert.equal(existsSync(join(root, "AGENTS.md")), true);
-      assert.equal(existsSync(join(root, "CLAUDE.md")), true);
-    });
-  }
+  const doctor = spawnSync(process.execPath, [doctorScript, "--project-root", root], {
+    encoding: "utf8",
+    env: { ...process.env, ADW_MANAGED_DEVCONTAINER: "1" },
+  });
+  assert.equal(doctor.status, 0, doctor.stderr || doctor.stdout);
+  const snapshot = JSON.parse(doctor.stdout);
+  assert.equal(snapshot.checks.find(({ id }) => id === "execution:managed-files").status, "pass");
+  assert.deepEqual(snapshot.checks.filter(({ id }) => id.startsWith("routing:")).map(({ id }) => id), ["routing:AGENTS.md", "routing:CLAUDE.md"]);
+  assert.equal(existsSync(join(root, "AGENTS.md")), true);
+  assert.equal(existsSync(join(root, "CLAUDE.md")), true);
 });
