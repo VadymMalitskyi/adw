@@ -209,7 +209,6 @@ test("plan skill restores phases, groups, anchors, directives, and validation so
   assert.match(skill, /file -> symbol/);
   assert.match(skill, /never line numbers/i);
   assert.match(skill, /IMPLEMENT[\s\S]{0,200}CONTRACT[\s\S]{0,200}PATTERN[\s\S]{0,200}GOTCHA[\s\S]{0,200}DONE WHEN[\s\S]{0,200}VALIDATE/);
-  assert.match(skill, /max_parallel/);
   assert.match(skill, /exact, non-interactive, and derived from an observable manifest, task runner, CI workflow, or authoritative project documentation/);
   assert.match(skill, /Do not invent a command/);
   assert.match(skill, /group pull requests by default, or one integration pull request/);

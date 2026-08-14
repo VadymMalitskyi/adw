@@ -58,7 +58,7 @@ test("init previews without writes and applies idempotent bounded changes", () =
 
   const preview = run(root, "preview");
   assert.equal(preview.mode, "preview");
-  assert.deepEqual(preview.execution, { isolation: "project-devcontainer", action: "preserve", required: true, reopen_required: true, mode: "orchestrated", max_parallel: 3, agent_tools: "both" });
+  assert.deepEqual(preview.execution, { isolation: "project-devcontainer", action: "preserve", required: true, reopen_required: true, mode: "orchestrated", agent_tools: "both" });
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), statusBefore);
   assert.deepEqual(readFileSync(join(root, "AGENTS.md")), agentBefore);
 

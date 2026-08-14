@@ -38,7 +38,7 @@ test("onboarding choices are preview-bound and split shared from personal config
   writeFileSync(answersPath, `${JSON.stringify({
     schema: 1,
     web_access: "hosted-only",
-    execution: { isolation: "managed-devcontainer", mode: "orchestrated", max_parallel: 2 },
+    execution: { isolation: "managed-devcontainer", mode: "orchestrated" },
     development: { runtime_versions: { dotnet: "8" } },
     providers: {
       work_tracker: {
@@ -77,7 +77,7 @@ test("onboarding choices are preview-bound and split shared from personal config
   const preview = JSON.parse(previewResult.stdout);
   assert.match(preview.preview_digest, /^[0-9a-f]{64}$/);
   assert.equal(preview.execution.agent_tools, "both");
-  assert.deepEqual(preview.onboarding.execution, { mode: "orchestrated", max_parallel: 2, isolation: "managed-devcontainer" });
+  assert.deepEqual(preview.onboarding.execution, { mode: "orchestrated", isolation: "managed-devcontainer" });
   assert.equal(preview.onboarding.web_access, "hosted-only");
   assert.equal(preview.execution.web_access, "hosted-only");
   assert.deepEqual(preview.onboarding.runtime_versions, { dotnet: "8" });
@@ -97,7 +97,7 @@ test("onboarding choices are preview-bound and split shared from personal config
   assert.equal(existsSync(join(root, ".codex/rules/adw.rules")), true);
   assert.equal(existsSync(join(root, ".claude/settings.json")), true);
   const projectConfig = readFileSync(join(root, "adw.yaml"), "utf8");
-  assert.match(projectConfig, /execution:\n  mode: orchestrated\n  max_parallel: 2\n  isolation: managed-devcontainer/);
+  assert.match(projectConfig, /execution:\n  mode: orchestrated\n  isolation: managed-devcontainer/);
   assert.match(projectConfig, /development:\n  runtime_versions:\n    dotnet: "8"/);
   assert.match(projectConfig, /work_tracker:[\s\S]*provider: "github"[\s\S]*required: true/);
   assert.doesNotMatch(projectConfig, /ensure:|cardinality:|profile:|workflows:/);

@@ -87,7 +87,6 @@ test("review-plan performs a cold read and covers every required semantic check"
   for (const [label, pattern] of checks) assert.match(skill, pattern, `missing check: ${label}`);
 
   assert.match(skill, /`resolved`, `moved`, or `missing`/);
-  assert.match(skill, /max_parallel/);
   assert.match(skill, /Never report a check as passed when it was skipped/);
 });
 

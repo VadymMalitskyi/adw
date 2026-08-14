@@ -23,7 +23,6 @@ docs:
   worktree: worktrees/docs
 execution:
   mode: sequential
-  max_parallel: 1
   isolation: provider-sandbox
 components:
   app:
@@ -61,7 +60,6 @@ test("the project contract rejects only operationally important defects", () => 
   for (const [line, replacement, expected] of [
     ["  isolation: provider-sandbox\n", "  isolation: nowhere\n", "/execution/isolation"],
     ["  mode: sequential\n", "  mode: parallel\n", "/execution/mode"],
-    ["  max_parallel: 1\n", "  max_parallel: 0\n", "/execution/max_parallel"],
   ]) {
     const broken = validateProjectConfig(parseYaml(MINIMAL.replace(line, replacement), "adw.yaml"));
     assert.ok(errorPaths(broken).includes(expected), `${expected} must be rejected`);
@@ -85,6 +83,10 @@ test("the project contract rejects only operationally important defects", () => 
 
   const unknown = config("surprise: true\n");
   assert.ok(errorPaths(unknown).includes("/surprise"));
+
+  // Parallelism is a property of the plan, never of the project configuration.
+  const throttled = validateProjectConfig(parseYaml(MINIMAL.replace("  mode: sequential\n", "  mode: sequential\n  max_parallel: 3\n"), "adw.yaml"));
+  assert.ok(errorPaths(throttled).includes("/execution/max_parallel"), "a configured parallelism limit must be rejected");
 });
 
 test("credential-like configuration is rejected everywhere, including inside opaque provider settings", () => {

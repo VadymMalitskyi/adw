@@ -18,7 +18,7 @@ function config() {
   return [
     "adw: 1", "", "git:", "  base_branch: main", "",
     "docs:", "  branch: docs", "  worktree: worktrees/docs", "  sync_marker: SYNC.yaml", "",
-    "execution:", "  mode: orchestrated", "  max_parallel: 3", "  isolation: provider-sandbox", "",
+    "execution:", "  mode: orchestrated", "  isolation: provider-sandbox", "",
     "components:", "  app:", "    path: .", "    validate:", "      - npm test", "",
   ].join("\n");
 }

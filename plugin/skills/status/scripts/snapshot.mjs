@@ -58,9 +58,9 @@ function executionSnapshot(projectRoot, project) {
     project_devcontainer: process.env.ADW_PROJECT_DEVCONTAINER === "1" || process.env.REMOTE_CONTAINERS === "true" || process.env.CODESPACES === "true",
   };
   if (!project) {
-    return { configured: false, mode: null, max_parallel: null, isolation: null, active: false, markers, reason: "adw.yaml is missing or invalid" };
+    return { configured: false, mode: null, isolation: null, active: false, markers, reason: "adw.yaml is missing or invalid" };
   }
-  const { isolation = null, mode = null, max_parallel = null } = project.execution ?? {};
+  const { isolation = null, mode = null } = project.execution ?? {};
   // There is no configured permission profile in `adw: 1`; the managed profile
   // is implied by managed-devcontainer isolation.
   const permissionProfile = isolation === "managed-devcontainer" ? PERMISSION_PROFILE : null;
@@ -74,7 +74,6 @@ function executionSnapshot(projectRoot, project) {
   return {
     configured: Boolean(isolation && mode),
     mode,
-    max_parallel,
     isolation,
     permissions: { profile: permissionProfile, agent_tools: agentTools, provider_artifacts: providerArtifacts },
     active,

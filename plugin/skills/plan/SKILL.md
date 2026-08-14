@@ -71,7 +71,7 @@ Write for an engineer who will never open PART 2: the problem and who it affects
 - Fill the glance table with one row per group: `Phase`, `Group`, `Component`, `Primary paths`, `Depends on`, `Tracker`, `Delivery`.
 - Order phases as dependency barriers. A later phase may rely on everything earlier phases produced.
 - Give every phase and group a stable lowercase id. Run records, branches, and worktrees are keyed by those ids, so they must not be renamed after approval.
-- Put groups in the same phase only when their write paths and contracts are genuinely disjoint, so they can run concurrently. Where two groups would otherwise touch the same file, define the shared contract in an earlier phase instead. Keep each phase within the configured `execution.max_parallel`.
+- Put groups in the same phase only when their write paths and contracts are genuinely disjoint, so they can run concurrently. Where two groups would otherwise touch the same file, define the shared contract in an earlier phase instead. Put every genuinely independent group in the same phase; never split a phase or merge groups to suit a machine's capacity, because execution runs exactly what the phase declares.
 - Record per group: goal, component, dependencies, affected paths, delivery shape, and tracker intent.
 - Use grep-able `file -> symbol` anchors, never line numbers, and verify every anchor exists in the working tree as written.
 - Write directive tasks: one `IMPLEMENT` directive per unit of work, with optional `CONTRACT`, `PATTERN`, `GOTCHA`, `DONE WHEN`, and `VALIDATE` entries. `DONE WHEN` must be observable without trusting the worker's own summary.

@@ -9,7 +9,7 @@ Before any project or external mutation:
 1. Invoke `node <plugin-root>/lib/adw-helper.mjs load-project` with JSON stdin `{ "project_root": "<project-root>", "path": "adw.yaml" }`. This command reads the exact file bytes itself, parses YAML 1.2 with duplicate-key rejection, validates the parsed value against the handwritten `adw: 1` contract, and returns the parsed `data` plus its byte digest.
 2. Require exit code 0 and `ok: true`. Never ask the model, a regex scraper, or another ad-hoc reader to transcribe security-relevant YAML before validation.
 3. If validation fails, stop. The installed helper's contract is authoritative; do not add a separate compatibility or migration interpretation.
-4. Only from the successfully loaded `data`, read `execution.isolation`, `execution.mode`, and `execution.max_parallel`.
+4. Only from the successfully loaded `data`, read `execution.isolation` and `execution.mode`.
 
 There is no `enforcement` field and no configured permission profile. The `managed-development` permission profile is implied by `isolation: managed-devcontainer`. `SYNC.yaml` may be parsed only by the helper's exported `parseYaml` function in bundled scripts.
 

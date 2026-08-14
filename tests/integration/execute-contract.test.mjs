@@ -45,7 +45,7 @@ test("execute binds the exact approved plan bytes to the docs commit and routes 
 test("execute reads the project contract fields and no unsupported machinery", () => {
   assert.match(execute, /helper's `load-project` command/);
   assert.match(execute, /`execution\.mode`/);
-  assert.match(execute, /`execution\.max_parallel`/);
+  assert.match(execute, /every group the phase declares/i);
   assert.match(execute, /`execution\.isolation`/);
   for (const removed of [/plan\.yaml/, /spec\.md/, /integrations\.yaml/, /resolve-project-policy/, /effective_policy/, /verify-approval-bundle/, /external-events/, /validation\.json/]) {
     assert.doesNotMatch(execute, removed, `execute must not reference unsupported machinery: ${removed}`);
@@ -107,7 +107,7 @@ test("execute keeps delivery separately authorized and supports both delivery st
 
 test("the execution contract resolves the profile through load-project without an enforcement field", () => {
   assert.match(executionContract, /adw-helper\.mjs load-project/);
-  assert.match(executionContract, /`execution\.isolation`, `execution\.mode`, and `execution\.max_parallel`/);
+  assert.match(executionContract, /`execution\.isolation` and `execution\.mode`/);
   assert.match(executionContract, /There is no `enforcement` field/);
   assert.match(executionContract, /implied by `isolation: managed-devcontainer`/);
   assert.match(executionContract, /lightweight default and is inherently the weaker boundary/);

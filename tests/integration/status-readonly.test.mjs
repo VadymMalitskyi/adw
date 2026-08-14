@@ -70,7 +70,6 @@ function fixture(label) {
     "",
     "execution:",
     "  mode: orchestrated",
-    "  max_parallel: 3",
     "  isolation: managed-devcontainer",
     "",
     "components:",
@@ -206,7 +205,6 @@ test("status reconstructs plan, approval, and run-record state from durable arti
   assert.equal(snapshot.docs.attached, true);
   assert.equal(snapshot.docs.branch, "docs");
   assert.equal(snapshot.execution.mode, "orchestrated");
-  assert.equal(snapshot.execution.max_parallel, 3);
   assert.equal(snapshot.execution.isolation, "managed-devcontainer");
   assert.equal(snapshot.execution.permissions.profile, "managed-development");
   assert.equal(snapshot.execution.active, true);

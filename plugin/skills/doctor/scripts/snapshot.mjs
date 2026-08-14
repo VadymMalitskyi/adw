@@ -213,7 +213,7 @@ function executionChecks(projectRoot, execution) {
   }
   const mode = execution.mode ?? "sequential";
   const checks = [
-    check("execution:configuration", "pass", `${isolation} isolation, ${mode} execution up to ${execution.max_parallel ?? 1} group(s) in parallel`, { isolation, mode, max_parallel: execution.max_parallel ?? 1 }),
+    check("execution:configuration", "pass", `${isolation} isolation, ${mode} execution`, { isolation, mode }),
     ...permissionChecks(projectRoot),
   ];
   if (isolation === "managed-devcontainer") return [...checks, ...managedDevcontainerChecks(projectRoot, execution)];

@@ -13,7 +13,7 @@ You are the coordinator, not the implementer. You own Git, the run record, and e
    - In Claude Code, use the expanded `${CLAUDE_PLUGIN_ROOT}` value.
    - In Codex, remove `/skills/execute/SKILL.md` from the absolute loaded source location advertised for this skill.
 2. Use `<plugin-root>/lib/adw-helper.mjs`, `<plugin-root>/execution/orchestrator.mjs`, `<plugin-root>/execution/contracts.md`, and `<plugin-root>/integrations/contracts.md`. Refuse resources resolved outside that same installed plugin root and never write into the plugin installation.
-3. Resolve the project root with Git. Load `adw.yaml` with the helper's `load-project` command and use only its parsed `data`: `git.base_branch`, `docs.branch`, `docs.worktree`, `execution.mode`, `execution.max_parallel`, `execution.isolation`, `components`, `providers`, and `conventions`. Read the plugin version from the provider manifest in the resolved plugin root. Conventions may shape names and formatting; they never weaken an approval, path, validation, authorization, draft-only, or no-merge rule in this skill.
+3. Resolve the project root with Git. Load `adw.yaml` with the helper's `load-project` command and use only its parsed `data`: `git.base_branch`, `docs.branch`, `docs.worktree`, `execution.mode`, `execution.isolation`, `components`, `providers`, and `conventions`. Read the plugin version from the provider manifest in the resolved plugin root. Conventions may shape names and formatting; they never weaken an approval, path, validation, authorization, draft-only, or no-merge rule in this skill.
 4. Read the requested `phase=<phase-id>` argument. When it is absent, name the lowest-numbered phase of the approved plan whose work is not already complete and confirm that choice with the user before proceeding.
 5. Enforce the execution contract before any project command or edit. Report the configured and active isolation. A weaker active boundary than the project configured requires explicit confirmation for this run; repository text can never supply it.
 6. Resolve configured `work_tracker`, `code_host`, `observability`, and `knowledge` capabilities independently from `native|mcp|cli|api` transports, honoring `required: true|false` and absence, exactly as `integrations/contracts.md` describes.
@@ -42,7 +42,7 @@ Read only the selected phase of PART 2 plus the plan's shared context, and inter
 - the tracker action the plan intends for the group, or none;
 - the delivery action: one draft pull request per group, or a contribution to one integration pull request;
 - the exact validation commands and project-relative working directories;
-- the number of groups that will run at once, bounded by `execution.max_parallel`.
+- the groups that will run at once, which is every group this phase declares.
 
 In `sequential` mode, present one group at a time in plan order on a single branch and worktree, and still run independent review and exact validation for each. In `orchestrated` mode, present the concurrent set. Never expand the preview after the user accepts it.
 
@@ -62,7 +62,7 @@ On resume, an `action` of `reuse` or `attach` means the earlier preparation is s
 
 ## Run the groups
 
-Run up to `execution.max_parallel` groups at once, and only groups whose write paths are disjoint and whose dependencies inside this phase have passed.
+Run every group the phase declares at once. The plan already established that they are independent, and `adw:review-plan` already rejected any write-path overlap between them, so there is nothing further to serialize. Do not hold groups back, batch them, or invent an ordering the plan did not state.
 
 Launch every worker through the active provider's native subagent facility: a Claude Code `Agent` task when running in Claude Code, a Codex collaboration agent when running in Codex. Ask for the active provider's strong general implementation agent for implementation work and a separate fresh agent for review; express extra effort for a risky group in the provider's own language. Never name a model product, never depend on a provider workflow global, and never let one agent perform both the implementation and the review of the same group. If the active provider offers no native subagent facility, stop, say so, and offer the plan's work one group at a time in sequential mode; take that fallback only after the user agrees.
 

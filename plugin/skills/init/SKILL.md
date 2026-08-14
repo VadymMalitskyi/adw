@@ -17,7 +17,7 @@ Preserve repository-owned content. Modify only the bounded ADW blocks, new ADW a
 
    > ADW is a project workflow helper for planning, reviewing, and safely carrying out software changes with Codex and Claude Code. This setup does not change your project yet: first it creates a preview of every proposed file and waits for your approval. I'll ask only about choices ADW cannot safely guess — how work should run, which optional services your team uses, and your team's conventions. You do not need to know Docker, agents, or integrations in advance; use the default or say "I'm not sure." Never provide passwords, API keys, or tokens.
 
-   - **Execution mode.** `orchestrated` runs dependency-ordered work with concurrent groups inside a phase, each in its own branch and worktree. `sequential` runs one branch at a time. Recommend `orchestrated`, and ask for `max_parallel` between 1 and 16 (default 3).
+   - **Execution mode.** `orchestrated` runs dependency-ordered work with concurrent groups inside a phase, each in its own branch and worktree. `sequential` runs one branch at a time. Recommend `orchestrated`. There is no parallelism limit to choose: a phase runs exactly the groups its plan declared independent.
    - **Isolation.** Explain the three choices plainly. A provider sandbox is the lightweight portable default with fewer guarantees. An existing project devcontainer is left completely unchanged. A managed devcontainer is an isolated, repeatable workspace ADW configures and hardens. Default to `provider-sandbox` for a repository with no `.devcontainer/`; select `project-devcontainer` automatically when `.devcontainer/devcontainer.json` already exists and say explicitly that the project-owned container stays unchanged and must provide the required agent tools itself. Offer `managed-devcontainer` only as an explicit opt-in for teams wanting the stronger reproducible boundary; never present it as required to adopt ADW.
    - **Managed container follow-ups, only after that opt-in.** Explain that managed containers always install Codex and Claude Code with both sets of extensions, credential volumes, checks, and agent network domains. Explain web access before asking: `public-pages` lets Claude open public web pages for research; `hosted-only` is the stricter option limiting container egress to specifically approved domains. When a detected language has no pinned runtime version, name the language, explain that the container needs a version, offer the current supported major-version default, and record the answer in `development.runtime_versions`. Do not invent a version without repository evidence or the person's answer.
    - **Optional services.** Ask which capabilities the team actually uses — `work_tracker`, `code_host`, `observability`, `knowledge` — and why: this lets ADW check availability and propose the right safe actions. "None" is a valid answer and keeps the lightweight path. For each selected capability collect only the provider, whether it is required, non-secret settings, preferred transport, and any exact additional network domains. Do not ask about work-item field policy, payload profiles, or tracker cardinality; the plan states its tracker intent per change.
@@ -30,7 +30,7 @@ Preserve repository-owned content. Modify only the bounded ADW blocks, new ADW a
    ```json
    {
      "schema": 1,
-     "execution": { "isolation": "provider-sandbox", "mode": "orchestrated", "max_parallel": 3 },
+     "execution": { "isolation": "provider-sandbox", "mode": "orchestrated" },
      "web_access": "public-pages",
      "providers": {},
      "conventions": {
@@ -48,7 +48,7 @@ Preserve repository-owned content. Modify only the bounded ADW blocks, new ADW a
 
 The internal script must:
 
-- render the small `adw: 1` contract: `git.base_branch`, `docs.branch`/`worktree`/`sync_marker`, `execution.mode`/`max_parallel`/`isolation`, discovered `components` with their `validate` commands, optional `providers`, and optional `conventions`;
+- render the small `adw: 1` contract: `git.base_branch`, `docs.branch`/`worktree`/`sync_marker`, `execution.mode`/`isolation`, discovered `components` with their `validate` commands, optional `providers`, and optional `conventions`;
 - preserve all bytes outside `<!-- ADW:START -->` / `<!-- ADW:END -->` blocks in `AGENTS.md` and `CLAUDE.md`;
 - preserve all bytes outside `# ADW:START` / `# ADW:END` in `.gitignore` and avoid duplicate `.adw/` or `/worktrees/` rules;
 - ignore local paths before creating `.adw/local.yaml`, `.adw/preferences.md`, `.adw/cache/`, or the docs worktree;

@@ -25,7 +25,6 @@ const CHANGE_ID = /^[a-z0-9](?:[a-z0-9_-]|\.[a-z0-9_-]+)*$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 const COMMIT = /^[0-9a-f]{40}$/;
 const PLACEHOLDER = /^\s*<[^>]+>\s*$/;
-const MAX_PARALLEL = 16;
 const DEFAULT_TIMEOUT_MS = 120000;
 const VALIDATION_TERMINATION_GRACE_MS = 250;
 const VALIDATION_PIPE_CLOSE_GRACE_MS = 100;
@@ -243,7 +242,7 @@ export function validateProjectConfig(data) {
     adw: 1,
     git: { base_branch: "main" },
     docs: { branch: "docs", worktree: "worktrees/docs", sync_marker: "SYNC.yaml" },
-    execution: { mode: "sequential", max_parallel: 1, isolation: "provider-sandbox" },
+    execution: { mode: "sequential", isolation: "provider-sandbox" },
     development: { runtime_versions: {} },
     components: {},
     providers: {},
@@ -271,15 +270,11 @@ export function validateProjectConfig(data) {
 
   if (data.execution === undefined) errors.add("/execution", "is required");
   else if (checkObject(errors, data.execution, "/execution")) {
-    checkKnownKeys(errors, data.execution, new Set(["mode", "max_parallel", "isolation", "web_access"]), "/execution");
+    checkKnownKeys(errors, data.execution, new Set(["mode", "isolation", "web_access"]), "/execution");
     if (!EXECUTION_MODES.includes(data.execution.mode)) errors.add("/execution/mode", `must be one of: ${EXECUTION_MODES.join(", ")}`);
     else normalized.execution.mode = data.execution.mode;
     if (!ISOLATION_MODES.includes(data.execution.isolation)) errors.add("/execution/isolation", `must be one of: ${ISOLATION_MODES.join(", ")}`);
     else normalized.execution.isolation = data.execution.isolation;
-    if (data.execution.max_parallel === undefined) normalized.execution.max_parallel = normalized.execution.mode === "orchestrated" ? 3 : 1;
-    else if (!Number.isInteger(data.execution.max_parallel) || data.execution.max_parallel < 1 || data.execution.max_parallel > MAX_PARALLEL) {
-      errors.add("/execution/max_parallel", `must be an integer between 1 and ${MAX_PARALLEL}`);
-    } else normalized.execution.max_parallel = data.execution.max_parallel;
     if (data.execution.web_access !== undefined) {
       if (!WEB_ACCESS_MODES.has(data.execution.web_access)) errors.add("/execution/web_access", `must be one of: ${[...WEB_ACCESS_MODES].join(", ")}`);
       else normalized.execution.web_access = data.execution.web_access;

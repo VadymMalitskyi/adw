@@ -37,7 +37,7 @@ test("missing answers use the lightweight dual-agent default", () => {
     schema: 1,
     agentTools: "both",
     webAccess: "public-pages",
-    execution: { mode: "orchestrated", maxParallel: 3 },
+    execution: { mode: "orchestrated" },
     development: { runtimeVersions: {} },
     providers: {},
     networkDomains: [],
@@ -61,7 +61,7 @@ test("missing answers use the lightweight dual-agent default", () => {
 test("normalizes supported project and local onboarding answers", () => {
   const onboarding = load(base({
     web_access: "public-pages",
-    execution: { isolation: "managed-devcontainer", mode: "orchestrated", max_parallel: 4 },
+    execution: { isolation: "managed-devcontainer", mode: "orchestrated" },
     providers: {
       work_tracker: {
         provider: "github",
@@ -97,7 +97,7 @@ test("normalizes supported project and local onboarding answers", () => {
 
   assert.equal(onboarding.agentTools, "both");
   assert.equal(onboarding.webAccess, "public-pages");
-  assert.deepEqual(onboarding.execution, { isolation: "managed-devcontainer", mode: "orchestrated", maxParallel: 4 });
+  assert.deepEqual(onboarding.execution, { isolation: "managed-devcontainer", mode: "orchestrated" });
   assert.deepEqual(onboarding.networkDomains, ["api.github.com", "github.com"]);
   assert.equal("network_domains" in onboarding.providers.work_tracker, false);
   assert.equal(onboarding.providers.work_tracker.required, true);
@@ -123,11 +123,11 @@ test("normalizes supported project and local onboarding answers", () => {
   ].join("\n"));
 });
 
-test("execution answers stay inside the supported mode and parallelism range", () => {
-  assert.deepEqual(load(base({ execution: { mode: "sequential" } })).execution, { mode: "sequential", maxParallel: 1 });
+test("execution answers carry only the workflow shape", () => {
+  assert.deepEqual(load(base({ execution: { mode: "sequential" } })).execution, { mode: "sequential" });
   assert.throws(() => load(base({ execution: { mode: "parallel" } })), /orchestrated, sequential/);
-  assert.throws(() => load(base({ execution: { max_parallel: 0 } })), /between 1 and 16/);
-  assert.throws(() => load(base({ execution: { max_parallel: 99 } })), /between 1 and 16/);
+  // A parallelism limit is not an onboarding answer; the plan decides it.
+  assert.throws(() => load(base({ execution: { max_parallel: 3 } })), /max_parallel.*not supported/);
   assert.throws(() => load(base({ execution: { isolation: "nowhere" } })), /managed-devcontainer|provider-sandbox/);
 });
 
@@ -147,7 +147,7 @@ test("summary exposes local field names without personal values", () => {
   }));
   const summary = onboardingSummary(onboarding);
   assert.equal(summary.agent_tools, "both");
-  assert.deepEqual(summary.execution, { mode: "orchestrated", max_parallel: 3, isolation: null });
+  assert.deepEqual(summary.execution, { mode: "orchestrated", isolation: null });
   assert.deepEqual(summary.providers.code_host.settings, ["owner", "repository"]);
   assert.equal(summary.providers.code_host.required, true);
   assert.deepEqual(summary.local.identity_fields, ["display_name", "email"]);

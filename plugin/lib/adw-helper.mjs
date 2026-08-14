@@ -7382,7 +7382,6 @@ var CHANGE_ID = /^[a-z0-9](?:[a-z0-9_-]|\.[a-z0-9_-]+)*$/;
 var SHA256 = /^[0-9a-f]{64}$/;
 var COMMIT = /^[0-9a-f]{40}$/;
 var PLACEHOLDER = /^\s*<[^>]+>\s*$/;
-var MAX_PARALLEL = 16;
 var DEFAULT_TIMEOUT_MS = 12e4;
 var VALIDATION_TERMINATION_GRACE_MS = 250;
 var VALIDATION_PIPE_CLOSE_GRACE_MS = 100;
@@ -7598,7 +7597,7 @@ function validateProjectConfig(data) {
     adw: 1,
     git: { base_branch: "main" },
     docs: { branch: "docs", worktree: "worktrees/docs", sync_marker: "SYNC.yaml" },
-    execution: { mode: "sequential", max_parallel: 1, isolation: "provider-sandbox" },
+    execution: { mode: "sequential", isolation: "provider-sandbox" },
     development: { runtime_versions: {} },
     components: {},
     providers: {},
@@ -7623,15 +7622,11 @@ function validateProjectConfig(data) {
   }
   if (data.execution === void 0) errors.add("/execution", "is required");
   else if (checkObject(errors, data.execution, "/execution")) {
-    checkKnownKeys(errors, data.execution, /* @__PURE__ */ new Set(["mode", "max_parallel", "isolation", "web_access"]), "/execution");
+    checkKnownKeys(errors, data.execution, /* @__PURE__ */ new Set(["mode", "isolation", "web_access"]), "/execution");
     if (!EXECUTION_MODES.includes(data.execution.mode)) errors.add("/execution/mode", `must be one of: ${EXECUTION_MODES.join(", ")}`);
     else normalized.execution.mode = data.execution.mode;
     if (!ISOLATION_MODES.includes(data.execution.isolation)) errors.add("/execution/isolation", `must be one of: ${ISOLATION_MODES.join(", ")}`);
     else normalized.execution.isolation = data.execution.isolation;
-    if (data.execution.max_parallel === void 0) normalized.execution.max_parallel = normalized.execution.mode === "orchestrated" ? 3 : 1;
-    else if (!Number.isInteger(data.execution.max_parallel) || data.execution.max_parallel < 1 || data.execution.max_parallel > MAX_PARALLEL) {
-      errors.add("/execution/max_parallel", `must be an integer between 1 and ${MAX_PARALLEL}`);
-    } else normalized.execution.max_parallel = data.execution.max_parallel;
     if (data.execution.web_access !== void 0) {
       if (!WEB_ACCESS_MODES.has(data.execution.web_access)) errors.add("/execution/web_access", `must be one of: ${[...WEB_ACCESS_MODES].join(", ")}`);
       else normalized.execution.web_access = data.execution.web_access;

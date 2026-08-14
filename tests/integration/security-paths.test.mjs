@@ -70,7 +70,7 @@ function projectWith(overrides = {}) {
     adw: 1,
     git: { base_branch: "main" },
     docs: { branch: "docs", worktree: "worktrees/docs" },
-    execution: { mode: "sequential", max_parallel: 1, isolation: "provider-sandbox" },
+    execution: { mode: "sequential", isolation: "provider-sandbox" },
     components: { app: { path: ".", validate: ["npm test"] } },
     ...overrides,
   };

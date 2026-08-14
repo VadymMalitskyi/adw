@@ -24,7 +24,6 @@ function projectConfiguration() {
     "  sync_marker: SYNC.yaml",
     "execution:",
     "  mode: orchestrated",
-    "  max_parallel: 3",
     "  isolation: provider-sandbox",
     "components:",
     "  app:",

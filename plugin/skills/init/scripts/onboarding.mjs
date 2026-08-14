@@ -11,7 +11,6 @@ import {
 const CAPABILITY_SET = new Set(CAPABILITIES);
 const ISOLATION_MODES = new Set(["managed-devcontainer", "project-devcontainer", "provider-sandbox"]);
 const EXECUTION_MODES = new Set(["orchestrated", "sequential"]);
-const MAX_PARALLEL = 16;
 const TRANSPORTS = new Set(["auto", "native", "mcp", "cli", "api"]);
 const ACCESS_MODES = new Set(["read-only", "read-write"]);
 const WEB_ACCESS_MODES = new Set(["hosted-only", "public-pages"]);
@@ -97,21 +96,11 @@ function readProviderRegistry(pluginRoot) {
 // repository evidence can still choose between an existing project container
 // and the lightweight provider sandbox.
 function normalizeExecution(value) {
-  const normalized = { mode: "orchestrated", maxParallel: 3 };
+  const normalized = { mode: "orchestrated" };
   if (value === undefined) return normalized;
   value = object(value, "onboarding.execution");
-  rejectUnknown(value, new Set(["isolation", "mode", "max_parallel"]), "onboarding.execution");
+  rejectUnknown(value, new Set(["isolation", "mode"]), "onboarding.execution");
   if (value.mode !== undefined) normalized.mode = enumValue(value.mode, EXECUTION_MODES, "onboarding.execution.mode");
-  if (normalized.mode === "sequential") normalized.maxParallel = 1;
-  if (value.max_parallel !== undefined) {
-    if (!Number.isInteger(value.max_parallel) || value.max_parallel < 1 || value.max_parallel > MAX_PARALLEL) {
-      fail("onboarding.execution.max_parallel", `must be an integer between 1 and ${MAX_PARALLEL}`);
-    }
-    normalized.maxParallel = value.max_parallel;
-  }
-  if (normalized.mode === "sequential" && normalized.maxParallel !== 1) {
-    fail("onboarding.execution.max_parallel", "must equal 1 for sequential execution");
-  }
   if (value.isolation !== undefined) normalized.isolation = enumValue(value.isolation, ISOLATION_MODES, "onboarding.execution.isolation");
   return normalized;
 }
@@ -232,7 +221,7 @@ export function defaultOnboarding() {
     schema: 1,
     agentTools: "both",
     webAccess: "public-pages",
-    execution: { mode: "orchestrated", maxParallel: 3 },
+    execution: { mode: "orchestrated" },
     development: { runtimeVersions: {} },
     providers: {},
     networkDomains: [],
@@ -273,7 +262,6 @@ export function onboardingSummary(onboarding) {
     web_access: onboarding.webAccess,
     execution: {
       mode: onboarding.execution?.mode ?? "orchestrated",
-      max_parallel: onboarding.execution?.maxParallel ?? 3,
       isolation: onboarding.execution?.isolation ?? null,
     },
     runtime_versions: onboarding.development?.runtimeVersions ?? {},

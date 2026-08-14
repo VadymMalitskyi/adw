@@ -270,7 +270,6 @@ function projectConfiguration(projectRoot, isolation, onboarding) {
     "",
     "execution:",
     `  mode: ${onboarding.execution.mode}`,
-    `  max_parallel: ${onboarding.execution.maxParallel}`,
     `  isolation: ${isolation}`,
   ];
   // `web_access` bounds the generated container's egress; it is meaningless
@@ -508,7 +507,6 @@ function summarize(projectRoot, files, docs, execution, onboarding, developmentE
     execution: {
       ...execution,
       mode: onboarding.execution.mode,
-      max_parallel: onboarding.execution.maxParallel,
       agent_tools: onboarding.agentTools,
       ...(execution.isolation === "managed-devcontainer" ? { web_access: onboarding.webAccess } : {}),
     },

@@ -53,7 +53,7 @@ Approval binds the exact plan bytes and the docs commit that contained them:
 
 Edit one byte of an approved plan and execution stops until you reapprove. You are never asked to read or copy a digest.
 
-`adw:execute phase=<phase-id>` verifies the approval and its dependency phases, shows a bounded preview, writes a run record, prepares deterministic branches and worktrees, and then runs up to `max_parallel` groups concurrently through the active provider's native subagents. Each group runs implementation → independent review → fix every in-scope high-severity finding → truthful validation → coordinator scope check. Workers never commit, push, or touch external systems; the coordinator owns Git and every external action.
+`adw:execute phase=<phase-id>` verifies the approval and its dependency phases, shows a bounded preview, writes a run record, prepares deterministic branches and worktrees, and then runs every group the phase declares concurrently through the active provider's native subagents. Each group runs implementation → independent review → fix every in-scope high-severity finding → truthful validation → coordinator scope check. Workers never commit, push, or touch external systems; the coordinator owns Git and every external action.
 
 Interrupt it and start a new session: status and resume are reconstructed from Git branches, worktree markers, the approval, and the run records. No chat history required.
 
@@ -75,7 +75,6 @@ docs:
 
 execution:
   mode: orchestrated          # orchestrated | sequential
-  max_parallel: 3
   isolation: provider-sandbox # provider-sandbox | project-devcontainer | managed-devcontainer
 
 components:

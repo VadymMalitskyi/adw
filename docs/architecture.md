@@ -46,7 +46,7 @@ Each group is prepared with a durable empty marker commit carrying the change, p
 
 ## Parallelism
 
-Phases are dependency barriers. Groups within a phase run concurrently, bounded by `execution.max_parallel`, only when their affected write paths are disjoint. Overlap that the plan does not explain through a shared contract group in an earlier phase is a blocking defect — `adw:review-plan` reports it, and the orchestrator refuses to prepare it.
+Phases are dependency barriers. Every group within a phase runs concurrently, and a group belongs in that phase only when its affected write paths are disjoint from its siblings'. The plan is the only thing that decides how much runs at once: there is no configured parallelism limit, because a machine's capacity is not a property of the design. Overlap that the plan does not explain through a shared contract group in an earlier phase is a blocking defect — `adw:review-plan` reports it, and the orchestrator refuses to prepare it.
 
 ## Integration layer
 

@@ -14,7 +14,6 @@ execution:
   # orchestrated  runs the independent groups of one phase in parallel worktrees
   # sequential    runs one branch and worktree at a time
   mode: orchestrated
-  max_parallel: 3
   # provider-sandbox      lightweight default; the agent provider's own sandbox
   # project-devcontainer  an existing project-owned container, left unchanged
   # managed-devcontainer  the generated reproducible hardened container

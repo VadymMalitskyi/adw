@@ -2,7 +2,7 @@
 
 ## Initialize
 
-`adw:init` begins with a read-only repository preview, then asks a short set of questions about the choices ADW cannot safely infer: execution mode and maximum parallelism, isolation, which optional provider capabilities the team actually uses, any validation command it could not derive from an observable source, and concise branch and pull-request conventions. There are no work-tracker workflow or payload-profile questions. Optional display name, email, account hints, and transport preferences belong to the initializing maintainer alone and are written to ignored `.adw/local.yaml`; credentials are never accepted.
+`adw:init` begins with a read-only repository preview, then asks a short set of questions about the choices ADW cannot safely infer: execution mode, isolation, which optional provider capabilities the team actually uses, any validation command it could not derive from an observable source, and concise branch and pull-request conventions. There are no work-tracker workflow or payload-profile questions. Optional display name, email, account hints, and transport preferences belong to the initializing maintainer alone and are written to ignored `.adw/local.yaml`; credentials are never accepted.
 
 The reviewed preview covers root `adw.yaml`, ignore rules, both provider routing blocks, the selected execution profile, the discovered component and validation model, and the docs-branch worktree. Apply is bound to the exact digest of the reviewed preview, so changed answers, repository evidence, templates, or target bytes stop before writing.
 
@@ -47,7 +47,7 @@ Any change to the plan bytes makes the approval stale. `adw:amend` supersedes th
 3. Interpret the selected phase into a bounded execution preview and show it: group ids, goals, paths, branches, worktrees, tracker actions, delivery actions, and validation commands.
 4. Write the phase run record before any worker launches, and commit it on the docs branch.
 5. Prepare deterministic group branches and worktrees through the orchestrator.
-6. Run up to `max_parallel` groups concurrently using the active provider's native subagents.
+6. Run every group the phase declares concurrently, using the active provider's native subagents.
 7. Inside each group, run stages sequentially: implementation → independent review → fix every in-scope high-severity finding → deterministic validation → coordinator scope check.
 8. Stop the phase on an unexplained or scope-changing diff, unsafe overlap, an unresolved high-severity finding, or a required validation failure.
 9. After all groups pass, offer separately authorized tracker, push, and draft pull-request actions.

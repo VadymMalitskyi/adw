@@ -35,7 +35,6 @@ const PROJECT_CONFIG = [
   "",
   "execution:",
   "  mode: sequential",
-  "  max_parallel: 1",
   "  isolation: provider-sandbox",
   "",
   "components:",

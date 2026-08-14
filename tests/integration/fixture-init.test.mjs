@@ -78,7 +78,7 @@ test("an explicitly selected managed devcontainer generates its full managed fil
   const preview = runInit(root, "preview", false, 0, "managed-devcontainer");
   assert.equal(preview.mode, "preview");
   assert.equal(preview.docs.action, "create");
-  assert.deepEqual(preview.execution, { isolation: "managed-devcontainer", action: "create", required: true, reopen_required: true, mode: "orchestrated", max_parallel: 3, agent_tools: "both", web_access: "public-pages" });
+  assert.deepEqual(preview.execution, { isolation: "managed-devcontainer", action: "create", required: true, reopen_required: true, mode: "orchestrated", agent_tools: "both", web_access: "public-pages" });
   assert.match(preview.setup_guidance.what_adw_is, /plan, review, and safely carry out/i);
   assert.match(preview.setup_guidance.preview_safety, /not changed the repository/i);
   assert.match(preview.setup_guidance.why_information_is_needed, /cannot safely infer/i);
@@ -111,7 +111,7 @@ test("an explicitly selected managed devcontainer generates its full managed fil
   const claudeProjectSettings = JSON.parse(readFileSync(join(root, ".claude/settings.json"), "utf8"));
   assert.deepEqual(claudeProjectSettings.permissions.allow, ["WebSearch"]);
   assert.equal(claudeProjectSettings.sandbox.autoAllowBashIfSandboxed, true);
-  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /execution:\n  mode: orchestrated\n  max_parallel: 3\n  isolation: managed-devcontainer\n  web_access: public-pages/);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /execution:\n  mode: orchestrated\n  isolation: managed-devcontainer\n  web_access: public-pages/);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /components:\n  app:\n    path: "\."\n    validate: \[\]/);
   assert.doesNotMatch(readFileSync(join(root, "adw.yaml"), "utf8"), /enforcement|permissions:|^schema:/m);
   assert.doesNotMatch(readFileSync(join(root, "adw.yaml"), "utf8"), /<unresolved>|<replace with/);
@@ -135,12 +135,12 @@ test("an explicitly selected managed devcontainer generates its full managed fil
 test("provider sandbox is the lightweight default and creates no container", () => {
   const root = copyFixture("empty-repo");
   const preview = runInit(root, "preview");
-  assert.deepEqual(preview.execution, { isolation: "provider-sandbox", action: "none", required: false, reopen_required: false, mode: "orchestrated", max_parallel: 3, agent_tools: "both" });
+  assert.deepEqual(preview.execution, { isolation: "provider-sandbox", action: "none", required: false, reopen_required: false, mode: "orchestrated", agent_tools: "both" });
   runInit(root, "apply", true);
   assert.equal(existsSync(join(root, ".devcontainer")), false);
   assert.equal(existsSync(join(root, ".codex/config.toml")), true, "provider permission policy applies to every isolation mode");
   const config = readFileSync(join(root, "adw.yaml"), "utf8");
-  assert.match(config, /execution:\n  mode: orchestrated\n  max_parallel: 3\n  isolation: provider-sandbox\n/);
+  assert.match(config, /execution:\n  mode: orchestrated\n  isolation: provider-sandbox\n/);
   assert.doesNotMatch(config, /web_access/, "web access is meaningless outside the managed container");
   assert.equal(preview.next_steps.length, 3);
 });
