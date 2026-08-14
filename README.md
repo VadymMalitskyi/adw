@@ -131,10 +131,6 @@ Then start a new provider session in a target Git project and invoke `adw:init`.
 
 Workflows depend on capabilities — `work_tracker`, `code_host`, `observability`, `knowledge` — never on provider tool names. Provider references translate four operations (`read`, `create`, `update`, `link`) to a native, MCP, CLI, or API transport. See [integration architecture](docs/integrations.md).
 
-## Upgrading from 0.6
-
-ADW 1.0 intentionally breaks the 0.6 artifact contract. There is no migration subsystem. `adw:doctor` recognizes a `schema: 5` project and returns exact transition guidance without modifying anything. See [migrating from 0.6](docs/migrating-from-0.6.md).
-
 ## Development
 
 ```bash

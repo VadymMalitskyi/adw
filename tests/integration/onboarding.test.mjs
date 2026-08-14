@@ -172,13 +172,13 @@ test("digest covers normalized values rather than answer formatting or key order
   assert.throws(() => onboardingDigest({ schema: 1 }), /requires normalized/);
 });
 
-test("rejects removed 0.6 inputs, unknown fields, and secret-like keys recursively", () => {
+test("rejects unsupported inputs, unknown fields, and secret-like keys recursively", () => {
   assert.throws(() => load(base({ agents: ["codex"] })), /agents.*not supported/);
   assert.throws(() => load(base({ web_access: "unrestricted" })), /hosted-only, public-pages/);
   assert.throws(() => load(base({ surprise: true })), /surprise.*not supported/);
-  // These are the 0.6 blocks the redesign removed; they must be rejected, never quietly ignored.
-  for (const removed of ["integrations", "workflows", "documentation"]) {
-    assert.throws(() => load(base({ [removed]: {} })), new RegExp(`${removed}.*not supported`), removed);
+  // Unsupported top-level blocks must be rejected, never quietly ignored.
+  for (const unsupported of ["integrations", "workflows", "documentation"]) {
+    assert.throws(() => load(base({ [unsupported]: {} })), new RegExp(`${unsupported}.*not supported`), unsupported);
   }
   assert.throws(() => load(base({ local: { identity: { display_name: "Ada", access_token: "do-not-store" } } })), /credential-like keys are forbidden/);
   assert.throws(() => load(base({ providers: { code_host: { provider: "github", required: true, settings: { nested: { api_key: "x" } } } } })), /api_key.*credential-like/);

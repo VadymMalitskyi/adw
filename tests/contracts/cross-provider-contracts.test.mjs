@@ -170,13 +170,12 @@ test("skills preserve the required behavior and safety boundaries", () => {
       ["installed-contract validation", /artifact validator|project validation/i],
       ["digest-bound managed repair", /preview digest|--preview-digest/i],
       ["plugin-manager ownership", /plugin manager/i],
-      ["no backward-compatibility lifecycle", /no backward-compatibility or migration lifecycle/i],
+      ["never repairs project configuration", /never (?:translates|rewrites)[^\n]{0,80}(?:project )?configuration|never rewrites `adw\.yaml`/i],
     ],
     doctor: [
       ["read-only operation", /read-only|without changing/i],
       ["project contract check", /`adw: 1`|project contract/i],
-      ["superseded contract diagnosis without mutation", /superseded[\s\S]{0,400}(?:Change nothing|do not translate|without changing)/i],
-      ["transition guidance", /migrating-from-0\.6/],
+      ["unreadable contract reported without mutation", /cannot be read[\s\S]{0,300}Change nothing/i],
       ["routing checks", /routing/i],
       ["context freshness", /fresh/i],
       ["execution isolation checks", /execution|isolation/i],
@@ -267,11 +266,11 @@ test("skills preserve the required behavior and safety boundaries", () => {
   for (const [name, requirements] of Object.entries(contracts)) assertContract(name, requirements);
 });
 
-test("skills do not depend on removed 0.6 artifacts, schemas, or digest ceremony", () => {
-  // 1.0 restored phases, parallel groups, and isolated group worktrees, so
-  // those words are expected. What must be absent is the superseded artifact
-  // and digest machinery, and any provider name leaking into a workflow.
-  const removed = [
+test("skills use only the current artifact vocabulary and no digest ceremony", () => {
+  // Phases, parallel groups, and isolated group worktrees are core vocabulary.
+  // What must never appear is schema-versioned configuration, split planning
+  // artifacts, digest ceremony, or a provider name leaking into a workflow.
+  const forbidden = [
     /\bspec\.md\b/,
     /\bplan\.yaml\b/,
     /\bintegrations\.yaml\b/,
@@ -294,11 +293,8 @@ test("skills do not depend on removed 0.6 artifacts, schemas, or digest ceremony
   for (const name of REQUIRED_SKILLS) {
     const source = skillText(name);
     assert.doesNotMatch(source, /Azure DevOps|\bADO\b|Notion|Datadog/i, `${name}: provider-neutral skills cannot embed one provider`);
-    for (const pattern of removed) {
-      // `adw:doctor` is the one workflow allowed to name the 0.6 contract, and
-      // only to report the transition guide without touching the project.
-      if (name === "doctor" && pattern.source.includes("schema")) continue;
-      assert.doesNotMatch(source, pattern, `${name}: removed 0.6 machinery is still referenced: ${pattern.source}`);
+    for (const pattern of forbidden) {
+      assert.doesNotMatch(source, pattern, `${name}: unsupported artifact or digest machinery is referenced: ${pattern.source}`);
     }
   }
 });

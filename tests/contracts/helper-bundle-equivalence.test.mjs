@@ -48,17 +48,17 @@ test("security- and evidence-critical canonical invariants are represented in th
   }
 });
 
-test("the 0.6 schema, policy, and receipt framework is absent from the released helper", () => {
-  const removed = [
+test("no schema, policy, or receipt framework reaches the released helper", () => {
+  const forbidden = [
     "ARTIFACT_SCHEMAS", "validateJsonSchema", "validateArtifact", "loadArtifactFile",
     "computeApprovalBundle", "createApprovalBundle", "verifyApprovalBundle",
     "resolveProjectPolicy", "computePolicyDigest", "project_policy_digest",
     "computeRequirementsDigest", "computeAuthorizationDigest", "recordExternalAction",
     "validateWorkItemPayload", "readback_digest", "Ajv",
   ];
-  for (const name of removed) {
-    assert.ok(!source.includes(name), `canonical source still contains removed machinery: ${name}`);
-    assert.ok(!bundle.includes(name), `generated bundle still contains removed machinery: ${name}`);
+  for (const name of forbidden) {
+    assert.ok(!source.includes(name), `canonical source contains unsupported machinery: ${name}`);
+    assert.ok(!bundle.includes(name), `generated bundle contains unsupported machinery: ${name}`);
   }
   assert.ok(!/"ajv"/.test(read("package.json")), "AJV must not remain a dependency");
 });

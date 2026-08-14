@@ -62,8 +62,8 @@ test("provider-sandbox preview and digest-bound apply are no-op managed-file che
 
 test("invalid project configuration is rejected without writes or format-specific recovery", () => {
   const root = fixture();
-  // A superseded 0.6 contract is diagnosed by adw:doctor, never reinterpreted here.
-  writeFileSync(join(root, "adw.yaml"), "schema: 5\ngit:\n  default_branch: main\n");
+  // An unreadable contract is reported with its errors, never reinterpreted.
+  writeFileSync(join(root, "adw.yaml"), "schema: 99\ngit:\n  default_branch: main\n");
   git(root, "add", "adw.yaml");
   git(root, "commit", "-q", "-m", "superseded contract");
   const before = readFileSync(join(root, "adw.yaml"), "utf8");
@@ -100,7 +100,7 @@ test("managed projects preview and atomically repair release-owned files", () =>
 
   const markerPath = join(root, ".devcontainer/adw-managed.json");
   const marker = JSON.parse(readFileSync(markerPath, "utf8"));
-  marker.plugin_version = "0.5.0";
+  marker.plugin_version = "0.0.1";
   writeFileSync(markerPath, `${JSON.stringify(marker, null, 2)}\n`);
   writeFileSync(join(root, ".devcontainer/Dockerfile"), "drifted\n");
   writeFileSync(join(root, ".devcontainer/allowed-domains.txt"), `${readFileSync(join(root, ".devcontainer/allowed-domains.txt"), "utf8")}evil.example.com\n`);
@@ -122,7 +122,7 @@ test("managed projects preview and atomically repair release-owned files", () =>
   assert.equal(repairedContainer.features["ghcr.io/devcontainers/features/dotnet:1"].version, "8");
 });
 
-test("managed repair rejects inconsistent legacy onboarding runtime evidence", () => {
+test("managed repair rejects inconsistent recovered runtime evidence", () => {
   const root = mkdtempSync(join(tmpdir(), "adw-update-runtime-evidence-"));
   git(root, "init", "-q", "-b", "main");
   git(root, "config", "user.name", "ADW Test");

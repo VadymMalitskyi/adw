@@ -237,7 +237,7 @@ export function validateProjectConfig(data) {
   if (!checkObject(errors, data, "/")) return { valid: false, errors: errors.items };
   checkKnownKeys(errors, data, PROJECT_KEYS, "");
   checkNoSecretLikeKeys(errors, data, "");
-  if (data.adw !== 1) errors.add("/adw", "must equal 1; this release does not read earlier ADW project contracts");
+  if (data.adw !== 1) errors.add("/adw", "must equal 1");
 
   const normalized = {
     adw: 1,

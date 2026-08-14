@@ -23,8 +23,6 @@ ADW 1.0 has two handwritten contracts a human ever reads (`adw.yaml` and `plan.m
 - `changes/<change-id>/runs/<phase-id>.json`: the machine-written phase run record.
 - `SYNC.yaml`: code branch, reviewed-through commit, and update time.
 
-Removed in 1.0 and never regenerated: `spec.md`, `plan.yaml`, `integrations.yaml`, standalone `validation.json`, `external-events/` receipts, `adw/work-items/*.yaml` profiles, and the entire `plugin/schemas/` directory.
-
 ## Phase run record
 
 ```json
@@ -69,4 +67,4 @@ Only the coordinator writes run records, and they are committed locally on the d
 - Captured command output is bounded to the last 4000 characters with secret-like values redacted.
 - Branches and worktrees are unique per group within a phase, and parallel groups must have disjoint write paths.
 - Run records never contain absolute local paths, credentials, unrestricted logs, or raw external content — only stable external ids, canonical URLs, and concise outcomes.
-- Previous project, plan, and approval contract versions are unsupported and are never rewritten automatically.
+- A configuration ADW cannot read is reported with its exact errors, never reinterpreted, translated, or rewritten.

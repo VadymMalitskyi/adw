@@ -540,11 +540,7 @@ try {
   const developmentEnvironment = discoverDevelopmentEnvironment(projectRoot, { runtimeVersions: onboarding.development?.runtimeVersions });
   const understanding = discoverProjectUnderstanding(projectRoot, developmentEnvironment);
   const plannedConfig = files.find(({ path }) => path === "adw.yaml")?.after ?? readFileSync(join(projectRoot, "adw.yaml"), "utf8");
-  const parsedConfig = parseYaml(plannedConfig, "adw.yaml");
-  if (parsedConfig.adw === undefined && parsedConfig.schema !== undefined) {
-    throw new Error("adw.yaml uses the superseded ADW 0.6 project contract; follow docs/migrating-from-0.6.md instead of reinitializing over it");
-  }
-  const projectValidation = validateProjectConfig(parsedConfig);
+  const projectValidation = validateProjectConfig(parseYaml(plannedConfig, "adw.yaml"));
   if (!projectValidation.valid) throw new Error(`adw.yaml is invalid: ${projectValidation.errors.map((item) => `${item.path} ${item.message}`).join("; ")}`);
   const docs = docsPlan(projectRoot);
   const approvedPreviewDigest = previewDigest(projectRoot, files, docs, execution, onboarding, understanding);

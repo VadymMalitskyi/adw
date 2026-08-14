@@ -113,7 +113,7 @@ test("an explicitly selected managed devcontainer generates its full managed fil
   assert.equal(claudeProjectSettings.sandbox.autoAllowBashIfSandboxed, true);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /execution:\n  mode: orchestrated\n  max_parallel: 3\n  isolation: managed-devcontainer\n  web_access: public-pages/);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /components:\n  app:\n    path: "\."\n    validate: \[\]/);
-  assert.doesNotMatch(readFileSync(join(root, "adw.yaml"), "utf8"), /enforcement|permissions:|schema: 5/);
+  assert.doesNotMatch(readFileSync(join(root, "adw.yaml"), "utf8"), /enforcement|permissions:|^schema:/m);
   assert.doesNotMatch(readFileSync(join(root, "adw.yaml"), "utf8"), /<unresolved>|<replace with/);
   assert.deepEqual(filesUnder(root, "worktrees/docs"), [
     "worktrees/docs/.git",

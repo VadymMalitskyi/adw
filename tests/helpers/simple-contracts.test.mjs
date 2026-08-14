@@ -54,9 +54,9 @@ test("the project contract accepts a small handwritten configuration and normali
 test("the project contract rejects only operationally important defects", () => {
   assert.deepEqual(errorPaths(validateProjectConfig(parseYaml("adw: 5\n", "adw.yaml"))).slice(0, 1), ["/adw"]);
 
-  const legacy = validateProjectConfig(parseYaml("schema: 5\ngit:\n  default_branch: main\n", "adw.yaml"));
-  assert.equal(legacy.valid, false);
-  assert.ok(errorPaths(legacy).includes("/schema"), "an 0.6 project must be reported, never silently reinterpreted");
+  const versioned = validateProjectConfig(parseYaml("schema: 99\ngit:\n  default_branch: main\n", "adw.yaml"));
+  assert.equal(versioned.valid, false);
+  assert.ok(errorPaths(versioned).includes("/schema"), "a schema-versioned configuration is reported, never silently reinterpreted");
 
   for (const [line, replacement, expected] of [
     ["  isolation: provider-sandbox\n", "  isolation: nowhere\n", "/execution/isolation"],

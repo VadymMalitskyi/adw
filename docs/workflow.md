@@ -30,7 +30,7 @@ Planning explores code read-only. It never creates a code branch, worktree, or i
 
 `adw:review-plan` runs as the default final step of `adw:plan`, and can be invoked standalone. It is a fresh subagent that receives the plan and the repository but never the planning conversation. It checks whether the design solves the stated problem, names the single load-bearing assumption most likely to cause rework or an incident, considers simpler and rejected alternatives, verifies every anchor against live code, checks phase dependency order, checks path overlap and contract conflicts among groups marked parallel, checks the completeness of worker context and Notes, checks that validation commands are real and sufficient, and checks that every acceptance criterion maps to executable work and validation.
 
-Objective defects are fixed in the plan. Judgment calls become explicit open decisions for the human. A `needs-rework` verdict prevents approval; `revise-recommended` is shown clearly; `ship-ready` may proceed. This semantic review replaces most of the schema ceremony ADW 0.6 used for the same purpose.
+Objective defects are fixed in the plan. Judgment calls become explicit open decisions for the human. A `needs-rework` verdict prevents approval; `revise-recommended` is shown clearly; `ship-ready` may proceed. This semantic review is what keeps a plan honest, rather than a schema.
 
 ## Approve and amend
 
@@ -68,6 +68,6 @@ The implementation worker receives only its bounded group packet plus the releva
 
 ## Maintenance
 
-`adw:status` and `adw:doctor` are read-only. Status reconstructs plan review and approval state, phases, group branches and worktrees, tracker ids, pull requests, validation, blocked reasons, and the next action from durable artifacts and Git alone. Doctor validates the handwritten configuration and only the configured isolation and providers, and recognizes an 0.6 `schema: 5` project by returning the transition guidance without modifying it.
+`adw:status` and `adw:doctor` are read-only. Status reconstructs plan review and approval state, phases, group branches and worktrees, tracker ids, pull requests, validation, blocked reasons, and the next action from durable artifacts and Git alone. Doctor validates the handwritten configuration and only the configured isolation and providers, and reports an unreadable configuration without modifying it.
 
 `adw:sync-docs` reports `SYNC.yaml` drift by default and updates the docs branch only in explicitly authorized fix mode, always with a normal push. `adw:update` repairs only release-owned managed permission and devcontainer files when managed mode is configured; provider plugin managers own plugin code updates.

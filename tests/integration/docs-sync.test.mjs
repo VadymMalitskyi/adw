@@ -281,11 +281,11 @@ test("sync-docs stops on dirty and non-fast-forward worktrees", () => {
   assert.match(run(diverged.root, ["report"], 2).stderr, /behind or diverged/);
 });
 
-test("sync-docs refuses an invalid or legacy project contract", () => {
+test("sync-docs refuses a project contract it cannot read", () => {
   const { root } = fixture();
-  writeFileSync(join(root, "adw.yaml"), PROJECT_CONFIG.replace("adw: 1", "schema: 5"));
+  writeFileSync(join(root, "adw.yaml"), PROJECT_CONFIG.replace("adw: 1", "schema: 99"));
   git(root, "add", "adw.yaml");
-  git(root, "commit", "-q", "-m", "legacy configuration");
+  git(root, "commit", "-q", "-m", "unreadable configuration");
   const failure = run(root, ["report"], 2).stderr;
   assert.match(failure, /adw\.yaml is invalid/);
   assert.match(failure, /\/adw/);

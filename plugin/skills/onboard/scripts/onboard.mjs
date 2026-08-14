@@ -72,12 +72,7 @@ async function parseProjectConfiguration(root) {
   const loaded = await loadProjectConfig({ project_root: root, path: "adw.yaml" });
   const project = loaded.data;
   const validation = loaded.validation;
-  if (!validation.valid) {
-    if (project?.adw === undefined && project?.schema !== undefined) {
-      fail("adw.yaml uses the superseded ADW 0.6 project contract; follow docs/migrating-from-0.6.md before onboarding with this release");
-    }
-    fail(`adw.yaml is invalid: ${validation.errors.map((item) => `${item.path} ${item.message}`).join("; ")}`);
-  }
+  if (!validation.valid) fail(`adw.yaml is invalid: ${validation.errors.map((item) => `${item.path} ${item.message}`).join("; ")}`);
   const { branch, worktree } = project.docs;
   if (branch.startsWith("-") || git(root, ["check-ref-format", `refs/heads/${branch}`], { allowFailure: true }).status !== 0) {
     fail(`docs.branch is not a safe Git branch name: ${branch}`);

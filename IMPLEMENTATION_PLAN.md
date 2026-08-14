@@ -1,6 +1,6 @@
 # ADW 1.0 — Implementation record
 
-This document records the delivered 1.0 architecture and the gates that keep it honest. `PRD.md` states what ADW must do; `ADW_REDESIGN_PLAN.md` is the historical handoff that produced this release.
+This document records the delivered 1.0 architecture and the gates that keep it honest. `PRD.md` states what ADW must do; `docs/architecture.md` explains how the pieces fit together.
 
 ## Repository layout
 
@@ -69,7 +69,7 @@ Foundation `init`, `onboard`, `doctor`, `status`, `discover`; change loop `plan`
 | Managed container invariants and egress policy hold | `tests/integration/managed-devcontainer.test.mjs`, `tests/integration/egress-proxy.test.mjs`, `npm run test:security` |
 | Sync-docs reports read-only, refuses out-of-scope proposals, and never force-pushes | `tests/integration/docs-sync.test.mjs` |
 | Both providers expose the same skills, frontmatter, and safety boundaries | `tests/contracts/cross-provider-contracts.test.mjs` |
-| The helper bundle is self-contained, reproducible, and free of 0.6 machinery | `tests/contracts/helper-bundle-equivalence.test.mjs`, `tests/contracts/helper-reproducibility.test.mjs` |
+| The helper bundle is self-contained, reproducible, and free of schema and policy machinery | `tests/contracts/helper-bundle-equivalence.test.mjs`, `tests/contracts/helper-reproducibility.test.mjs` |
 
 ## Release gates
 

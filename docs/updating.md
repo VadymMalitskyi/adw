@@ -6,11 +6,9 @@ Plugin managers distribute skill, template, and helper changes. Pin private inst
 
 Run `adw:doctor` before resuming active work. Roll back through the provider manager to the previous tag when needed.
 
-ADW 1.0 breaks the 0.6 artifact contract. Do not run 1.0 skills against an in-flight 0.6 change; see [migrating from 0.6](migrating-from-0.6.md) for the two supported paths.
-
 ## Managed-file repair
 
-ADW does not provide a backward-compatibility or migration lifecycle. The installed release's contract validation defines the accepted configuration. Invalid configuration stops update without writes.
+The installed release's contract validation defines the accepted configuration. Invalid configuration stops update without writes; ADW never reinterprets or rewrites it.
 
 Run `adw:update` to validate the project and preview managed-file repair:
 

@@ -9,7 +9,6 @@ import { CODEX_RULES, PERMISSION_PROFILE, managedClaudeSettings, mergeClaudeSett
 
 const skillDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pluginRoot = resolve(skillDirectory, "../..");
-const MIGRATION_GUIDE = "docs/migrating-from-0.6.md";
 const ISOLATIONS = new Set(["provider-sandbox", "project-devcontainer", "managed-devcontainer"]);
 
 function parseArguments(argv) {
@@ -229,25 +228,6 @@ function executionChecks(projectRoot, execution) {
   return checks;
 }
 
-// ADW 1.0 breaks the 0.6 artifact contract on purpose. Doctor names that
-// situation exactly, points at the transition guide, and changes nothing.
-function legacyContractCheck(projectRoot, configPath) {
-  let raw;
-  try { raw = parseYaml(readFileSync(configPath, "utf8"), "adw.yaml"); }
-  catch { return null; }
-  if (raw.adw !== undefined || raw.schema === undefined) return null;
-  return check("project-contract:legacy-0.6", "fail", `adw.yaml declares the ADW 0.6 project contract (schema: ${JSON.stringify(raw.schema)}); this release reads only adw: 1`, {
-    detected_schema: raw.schema,
-    transition_guide: MIGRATION_GUIDE,
-    read_only: true,
-    next_steps: [
-      `Read ${MIGRATION_GUIDE} before changing anything.`,
-      "Finish any active 0.6 change with the pinned 0.6 plugin, or preserve the old docs artifacts as history.",
-      "Then run a reviewed adw:init to write an adw: 1 configuration and re-plan active work as plan.md.",
-    ],
-  });
-}
-
 function manifestChecks() {
   const codexPath = join(pluginRoot, ".codex-plugin/plugin.json");
   const claudePath = join(pluginRoot, ".claude-plugin/plugin.json");
@@ -279,13 +259,6 @@ async function projectChecks(projectRoot) {
   if (!existsSync(configPath)) {
     checks.push(check("project-contract", "fail", "adw.yaml is missing; a project maintainer initializes the project with adw:init"));
   } else {
-    const legacy = legacyContractCheck(projectRoot, configPath);
-    if (legacy) {
-      // A 0.6 project is diagnosed, never rewritten. Stop before every check
-      // that would read fields this release no longer understands.
-      checks.push(legacy);
-      return { checks, isolation };
-    }
     let project;
     let validation;
     try {

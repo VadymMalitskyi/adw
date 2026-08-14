@@ -13,7 +13,7 @@ ADW is a private, dual-provider plugin that gives Codex and Claude Code one opin
 7. **Genericity lives at seams.** Languages, commands, components, providers, naming, isolation, delivery shape, and maximum parallelism are configurable. Core workflow semantics are not.
 8. **External writes remain separate.** Plan approval authorizes local implementation of the plan; it never authorizes pushes, pull requests, tracker mutations, merges, releases, or deployments.
 9. **Security is proportional.** Provider sandboxing is the lightweight default. Existing project devcontainers are preserved. The generated hardened devcontainer is an explicit opt-in.
-10. **No invisible compatibility framework.** 1.0 is a breaking contract. Existing 0.6 projects receive a clear transition guide, not a permanent migration subsystem.
+10. **One accepted contract.** The installed release's contract validation is the whole compatibility story. ADW ships no migration subsystem, no schema-version dispatch, and no alternate interpretation of a configuration it does not recognize.
 
 ## Users and experience
 
@@ -89,7 +89,7 @@ Workflows depend on `work_tracker`, `code_host`, `observability`, and `knowledge
 
 ## Explicit exclusions
 
-ADW does not add a hosted scheduler, daemon, workflow database, or standalone agent service; automatic merging, releasing, deployment, or force-pushing; a generic JSON Schema or migration platform; arbitrary tracker-field templating in core; automatic conflict resolution between group branches; credentials in project configuration or run records; backward execution of active 0.6 plans; or a requirement that every project use Docker, a tracker, or a code host.
+ADW does not add a hosted scheduler, daemon, workflow database, or standalone agent service; automatic merging, releasing, deployment, or force-pushing; a generic JSON Schema or migration platform; arbitrary tracker-field templating in core; automatic conflict resolution between group branches; credentials in project configuration or run records; or a requirement that every project use Docker, a tracker, or a code host.
 
 ## Success criteria
 
@@ -104,4 +104,4 @@ ADW does not add a hosted scheduler, daemon, workflow database, or standalone ag
 9. Group-PR and integration-PR delivery both work without ADW merging anything.
 10. Projects with no integrations and no devcontainer retain the lightweight path.
 11. Codex and Claude Code use the same plan, approval, run records, and workflow semantics.
-12. The complete test suite passes and the 0.6 schema/profile machinery is absent from the released plugin.
+12. The complete test suite passes, and the released plugin contains no JSON Schema engine, policy digest, or work-item payload profile.

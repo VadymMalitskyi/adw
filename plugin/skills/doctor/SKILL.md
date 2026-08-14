@@ -1,6 +1,6 @@
 ---
 name: doctor
-description: Diagnose an ADW installation and initialized project without changing it. Use when checking the project contract, execution isolation, managed or project devcontainers, provider availability, routing blocks, docs freshness, or whether a repository still uses a superseded ADW contract.
+description: Diagnose an ADW installation and initialized project without changing it. Use when checking the project contract, execution isolation, managed or project devcontainers, provider availability, routing blocks, or docs freshness.
 ---
 
 # Diagnose ADW
@@ -22,7 +22,7 @@ Perform every check read-only. Do not repair files, create caches, refresh provi
    - the attached docs worktree and sync-marker freshness;
    - declared components, their paths, and whether each has a validation command;
    - optional origin and project-owned devcontainer state.
-5. **Superseded contract.** If `adw.yaml` declares an earlier ADW contract instead of `adw: 1`, report that as a named failure, print the transition guidance at `docs/migrating-from-0.6.md`, and stop before every check that assumes the current contract. Change nothing. Do not translate, rewrite, or reinterpret the old configuration, and do not offer to.
+5. If `adw.yaml` cannot be read against the `adw: 1` contract, report the exact validation errors and stop before every check that assumes a readable configuration. Change nothing, and never translate, rewrite, or reinterpret the file — offer `adw:init` as a separate reviewed follow-up instead.
 6. Follow the execution contract for the configured isolation, and only that one:
    - `provider-sandbox`: report the real active filesystem, network, and approval policy that a script cannot attest, and say plainly that this is the lightweight boundary.
    - `project-devcontainer`: require its runtime marker and report material deviations from the managed baseline without changing the project-owned container.

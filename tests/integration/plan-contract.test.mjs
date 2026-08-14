@@ -242,7 +242,7 @@ test("plan skill keeps tracker writes separately authorized and reads bounded", 
   assert.doesNotMatch(skill, /Azure DevOps|\bADO\b|Datadog|Notion/i);
 });
 
-test("planning-lifecycle skills resolve bundled resources portably and drop the 0.6 artifact vocabulary", () => {
+test("planning-lifecycle skills resolve bundled resources portably and use one artifact vocabulary", () => {
   for (const name of ["plan", "review-plan", "approve", "amend"]) {
     const skill = readSkill(name);
 
@@ -271,7 +271,7 @@ test("planning-lifecycle skills resolve bundled resources portably and drop the 
       /resolve-project-policy/i,
       /validation\.json/i,
     ]) {
-      assert.doesNotMatch(skill, forbidden, `${name}: retired 0.6 concept ${forbidden}`);
+      assert.doesNotMatch(skill, forbidden, `${name}: unsupported concept ${forbidden}`);
     }
   }
 });
