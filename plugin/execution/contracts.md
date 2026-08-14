@@ -6,18 +6,20 @@ Treat the configured execution environment as an enforceable preflight, not docu
 
 Before any project or external mutation:
 
-1. Invoke `node <plugin-root>/lib/adw-helper.mjs load-artifact-file` with JSON stdin `{ "project_root": "<project-root>", "path": "adw.yaml", "artifact": "project" }`. This command reads the exact file bytes itself, parses YAML 1.2 with duplicate-key rejection, validates the parsed value against the complete schema, and returns the parsed `data` plus its byte digest.
+1. Invoke `node <plugin-root>/lib/adw-helper.mjs load-project` with JSON stdin `{ "project_root": "<project-root>", "path": "adw.yaml" }`. This command reads the exact file bytes itself, parses YAML 1.2 with duplicate-key rejection, validates the parsed value against the handwritten `adw: 1` contract, and returns the parsed `data` plus its byte digest.
 2. Require exit code 0 and `ok: true`. Never ask the model, a regex scraper, or another ad-hoc reader to transcribe security-relevant YAML before validation.
-3. If validation fails, stop. The installed helper's registered artifact contract is authoritative; do not add a separate compatibility or migration interpretation.
-4. Only from the successfully loaded `data`, read `execution.isolation`, `execution.enforcement`, and `execution.permissions.profile`.
+3. If validation fails, stop. The installed helper's contract is authoritative; do not add a separate compatibility or migration interpretation.
+4. Only from the successfully loaded `data`, read `execution.isolation`, `execution.mode`, and `execution.max_parallel`.
 
-Use the same `load-artifact-file` command for every project-relative YAML artifact with its registered artifact name: `plan.yaml` as `plan`, `integrations.yaml` as `integration`, and work-item profiles as `work-item-profile`. Preserve raw bytes separately when an approval digest binds them. `SYNC.yaml` has no artifact schema and may be parsed only by the helper's exported `parseYaml` function in bundled scripts.
+There is no `enforcement` field and no configured permission profile. The `managed-development` permission profile is implied by `isolation: managed-devcontainer`. `SYNC.yaml` may be parsed only by the helper's exported `parseYaml` function in bundled scripts.
 
 - `managed-devcontainer`: require `.devcontainer/adw-managed.json`, the managed files, and `ADW_MANAGED_DEVCONTAINER=1` in the active process.
 - `project-devcontainer`: preserve project-owned files; require `.devcontainer/devcontainer.json` and a runtime marker such as `ADW_PROJECT_DEVCONTAINER=1`.
 - `provider-sandbox`: inspect the active provider's real filesystem, network, and approval policy. Never infer isolation from repository text.
 
-For `required`, stop before reads that execute project code and before every mutation when the runtime cannot be verified. Read-only inspection of configuration needed to diagnose or enter the environment is allowed. For `preferred`, report the weaker boundary and obtain explicit confirmation before continuing with a mutating workflow.
+`provider-sandbox` is the lightweight default and is inherently the weaker boundary. Report it plainly in every readiness and execution preview so nobody mistakes it for a container boundary, and obtain explicit confirmation before a mutating workflow when the configured runtime cannot be verified as the active one.
+
+When the project configures `project-devcontainer` or `managed-devcontainer`, stop before reads that execute project code and before every mutation until that runtime marker is present in the active process. Read-only inspection of configuration needed to diagnose or enter the environment is allowed.
 
 `adw:init` is the only workflow allowed to create a managed container from outside it. It must derive project documentation and the development environment from one reviewed project model, and must resolve setup-blocking requirements before apply. After applying initialization, require only that the user commit the reviewed files, rebuild/reopen the repository, and authenticate inside project-scoped volumes when first used. `adw:doctor` remains an optional readiness diagnostic for the initializing person.
 

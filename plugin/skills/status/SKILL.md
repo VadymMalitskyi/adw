@@ -1,31 +1,27 @@
 ---
 name: status
-description: Reconstruct ADW workflow state from Git-native project and docs-branch artifacts without modifying anything. Use when reviewing branches, active changes, approval validity, validation evidence, docs checkout state, or draft pull requests in a new session.
+description: Reconstruct ADW workflow state from Git and the durable docs-branch artifacts without modifying anything. Use when reviewing branches, active changes, plan approval validity, phase run records, group worktrees, validation evidence, or draft pull requests in a new session.
 ---
 
-# Reconstruct ADW Status
+# Reconstruct ADW status
 
-Keep the entire workflow read-only. Do not fetch, pull, checkout, repair, create caches, or update pull requests.
+Keep the entire workflow read-only. Do not fetch, pull, checkout, repair, create caches, run project commands, or update pull requests.
 
 1. Resolve the installed plugin root from this loaded skill:
    - In Claude Code, expand `${CLAUDE_PLUGIN_ROOT}` and use `${CLAUDE_PLUGIN_ROOT}/skills/status/SKILL.md` as this skill's absolute locator.
    - In Codex, use the absolute `SKILL.md` source locator advertised when this skill loaded.
-   - Remove `/skills/status/SKILL.md` from that locator. Never derive plugin resources from the current working directory.
-   - Resolve `execution/contracts.md`, `integrations/contracts.md`, and selected provider references from that same root.
+   - Remove `/skills/status/SKILL.md` from that locator to obtain `<plugin-root>`. Never derive a plugin resource from the project or current working directory.
+   - Resolve `execution/contracts.md`, `integrations/contracts.md`, and any selected provider reference from that same root.
 2. Resolve the project root with `git rev-parse --show-toplevel`.
-3. Resolve configured `work_tracker`, `code_host`, `observability`, and `knowledge` independently from `native|mcp|cli|api` transports. Honor `disabled`, `optional`, and `required`; when integrations are omitted, do not probe external systems during ordinary status.
-4. Run `node <plugin-root>/skills/status/scripts/snapshot.mjs --project-root <project-root>`.
-5. Summarize configured and active execution isolation, doctor evidence, code branch, commit, dirty paths, docs worktree, docs commit, and docs dirty paths. Status may diagnose a required inactive environment but must not execute project code or mutate anything.
-6. For every `changes/<change-id>/` directory, report artifact presence and the reconstructed state:
-   - classify it as workflow `planned` when planning or approval artifacts exist, `quick` when standalone validation evidence exists without a planning bundle, or `unknown` otherwise;
-   - `draft` when the directory has no recognized intent or evidence, and `invalid` when present validation evidence is invalid;
-   - `planned` when intent exists without a valid active approval;
-   - `approved` only when schema-2 approval matches the exact current `spec.md`, `plan.yaml`, and optional `integrations.yaml` bytes;
-   - `validation-failed` when required evidence failed;
-   - `validated` only when validation evidence is valid and passed, plus an active exact-byte approval for a planned workflow; quick workflows require no approval.
-   Also summarize affected components, effective required validation, tracker policy, and whether current project-policy and profile digests still resolve to the approved snapshot. Report drift without modifying artifacts.
-7. Validate every non-symlink JSON file under `approval-history/` as a superseded approval whose filename matches its digest. Report valid and invalid lifecycle evidence independently from the current approval. Validate each `integrations.yaml` as artifact `integration` and each file under `external-events/` as artifact `external-action`. Summarize bindings, latest verified external actions, failed or uncertain receipts, and pending authorized-state reconciliation without exposing external content or secrets.
-8. For configured, non-disabled capabilities with an already authenticated read-only transport, read current requirement-bearing fields and relevant open draft pull-request state. Join objects by provider, external id, URL, or exact head branch. Report requirement drift separately from operational drift such as state or assignee. Required unavailability is a blocker; optional unavailability remains `not-queried`. Do not authenticate or write configuration.
-9. Call out stale approvals, invalid approval-history entries, requirement-bearing external drift, invalid artifacts, missing worktrees, dirty checkouts, failed validation, failed receipts, and ambiguous multiple active changes. Recommend the next ADW skill without taking that action.
-
-Resolve the bundled helper from the installed plugin root. Treat filesystem artifacts and Git as authoritative over prior conversation history.
+3. Resolve configured `work_tracker`, `code_host`, `observability`, and `knowledge` capabilities independently from `native|mcp|cli|api` transports. Honor `required: true|false` and absence. When no provider is configured, probe no external system during ordinary status.
+4. Run `node <plugin-root>/skills/status/scripts/snapshot.mjs --project-root <project-root>`. It loads `adw.yaml` through the bundled helper, verifies approvals against exact bytes and Git, and validates run records. Treat its JSON as authoritative over prior conversation.
+5. Summarize the configured execution mode, maximum concurrency, and isolation, plus whether that isolation is actually active. `provider-sandbox` is the lightweight default and the weaker boundary; say so plainly. Status may diagnose an inactive required environment but must never execute project code or mutate anything.
+6. For every `changes/<change-id>/` directory, report the reconstructed state:
+   - whether `plan.md` is present and its exact byte digest;
+   - approval state, which is `active` only when `approval.json` verifies against the exact current plan bytes, its `plan_commit` is reachable from the docs branch, that commit holds byte-identical plan bytes, its status is `active`, and its change id and plan path match; report `stale`, `superseded`, `invalid`, or `missing` with the precise reason otherwise;
+   - each superseded record under `approval-history/`, valid only when it is a non-symlink JSON file named for its own bound plan digest;
+   - each `runs/<phase-id>.json` record: phase status, start and completion, whether its plan digest still matches the current plan, and per group the branch, whether that branch exists, the worktree and whether it is attached, the recorded tracker item, draft pull request, implementation commit, review outcome with any unresolved high-severity findings, validation status with each command's actual result, and the group status;
+   - the blocking reasons, such as a stale approval, an unverifiable approval commit, an invalid run record, a failed required check, an unresolved high-severity finding, a missing branch or worktree, a dirty checkout, or several changes competing for the same branch.
+7. Recommend exactly one next ADW skill per change and never take that action: `adw:plan` for a change with no plan, `adw:approve` for an unapproved plan, `adw:amend` for a stale or superseded approval, `adw:execute` for an approved plan whose phases are unfinished, `adw:address-review` for an open draft pull request awaiting feedback, and none when every phase has passed.
+8. For a configured capability with an already authenticated read-only transport, read the open draft pull request state relevant to the recorded branches, joining objects by provider, external id, URL, or exact head branch. A required unavailable capability is a blocker; an optional one stays `not-queried`. Never authenticate, write configuration, or expose external content or secrets.
+9. Derive everything from durable artifacts and Git, never from chat history. Ignore symlinked, hostile, or unparsable entries rather than following them, and report that they were skipped.

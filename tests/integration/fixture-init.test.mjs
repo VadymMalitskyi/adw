@@ -70,22 +70,22 @@ function filesUnder(root, relativeRoot) {
   return paths;
 }
 
-test("empty repository initializes an empty validation set, docs records, and a managed devcontainer", () => {
+test("an explicitly selected managed devcontainer generates its full managed file set", () => {
   const root = copyFixture("empty-repo");
   const headBefore = git(root, "rev-parse", "HEAD");
   const statusBefore = git(root, "status", "--porcelain=v1", "--untracked-files=all");
 
-  const preview = runInit(root, "preview");
+  const preview = runInit(root, "preview", false, 0, "managed-devcontainer");
   assert.equal(preview.mode, "preview");
   assert.equal(preview.docs.action, "create");
-  assert.deepEqual(preview.devcontainer, { isolation: "managed-devcontainer", action: "create", required: true, reopen_required: true, agent_tools: "both", web_access: "public-pages" });
+  assert.deepEqual(preview.execution, { isolation: "managed-devcontainer", action: "create", required: true, reopen_required: true, mode: "orchestrated", max_parallel: 3, agent_tools: "both", web_access: "public-pages" });
   assert.match(preview.setup_guidance.what_adw_is, /plan, review, and safely carry out/i);
   assert.match(preview.setup_guidance.preview_safety, /not changed the repository/i);
   assert.match(preview.setup_guidance.why_information_is_needed, /cannot safely infer/i);
   assert.equal(preview.next_steps.length, 4);
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), statusBefore);
 
-  runInit(root, "apply", true);
+  runInit(root, "apply", true, 0, "managed-devcontainer");
   assert.equal(git(root, "rev-parse", "HEAD"), headBefore, "init must not commit code-branch artifacts");
   assert.deepEqual(filesUnder(root, ".devcontainer"), [
     ".devcontainer/Dockerfile",
@@ -103,17 +103,17 @@ test("empty repository initializes an empty validation set, docs records, and a 
     ".devcontainer/project-requirements.md",
     ".devcontainer/project-setup.sh",
   ]);
-  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /^schema: 5$/m);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /^adw: 1$/m);
   assert.match(readFileSync(join(root, ".adw/preferences.md"), "utf8"), /private ADW profile/);
-  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /permissions:\n    profile: managed-development/);
   assert.equal(existsSync(join(root, ".codex/config.toml")), true);
   assert.equal(existsSync(join(root, ".codex/rules/adw.rules")), true);
   assert.equal(existsSync(join(root, ".claude/settings.json")), true);
   const claudeProjectSettings = JSON.parse(readFileSync(join(root, ".claude/settings.json"), "utf8"));
   assert.deepEqual(claudeProjectSettings.permissions.allow, ["WebSearch"]);
   assert.equal(claudeProjectSettings.sandbox.autoAllowBashIfSandboxed, true);
-  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /execution:\n  isolation: managed-devcontainer\n  enforcement: required\n  web_access: public-pages/);
-  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /validation:\n  default: \[\]/);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /execution:\n  mode: orchestrated\n  max_parallel: 3\n  isolation: managed-devcontainer\n  web_access: public-pages/);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /components:\n  app:\n    path: "\."\n    validate: \[\]/);
+  assert.doesNotMatch(readFileSync(join(root, "adw.yaml"), "utf8"), /enforcement|permissions:|schema: 5/);
   assert.doesNotMatch(readFileSync(join(root, "adw.yaml"), "utf8"), /<unresolved>|<replace with/);
   assert.deepEqual(filesUnder(root, "worktrees/docs"), [
     "worktrees/docs/.git",
@@ -132,13 +132,17 @@ test("empty repository initializes an empty validation set, docs records, and a 
   assert.equal(git(join(root, "worktrees/docs"), "rev-parse", "HEAD"), docsHeadBefore);
 });
 
-test("provider sandbox is an explicit initialization choice and creates no container", () => {
+test("provider sandbox is the lightweight default and creates no container", () => {
   const root = copyFixture("empty-repo");
-  const preview = runInit(root, "preview", false, 0, "provider-sandbox");
-  assert.deepEqual(preview.devcontainer, { isolation: "provider-sandbox", action: "none", required: false, reopen_required: false, agent_tools: "both", web_access: "public-pages" });
-  runInit(root, "apply", true, 0, "provider-sandbox");
+  const preview = runInit(root, "preview");
+  assert.deepEqual(preview.execution, { isolation: "provider-sandbox", action: "none", required: false, reopen_required: false, mode: "orchestrated", max_parallel: 3, agent_tools: "both" });
+  runInit(root, "apply", true);
   assert.equal(existsSync(join(root, ".devcontainer")), false);
-  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /execution:\n  isolation: provider-sandbox\n  enforcement: preferred\n  web_access: public-pages/);
+  assert.equal(existsSync(join(root, ".codex/config.toml")), true, "provider permission policy applies to every isolation mode");
+  const config = readFileSync(join(root, "adw.yaml"), "utf8");
+  assert.match(config, /execution:\n  mode: orchestrated\n  max_parallel: 3\n  isolation: provider-sandbox\n/);
+  assert.doesNotMatch(config, /web_access/, "web access is meaningless outside the managed container");
+  assert.equal(preview.next_steps.length, 3);
 });
 
 test("existing project keeps instructions, documentation, ignores, and devcontainer bytes", () => {
@@ -157,15 +161,15 @@ test("existing project keeps instructions, documentation, ignores, and devcontai
 
   runInit(root, "apply", true);
   const config = readFileSync(join(root, "adw.yaml"), "utf8");
-  assert.match(config, /^schema: 5$/m);
-  assert.match(config, /execution:\n  isolation: project-devcontainer\n  enforcement: required/);
+  assert.match(config, /^adw: 1$/m);
+  assert.match(config, /isolation: project-devcontainer/);
   for (const [command, source] of [
     ["npm run lint", "package.json#scripts.lint"],
     ["npm run test", "package.json#scripts.test"],
     ["npm run build", "package.json#scripts.build"],
     ["make check", "Makefile#target:check"],
   ]) {
-    assert.match(config, new RegExp(`command: ${JSON.stringify(command)}\\n\\s+source: ${JSON.stringify(source)}`));
+    assert.match(config, new RegExp(`command: ${JSON.stringify(command)}\\n(?:\\s+\\S+: .*\\n)*?\\s+source: ${JSON.stringify(source)}`));
   }
   assert.doesNotMatch(config, /deploy|release/);
   assert.deepEqual(readFileSync(join(root, "AGENTS.md")).subarray(0, agentsBefore.length), agentsBefore);
@@ -191,7 +195,7 @@ test("monorepo initialization keeps component commands separate with observable 
 
   runInit(root, "apply", true);
   const config = readFileSync(join(root, "adw.yaml"), "utf8");
-  assert.match(config, /^schema: 5$/m);
+  assert.match(config, /^adw: 1$/m);
   assert.match(config, /path: "apps\/web"/);
   assert.match(config, /path: "services\/api"/);
   for (const source of [
@@ -204,7 +208,7 @@ test("monorepo initialization keeps component commands separate with observable 
   ]) assert.match(config, new RegExp(`source: ${JSON.stringify(source)}`), `missing provenance ${source}`);
   assert.doesNotMatch(config, /publish|deploy/);
   for (const [path, bytes] of sourcesBefore) assert.deepEqual(readFileSync(join(root, path)), bytes, `${path} changed`);
-  assert.equal(existsSync(join(root, ".devcontainer/devcontainer.json")), true);
+  assert.equal(existsSync(join(root, ".devcontainer")), false, "the lightweight default generates no container");
 
   const configBefore = readFileSync(join(root, "adw.yaml"));
   runInit(root, "apply", true);
@@ -223,8 +227,8 @@ test("init discovers common libs wildcard workspaces and never records the curre
 
   runInit(root, "apply", true);
   const config = readFileSync(join(root, "adw.yaml"), "utf8");
-  assert.match(config, /default_branch: "main"/);
-  assert.doesNotMatch(config, /default_branch: "feature\/setup"/);
+  assert.match(config, /base_branch: "main"/);
+  assert.doesNotMatch(config, /base_branch: "feature\/setup"/);
   assert.match(config, /core:\n    path: "libs\/core"/);
   assert.match(config, /command: "npm run test"[\s\S]*source: "libs\/core\/package\.json#scripts\.test"/);
 });

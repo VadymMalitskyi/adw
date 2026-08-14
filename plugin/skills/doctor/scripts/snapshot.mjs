@@ -4,16 +4,20 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadArtifactFile, parseYaml } from "../../../lib/adw-helper.mjs";
+import { loadProjectConfig, parseYaml } from "../../../lib/adw-helper.mjs";
 import { CODEX_RULES, PERMISSION_PROFILE, managedClaudeSettings, mergeClaudeSettings, mergeCodexConfig, permissionAgentsFromProject } from "../../../execution/managed-development.mjs";
 
 const skillDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pluginRoot = resolve(skillDirectory, "../..");
+const MIGRATION_GUIDE = "docs/migrating-from-0.6.md";
+const ISOLATIONS = new Set(["provider-sandbox", "project-devcontainer", "managed-devcontainer"]);
 
 function parseArguments(argv) {
   const index = argv.indexOf("--project-root");
   if (index === -1 || !argv[index + 1]) throw new Error("--project-root is required");
-  return { projectRoot: realpathSync(argv[index + 1]) };
+  // `--details` is a diagnosis switch. Ordinary contributors see only concise
+  // pass/fail summaries; marker digests and container internals stay hidden.
+  return { projectRoot: realpathSync(argv[index + 1]), details: argv.includes("--details") };
 }
 
 function git(projectRoot, args) {
@@ -24,7 +28,13 @@ function git(projectRoot, args) {
   });
 }
 
+let detailedOutput = false;
+
+// A passing check reports only its concise summary. Marker digests, container
+// wiring, and other internals are attached to failures, or to every check when
+// `--details` is requested for diagnosis.
 function check(id, status, summary, details = {}) {
+  if (status === "pass" && !detailedOutput) return { id, status, summary };
   return { id, status, summary, ...details };
 }
 
@@ -40,12 +50,16 @@ function regularFile(path, projectRoot) {
   return rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel);
 }
 
-function permissionChecks(projectRoot, execution) {
+// The permission profile is not a configured field. It is a release-owned
+// constant that `adw:init` writes for every isolation mode, and the managed
+// devcontainer additionally enforces it from root-owned container policy.
+function permissionChecks(projectRoot) {
   const checks = [];
-  const profile = execution.permissions?.profile;
-  checks.push(check("permissions:configuration", profile === PERMISSION_PROFILE ? "pass" : "fail", profile === PERMISSION_PROFILE ? `${PERMISSION_PROFILE} is configured` : `missing or unsupported permission profile: ${profile ?? "missing"}`));
-  if (profile !== PERMISSION_PROFILE) return checks;
   const agentTools = permissionAgentsFromProject(projectRoot, { existsSync, readFileSync, lstatSync, realpathSync, relative, isAbsolute, join });
+  if (agentTools === "unknown") {
+    return [check("permissions:configuration", "fail", `no ${PERMISSION_PROFILE} permission files were found; run adw:update to restore them`)];
+  }
+  checks.push(check("permissions:configuration", "pass", `${PERMISSION_PROFILE} permission files are in effect`, { agent_tools: agentTools }));
   if (agentTools === "codex" || agentTools === "both") {
     const configPath = join(projectRoot, ".codex/config.toml");
     const rulesPath = join(projectRoot, ".codex/rules/adw.rules");
@@ -61,62 +75,6 @@ function permissionChecks(projectRoot, execution) {
       valid = valid && JSON.stringify(current) === JSON.stringify(JSON.parse(mergeClaudeSettings(JSON.stringify(current))));
     } catch { valid = false; }
     checks.push(check("permissions:claude", valid ? "pass" : "fail", valid ? "Claude Code auto-allows sandboxed Bash and uses ADW semantic hooks plus ask/deny backstops" : "Claude Code permission configuration is missing, unsafe, or drifted"));
-  }
-  return checks;
-}
-
-async function workTrackerPolicyChecks(projectRoot, project) {
-  const policy = project.workflows?.work_tracker;
-  if (!policy) return [];
-  const tracker = project.integrations?.work_tracker;
-  const validPolicy = ["optional", "required"].includes(policy.binding)
-    && ["link-only", "create-or-link"].includes(policy.ensure)
-    && policy.stage === "plan"
-    && ["one-per-change", "one-parent-plus-plan-tasks"].includes(policy.cardinality)
-    && tracker && tracker.requirement !== "disabled"
-    && (policy.binding !== "required" || tracker.requirement === "required")
-    && (policy.ensure !== "create-or-link" || tracker.access === "read-write");
-  const checks = [check("workflow:work_tracker", validPolicy ? "pass" : "fail", validPolicy ? `${policy.binding} ${policy.ensure} policy at ${policy.stage}` : "invalid work-tracker policy or disabled capability", policy)];
-  if (!policy.profile) {
-    if (policy.ensure === "create-or-link") checks.push(check("workflow:work_tracker:profile", "fail", "create-or-link policy requires a profile"));
-    return checks;
-  }
-  const target = resolve(projectRoot, policy.profile);
-  const rel = relative(projectRoot, target);
-  if (isAbsolute(policy.profile) || rel === ".." || rel.startsWith("../") || !existsSync(target) || lstatSync(target).isSymbolicLink()) {
-    checks.push(check("workflow:work_tracker:profile", "fail", "profile must be an existing non-symlink project-relative file", { profile: policy.profile }));
-    return checks;
-  }
-  let profile;
-  let profileValidation = { valid: false };
-  let profileDigest;
-  try {
-    const loaded = await loadArtifactFile({ project_root: projectRoot, path: policy.profile, artifact: "work-item-profile" });
-    profile = loaded.data;
-    profileValidation = loaded.validation;
-    profileDigest = loaded.digest;
-  } catch {}
-  const valid = profileValidation.valid && profile.provider === tracker?.provider;
-  checks.push(check("workflow:work_tracker:profile", valid ? "pass" : "fail", valid ? "profile schema and provider match" : "profile schema or provider is invalid", { profile: policy.profile, provider: profile?.provider, sha256: profileDigest }));
-  if (policy.cardinality === "one-parent-plus-plan-tasks" && !policy.child_profile) checks.push(check("workflow:work_tracker:child-profile", "fail", "one-parent-plus-plan-tasks requires a child profile"));
-  if (policy.child_profile) {
-    const childTarget = resolve(projectRoot, policy.child_profile);
-    const childRel = relative(projectRoot, childTarget);
-    if (isAbsolute(policy.child_profile) || childRel === ".." || childRel.startsWith("../") || !existsSync(childTarget) || lstatSync(childTarget).isSymbolicLink()) {
-      checks.push(check("workflow:work_tracker:child-profile", "fail", "child profile must be an existing non-symlink project-relative file", { profile: policy.child_profile }));
-    } else {
-      let child;
-      let childValidation = { valid: false };
-      let childDigest;
-      try {
-        const loaded = await loadArtifactFile({ project_root: projectRoot, path: policy.child_profile, artifact: "work-item-profile" });
-        child = loaded.data;
-        childValidation = loaded.validation;
-        childDigest = loaded.digest;
-      } catch {}
-      const childValid = childValidation.valid && child.provider === tracker?.provider;
-      checks.push(check("workflow:work_tracker:child-profile", childValid ? "pass" : "fail", childValid ? "child profile schema and provider match" : "child profile schema or provider is invalid", { profile: policy.child_profile, provider: child?.provider, sha256: childDigest }));
-    }
   }
   return checks;
 }
@@ -243,27 +201,51 @@ function managedDevcontainerChecks(projectRoot, execution) {
   checks.push(check("execution:permission-files", permissionFilesMatch ? "pass" : "fail", permissionFilesMatch ? "managed Codex and Claude permission payloads match their recorded digests" : "managed Codex or Claude permission payloads, installs, or recorded digests are invalid"));
   checks.push(check("execution:unsafe-mounts", unsafeMount ? "fail" : "pass", unsafeMount ? "a host credential directory or Docker socket is mounted into the container" : "no broad host credential or Docker socket mount was detected"));
   const active = process.env.ADW_MANAGED_DEVCONTAINER === "1";
-  checks.push(check("execution:runtime", active ? "pass" : execution.enforcement === "required" ? "fail" : "warn", active ? "running inside the ADW managed devcontainer" : "ADW managed devcontainer is not the active execution environment"));
+  checks.push(check("execution:runtime", active ? "pass" : "fail", active ? "running inside the ADW managed devcontainer" : "ADW managed devcontainer is not the active execution environment"));
   return checks;
 }
 
+// Only the configured isolation is inspected. A provider-sandbox project is
+// never probed for Docker, container markers, or firewall wiring.
 function executionChecks(projectRoot, execution) {
-  if (!execution.isolation || !["required", "preferred"].includes(execution.enforcement)) {
-    return [check("execution:configuration", "fail", "execution isolation or enforcement is missing")];
+  const isolation = execution.isolation;
+  if (!ISOLATIONS.has(isolation)) {
+    return [check("execution:configuration", "fail", `unsupported execution isolation: ${isolation ?? "missing"}`)];
   }
-  const checks = [check("execution:configuration", "pass", `${execution.isolation} is ${execution.enforcement}`, execution), ...permissionChecks(projectRoot, execution)];
-  if (execution.isolation === "managed-devcontainer") return [...checks, ...managedDevcontainerChecks(projectRoot, execution)];
-  if (execution.isolation === "project-devcontainer") {
+  const mode = execution.mode ?? "sequential";
+  const checks = [
+    check("execution:configuration", "pass", `${isolation} isolation, ${mode} execution up to ${execution.max_parallel ?? 1} group(s) in parallel`, { isolation, mode, max_parallel: execution.max_parallel ?? 1 }),
+    ...permissionChecks(projectRoot),
+  ];
+  if (isolation === "managed-devcontainer") return [...checks, ...managedDevcontainerChecks(projectRoot, execution)];
+  if (isolation === "project-devcontainer") {
     const configured = existsSync(join(projectRoot, ".devcontainer/devcontainer.json"));
     const active = process.env.ADW_PROJECT_DEVCONTAINER === "1" || process.env.REMOTE_CONTAINERS === "true" || process.env.CODESPACES === "true";
     checks.push(check("execution:project-files", configured ? "pass" : "fail", configured ? "project-owned devcontainer is present" : "project-devcontainer is selected but devcontainer.json is missing"));
-    checks.push(check("execution:runtime", active ? "pass" : execution.enforcement === "required" ? "fail" : "warn", active ? "project devcontainer runtime marker is active" : "project devcontainer runtime could not be verified; set ADW_PROJECT_DEVCONTAINER=1 inside it"));
-  } else if (execution.isolation === "provider-sandbox") {
-    checks.push(check("execution:runtime", "info", "provider sandbox strength must be verified by the active agent; this script cannot attest host policy"));
+    checks.push(check("execution:runtime", active ? "pass" : "fail", active ? "project devcontainer runtime marker is active" : "project devcontainer runtime could not be verified; set ADW_PROJECT_DEVCONTAINER=1 inside it"));
   } else {
-    checks.push(check("execution:configuration", "fail", `unknown execution isolation: ${execution.isolation}`));
+    checks.push(check("execution:runtime", "info", "provider sandbox strength must be verified by the active agent; this script cannot attest host policy"));
   }
   return checks;
+}
+
+// ADW 1.0 breaks the 0.6 artifact contract on purpose. Doctor names that
+// situation exactly, points at the transition guide, and changes nothing.
+function legacyContractCheck(projectRoot, configPath) {
+  let raw;
+  try { raw = parseYaml(readFileSync(configPath, "utf8"), "adw.yaml"); }
+  catch { return null; }
+  if (raw.adw !== undefined || raw.schema === undefined) return null;
+  return check("project-contract:legacy-0.6", "fail", `adw.yaml declares the ADW 0.6 project contract (schema: ${JSON.stringify(raw.schema)}); this release reads only adw: 1`, {
+    detected_schema: raw.schema,
+    transition_guide: MIGRATION_GUIDE,
+    read_only: true,
+    next_steps: [
+      `Read ${MIGRATION_GUIDE} before changing anything.`,
+      "Finish any active 0.6 change with the pinned 0.6 plugin, or preserve the old docs artifacts as history.",
+      "Then run a reviewed adw:init to write an adw: 1 configuration and re-plan active work as plan.md.",
+    ],
+  });
 }
 
 function manifestChecks() {
@@ -285,48 +267,59 @@ function manifestChecks() {
 
 async function projectChecks(projectRoot) {
   const checks = [];
+  let docsWorktree = "worktrees/docs";
+  let isolation = null;
   const top = git(projectRoot, ["rev-parse", "--show-toplevel"]);
   if (top.status !== 0 || realpathSync(top.stdout.trim()) !== projectRoot) {
-    return [check("repository", "fail", "project root is not the Git top level")];
+    return { checks: [check("repository", "fail", "project root is not the Git top level")], isolation };
   }
   checks.push(check("repository", "pass", "project root is a Git repository"));
 
   const configPath = join(projectRoot, "adw.yaml");
   if (!existsSync(configPath)) {
-    checks.push(check("project-schema", "fail", "adw.yaml is missing"));
+    checks.push(check("project-contract", "fail", "adw.yaml is missing; a project maintainer initializes the project with adw:init"));
   } else {
+    const legacy = legacyContractCheck(projectRoot, configPath);
+    if (legacy) {
+      // A 0.6 project is diagnosed, never rewritten. Stop before every check
+      // that would read fields this release no longer understands.
+      checks.push(legacy);
+      return { checks, isolation };
+    }
     let project;
-    let schemaValidation;
+    let validation;
     try {
-      const loaded = await loadArtifactFile({ project_root: projectRoot, path: "adw.yaml", artifact: "project" });
+      const loaded = await loadProjectConfig({ project_root: projectRoot, path: "adw.yaml" });
       project = loaded.data;
-      schemaValidation = loaded.validation;
+      validation = loaded.validation;
     }
     catch (error) {
-      checks.push(check("project-schema", "fail", error.message));
-      return checks;
+      checks.push(check("project-contract", "fail", error.message));
+      return { checks, isolation };
     }
-    checks.push(check("project-schema", schemaValidation.valid ? "pass" : "fail", schemaValidation.valid ? "project schema 5 is valid" : "adw.yaml failed project schema validation", schemaValidation.valid ? {} : { errors: schemaValidation.errors }));
-    checks.push(check("docs-config", project.documentation?.worktree === "worktrees/docs" && project.documentation?.branch === "docs" ? "pass" : "fail", project.documentation?.worktree === "worktrees/docs" && project.documentation?.branch === "docs" ? "docs branch and worktree use the fixed ADW locations" : "unexpected docs branch or worktree"));
+    checks.push(check("project-contract", validation.valid ? "pass" : "fail", validation.valid ? "adw.yaml matches the adw: 1 project contract" : "adw.yaml does not match the adw: 1 project contract", validation.valid ? {} : { errors: validation.errors }));
+    if (!validation.valid) return { checks, isolation };
+    docsWorktree = project.docs.worktree;
+    isolation = project.execution.isolation;
+    const docsFixed = project.docs?.worktree === "worktrees/docs" && project.docs?.branch === "docs";
+    checks.push(check("docs-config", docsFixed ? "pass" : "warn", docsFixed ? "docs branch and worktree use the default ADW locations" : `docs branch ${project.docs?.branch} is checked out at ${project.docs?.worktree}`));
     const componentPaths = Object.values(project.components ?? {}).map(({ path }) => path).filter(Boolean);
     const uniqueComponents = new Set(componentPaths).size === componentPaths.length;
     checks.push(check("components", uniqueComponents ? "pass" : "fail", uniqueComponents ? `${componentPaths.length} component path(s) have unambiguous ownership` : "duplicate component paths create ambiguous ownership"));
     checks.push(...executionChecks(projectRoot, project.execution ?? {}));
-    const integrations = Object.entries(project.integrations ?? {}).map(([capability, declaration]) => ({ capability, ...declaration }));
-    if (integrations.length === 0) {
-      checks.push(check("integrations", "info", "no integrations configured; lightweight workflow is enabled"));
+    const providers = Object.entries(project.providers ?? {});
+    if (providers.length === 0) {
+      checks.push(check("providers", "info", "no providers configured; the lightweight workflow is enabled"));
     } else {
-      for (const integration of integrations) {
-        const configured = integration.provider && ["disabled", "optional", "required"].includes(integration.requirement);
+      for (const [capability, declaration] of providers) {
         checks.push(check(
-          `integration:${integration.capability}`,
-          configured ? "info" : "fail",
-          configured ? `${integration.provider} is declared as ${integration.requirement}; runtime capability probe is required` : "provider or requirement is missing",
-          { ...integration, transport: integration.transport ?? "auto", availability: "not-probed" },
+          `provider:${capability}`,
+          "info",
+          `${declaration.provider} is ${declaration.required ? "required" : "optional"}; runtime capability probe is required`,
+          { capability, provider: declaration.provider, required: declaration.required === true, transport: declaration.transport ?? "auto", availability: "not-probed" },
         ));
       }
     }
-    checks.push(...await workTrackerPolicyChecks(projectRoot, project));
   }
 
   const selectedAgents = permissionAgentsFromProject(projectRoot, { existsSync, readFileSync, lstatSync, realpathSync, relative, isAbsolute, join });
@@ -346,10 +339,10 @@ async function projectChecks(projectRoot) {
   }
 
   const worktrees = git(projectRoot, ["worktree", "list", "--porcelain"]);
-  const hasDocs = worktrees.status === 0 && /(?:^|\n)branch refs\/heads\/docs(?:\n|$)/.test(worktrees.stdout) && worktrees.stdout.split(/\n\n+/).some((record) => record.includes(`worktree ${join(projectRoot, "worktrees/docs")}`) && record.includes("branch refs/heads/docs"));
-  checks.push(check("docs-worktree", hasDocs ? "pass" : "fail", hasDocs ? "docs branch is attached at worktrees/docs" : "docs branch is not attached at worktrees/docs"));
+  const hasDocs = worktrees.status === 0 && /(?:^|\n)branch refs\/heads\/docs(?:\n|$)/.test(worktrees.stdout) && worktrees.stdout.split(/\n\n+/).some((record) => record.includes(`worktree ${join(projectRoot, docsWorktree)}`) && record.includes("branch refs/heads/docs"));
+  checks.push(check("docs-worktree", hasDocs ? "pass" : "fail", hasDocs ? `docs branch is attached at ${docsWorktree}` : `docs branch is not attached at ${docsWorktree}`));
 
-  const syncPath = join(projectRoot, "worktrees/docs/SYNC.yaml");
+  const syncPath = join(projectRoot, docsWorktree, "SYNC.yaml");
   if (!existsSync(syncPath)) {
     checks.push(check("context-freshness", "warn", "SYNC.yaml is unavailable"));
   } else {
@@ -372,15 +365,18 @@ async function projectChecks(projectRoot) {
   }
 
   const origin = git(projectRoot, ["remote", "get-url", "origin"]);
-  checks.push(check("integration:origin", origin.status === 0 ? "pass" : "info", origin.status === 0 ? "origin remote is configured" : "origin remote is optional and not configured"));
-  return checks;
+  checks.push(check("code-host:origin", origin.status === 0 ? "pass" : "info", origin.status === 0 ? "origin remote is configured" : "origin remote is optional and not configured"));
+  return { checks, isolation };
 }
 
 try {
-  const { projectRoot } = parseArguments(process.argv.slice(2));
-  const checks = [manifestChecks(), ...await projectChecks(projectRoot)];
+  const args = parseArguments(process.argv.slice(2));
+  const projectRoot = args.projectRoot;
+  detailedOutput = args.details;
+  const project = await projectChecks(projectRoot);
+  const checks = [manifestChecks(), ...project.checks];
   const failed = checks.some(({ status }) => status === "fail");
-  process.stdout.write(`${JSON.stringify({ ok: !failed, read_only: true, project_root: projectRoot, checks }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ ok: !failed, read_only: true, project_root: projectRoot, isolation: project.isolation, checks }, null, 2)}\n`);
   process.exitCode = failed ? 1 : 0;
 } catch (error) {
   process.stdout.write(`${JSON.stringify({ ok: false, read_only: true, error: error.message })}\n`);

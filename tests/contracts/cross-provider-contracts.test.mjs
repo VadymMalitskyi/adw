@@ -21,12 +21,13 @@ const REQUIRED_SKILLS = [
   "onboard",
   "plan",
   "quick",
+  "review-plan",
   "status",
   "sync-docs",
   "update",
 ];
 
-const DEFERRED_SKILLS = ["add-mcp", "brainstorm", "review-plan"];
+const DEFERRED_SKILLS = ["add-mcp", "brainstorm"];
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 function read(relativePath) {
@@ -151,7 +152,8 @@ test("skills preserve the required behavior and safety boundaries", () => {
       ["ignored local state", /\.adw\//],
       ["the root docs worktree", /\/worktrees\//],
       ["both provider routing files", /AGENTS\.md[\s\S]*CLAUDE\.md|CLAUDE\.md[\s\S]*AGENTS\.md/],
-      ["managed devcontainer default", /default to `managed-devcontainer`|managed `\.devcontainer\/` only when absent/i],
+      ["provider sandbox default", /default[^\n]{0,80}`?provider-sandbox`?|`?provider-sandbox`?[^\n]{0,80}default/i],
+      ["managed devcontainer opt-in", /managed-devcontainer[^\n]{0,120}(?:opt.in|explicit)|(?:opt.in|explicit)[^\n]{0,120}managed-devcontainer/i],
       ["project devcontainer preservation", /project-devcontainer[\s\S]*preserve|preserve every byte of an existing project devcontainer/i],
     ],
     onboard: [
@@ -172,11 +174,13 @@ test("skills preserve the required behavior and safety boundaries", () => {
     ],
     doctor: [
       ["read-only operation", /read-only|without changing/i],
-      ["schema compatibility", /schema/i],
+      ["project contract check", /`adw: 1`|project contract/i],
+      ["superseded contract diagnosis without mutation", /superseded[\s\S]{0,400}(?:Change nothing|do not translate|without changing)/i],
+      ["transition guidance", /migrating-from-0\.6/],
       ["routing checks", /routing/i],
       ["context freshness", /fresh/i],
       ["execution isolation checks", /execution|isolation/i],
-      ["optional integration checks", /optional integration/i],
+      ["optional capability checks", /optional capabilit/i],
     ],
     status: [
       ["read-only operation", /read-only|without modifying/i],
@@ -193,32 +197,42 @@ test("skills preserve the required behavior and safety boundaries", () => {
     ],
     plan: [
       ["docs worktree", /docs worktree/i],
-      ["specification artifact", /spec\.md/],
-      ["plan artifact", /plan\.yaml/],
-      ["sequential tasks", /sequential|ordered task/i],
+      ["the one canonical plan artifact", /plan\.md/],
+      ["phases and groups", /phase[\s\S]*group/i],
+      ["independent plan review", /adw:review-plan|review-plan/i],
       ["stop before implementation", /stop before[^\n]*implementation|never implement/i],
+    ],
+    "review-plan": [
+      ["cold read without the planning conversation", /cold(?:ly)?[^\n]{0,40}read|(?:do not|never|without)[^\n]{0,80}(?:conversation|prior chat|chat history)/i],
+      ["anchor verification against live code", /anchor[\s\S]{0,200}live code|live code[\s\S]{0,200}anchor/i],
+      ["parallel overlap detection", /overlap/i],
+      ["three verdicts", /ship-ready[\s\S]*revise-recommended[\s\S]*needs-rework/],
+      ["blocking verdict", /needs-rework[^\n]{0,120}(?:block|prevent)/i],
+      ["read-only when standalone", /never modif|read-only/i],
     ],
     approve: [
       ["explicit human confirmation", /explicit human (?:confirmation|approval|decision)|human[^\n]{0,80}(?:confirm|explicitly approve)/i],
-      ["digest binding", /digest/i],
-      ["docs commit binding", /docs.commit|docs commit/i],
-      ["artifact validation", /validat[^\n]*(?:spec|plan|artifact)/i],
+      ["exact plan bytes", /exact[^\n]{0,60}(?:bytes|plan\.md)|plan bytes/i],
+      ["docs commit binding", /plan_commit|docs commit/i],
+      ["no human digest transcription", /(?:never|not)[^\n]{0,80}(?:copy|transcribe|read)[^\n]{0,40}digest|digest[^\n]{0,60}(?:never|not)[^\n]{0,40}(?:shown|copied)/i],
     ],
     execute: [
-      ["approved commit verification", /verify[^\n]*(?:approv|docs commit)|approval digest/i],
-      ["sequential execution", /sequential/i],
-      ["whole-change review", /whole change|complete feature-branch diff|whole-diff/i],
-      ["validation evidence", /validation\.json|validation evidence/i],
-      ["required-check failure gate", /required[^\n]{0,100}(?:fail|nonzero)[^\n]{0,100}(?:stop|prevent|keeps status `failed`)/i],
-      ["authorized draft PR only", /draft[^\n]*pull request[^\n]*(?:explicit|authoriz)|explicit[^\n]*(?:authoriz)[^\n]*draft/i],
+      ["approval verification", /verify[^\n]*(?:approv|plan bytes)|verify-approval/i],
+      ["phase and group coordination", /phase[\s\S]*group/i],
+      ["independent review of every group", /independent review/i],
+      ["run-record evidence", /run record|runs\/</i],
+      ["required-check failure gate", /required[^\n]{0,120}(?:fail|nonzero)[^\n]{0,120}(?:stop|prevent|failed)/i],
+      ["draft pull requests only", /draft[^\n]*pull request/i],
+      ["delivery needs separate fresh authorization", /(?:separate|fresh)[^\n]{0,120}authoriz/i],
+      ["never merges", /never[^\n]{0,80}merge/i],
     ],
     investigate: [
       ["read-only operation", /read-only/i],
       ["bounded observability queries", /scope every query[\s\S]*service and environment/i],
       ["deployed revision verification", /never assume the local checkout is the deployed version/i],
       ["severity and confidence", /severity[\s\S]*confidence/i],
-      ["structured incident report", /incident-report\.v1\.schema\.json/i],
-      ["artifact validation", /adw-helper\.mjs validate/i],
+      ["concise report sections", /severity and confidence[\s\S]{0,400}unknowns/i],
+      ["handwritten machine-output consistency rules", /unique[\s\S]{0,120}evidence id|evidence id[\s\S]{0,120}unique/i],
       ["no remediation mutation", /do not execute them/i],
       ["safe implementation routing", /adw:quick[\s\S]*adw:plan/i],
     ],
@@ -239,7 +253,7 @@ test("skills preserve the required behavior and safety boundaries", () => {
       ["in-scope corrections", /in-scope correction/i],
       ["amendment routing", /adw:amend/i],
       ["retesting", /retest|regression test/i],
-      ["validation evidence", /validation evidence|validation\.json/i],
+      ["validation evidence", /validation evidence|run record/i],
     ],
     "sync-docs": [
       ["SYNC marker comparison", /SYNC\.yaml/],
@@ -253,30 +267,56 @@ test("skills preserve the required behavior and safety boundaries", () => {
   for (const [name, requirements] of Object.entries(contracts)) assertContract(name, requirements);
 });
 
-test("generic skills do not depend on legacy enterprise or orchestration workflows", () => {
+test("skills do not depend on removed 0.6 artifacts, schemas, or digest ceremony", () => {
+  // 1.0 restored phases, parallel groups, and isolated group worktrees, so
+  // those words are expected. What must be absent is the superseded artifact
+  // and digest machinery, and any provider name leaking into a workflow.
+  const removed = [
+    /\bspec\.md\b/,
+    /\bplan\.yaml\b/,
+    /\bintegrations\.yaml\b/,
+    /\bvalidation\.json\b/,
+    /\bexternal-events\b/,
+    /\bwork-item-profile\b/,
+    /\beffective_policy\b/,
+    /\bproject_policy_digest\b/,
+    /\bprofile_digest\b/,
+    /\brequirements_digest\b/,
+    /\bauthorization_digest\b/,
+    /\bvalidateArtifact\b/,
+    /\bload-artifact-file\b/,
+    /\bresolve-project-policy\b/,
+    /\bdigest-bundle\b/,
+    /\bapproval bundle\b/i,
+    /\bplugin\/schemas\b/,
+    /\bschema:?\s*5\b/,
+  ];
   for (const name of REQUIRED_SKILLS) {
     const source = skillText(name);
-    assert.doesNotMatch(source, /Azure DevOps|\bADO\b|Notion/i, `${name}: provider-neutral skills cannot depend on legacy enterprise systems`);
+    assert.doesNotMatch(source, /Azure DevOps|\bADO\b|Notion|Datadog/i, `${name}: provider-neutral skills cannot embed one provider`);
+    for (const pattern of removed) {
+      // `adw:doctor` is the one workflow allowed to name the 0.6 contract, and
+      // only to report the transition guide without touching the project.
+      if (name === "doctor" && pattern.source.includes("schema")) continue;
+      assert.doesNotMatch(source, pattern, `${name}: removed 0.6 machinery is still referenced: ${pattern.source}`);
+    }
+  }
+});
 
-    for (const pattern of [
-      /\btickets?\b/gi,
-      /implementation[ -]worktrees?/gi,
-      /\bphases?\b/gi,
-      /parallel (?:implementation )?(?:agents?|assignments?|branches?)/gi,
-      /multiple (?:implementation )?agents?/gi,
-      /integration branches?/gi,
-    ]) {
-      for (const match of source.matchAll(pattern)) {
-        const sentenceStart = Math.max(source.lastIndexOf(".", match.index - 1), source.lastIndexOf("\n", match.index - 1));
-        const sentenceEndCandidates = [source.indexOf(".", match.index), source.indexOf("\n", match.index)].filter((index) => index >= 0);
-        const sentenceEnd = sentenceEndCandidates.length > 0 ? Math.min(...sentenceEndCandidates) : source.length;
-        const sentence = source.slice(sentenceStart + 1, sentenceEnd + 1);
-        assert.match(
-          sentence,
-          /\b(?:never|not|no|without|remove|refuse|reject|unnecessary|do not|must not)\b/i,
-          `${name}: legacy concept is an assumption rather than an explicit prohibition: ${sentence.trim()}`,
-        );
-      }
+test("every skill preserves the invariants ADW never trades away", () => {
+  for (const name of REQUIRED_SKILLS) {
+    const source = skillText(name);
+    // ADW may describe merging and force-pushing only to forbid them, or to
+    // name a precondition a human satisfies outside ADW.
+    for (const match of source.matchAll(/\b(?:merges?|merging|merged|force-pushe?s?|force push(?:es)?|force-pushing)\b/gi)) {
+      const start = Math.max(source.lastIndexOf(".", match.index - 1), source.lastIndexOf("\n", match.index - 1));
+      const ends = [source.indexOf(".", match.index), source.indexOf("\n", match.index)].filter((index) => index >= 0);
+      const sentence = source.slice(start + 1, ends.length > 0 ? Math.min(...ends) + 1 : source.length);
+      assert.match(
+        sentence,
+        /\b(?:never|not|no|without|refuse|reject|prohibit|do not|must not|stop|wait|waits|human|before|after|until|merged|escalate)\b/i,
+        `${name}: a merge or force-push mention must be a prohibition or a human-owned precondition: ${sentence.trim()}`,
+      );
     }
   }
 });
@@ -313,18 +353,25 @@ test("integration-aware workflow language depends on capabilities and shared con
     assert.match(contract, new RegExp(`\\b${capability}\\b`), `shared contract omits ${capability}`);
   }
 
-  const workflows = ["plan", "approve", "execute", "amend", "doctor", "discover", "status", "quick", "address-review", "investigate", "onboard"];
+  for (const operation of ["read", "create", "update", "link"]) {
+    assert.match(contract, new RegExp(`\`${operation}\``), `shared contract omits the ${operation} operation`);
+  }
+  assert.match(contract, /idempotency/i, "shared contract omits idempotency");
+  assert.match(contract, /fresh[^\n]{0,60}authoriz/i, "shared contract omits fresh authorization");
+  assert.doesNotMatch(contract, /authorization_digest|external-events|requirements_digest/, "1.0 drops authorization digests and receipt artifacts");
+
+  const workflows = ["plan", "review-plan", "approve", "execute", "amend", "doctor", "discover", "status", "quick", "address-review", "investigate", "onboard"];
   for (const name of workflows) {
     const source = skillText(name);
     assert.match(source, /integrations\/contracts\.md/, `${name}: missing shared integration contract`);
     assert.doesNotMatch(source, /Azure DevOps|\bADO\b|Datadog|Notion/i, `${name}: workflow must select providers from configuration, not embed one provider`);
   }
 
-  for (const name of ["plan", "approve", "execute"]) {
-    const source = skillText(name);
-    assert.match(source, /integrations\.yaml/, `${name}: missing durable integration binding artifact`);
-  }
-  assert.match(skillText("plan"), /disabled[\s\S]*optional[\s\S]*required/, "plan: missing integration requirement handling");
+  // Tracker and delivery intent live in the plan; results live in run records.
+  assert.match(skillText("plan"), /tracker intent|tracker[\s\S]{0,80}intent/i, "plan: missing tracker intent");
+  assert.match(skillText("plan"), /delivery/i, "plan: missing delivery intent");
+  assert.match(skillText("execute"), /run record|runs\//i, "execute: provider outcomes belong in run records");
+  assert.match(skillText("plan"), /required:? (?:false|true)|required/i, "plan: missing provider availability handling");
 });
 
 test("every skill resolves bundled resources portably for Claude Code and Codex", () => {

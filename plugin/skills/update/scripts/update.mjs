@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   applyAtomicWrites,
-  loadArtifactFile,
+  loadProjectConfig,
 } from "../../../lib/adw-helper.mjs";
 import { permissionProjectFiles } from "../../../execution/managed-development.mjs";
 import { managedDevelopmentFiles } from "../../init/scripts/development-environment.mjs";
@@ -90,7 +90,11 @@ function existingIntegrationDomains(root) {
 }
 
 function existingRuntimeVersions(root, project) {
-  if (project.development?.runtime_versions) return project.development.runtime_versions;
+  // The project contract always normalizes `development.runtime_versions` to an
+  // object, so an empty one means the project declared none and the managed
+  // container's own evidence is the only remaining source.
+  const declared = project.development?.runtime_versions ?? {};
+  if (Object.keys(declared).length > 0) return declared;
   const text = readOptional(root, ".devcontainer/project-requirements.json");
   if (text === null) throw new Error("managed-devcontainer repair requires development.runtime_versions in adw.yaml or existing .devcontainer/project-requirements.json evidence");
   let requirements;
@@ -120,6 +124,9 @@ function existingRuntimeVersions(root, project) {
   return Object.fromEntries(Object.entries(recovered).sort(([left], [right]) => left.localeCompare(right)));
 }
 
+// Only the managed devcontainer is release-owned. Every other isolation mode
+// leaves project configuration, containers, plans, approvals, and run history
+// untouched, so the repair set is empty.
 function repairPlan(root, project) {
   if (project.execution.isolation !== "managed-devcontainer") return [];
   const agentTools = managedAgentTools(root);
@@ -156,7 +163,7 @@ function previewDigest(root, version, files) {
 try {
   const args = parseArguments(process.argv.slice(2));
   const root = projectRoot(args.projectRoot);
-  const loadedProject = await loadArtifactFile({ project_root: root, path: "adw.yaml", artifact: "project" });
+  const loadedProject = await loadProjectConfig({ project_root: root, path: "adw.yaml" });
   const project = loadedProject.data;
   const version = pluginVersion();
   const projectValidation = loadedProject.validation;

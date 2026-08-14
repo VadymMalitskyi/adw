@@ -38,35 +38,25 @@ test("onboarding choices are preview-bound and split shared from personal config
   writeFileSync(answersPath, `${JSON.stringify({
     schema: 1,
     web_access: "hosted-only",
-    execution: { isolation: "managed-devcontainer" },
+    execution: { isolation: "managed-devcontainer", mode: "orchestrated", max_parallel: 2 },
     development: { runtime_versions: { dotnet: "8" } },
-    documentation: { delivery: "direct-push" },
-    integrations: {
+    providers: {
       work_tracker: {
         provider: "github",
-        requirement: "required",
+        required: true,
         access: "read-only",
         settings: { owner: "example", repository: "project" },
         network_domains: ["tracker.example.com"],
       },
       code_host: {
         provider: "github",
-        requirement: "required",
+        required: true,
         access: "read-write",
-      },
-    },
-    workflows: {
-      work_tracker: {
-        binding: "required",
-        ensure: "link-only",
-        stage: "plan",
-        cardinality: "one-per-change",
       },
     },
     conventions: {
       branches: "Use one ADW branch per change.",
       pull_requests: "Create one draft pull request after validation.",
-      work_items: "Link one issue per change before approval.",
     },
     local: {
       identity: {
@@ -74,7 +64,7 @@ test("onboarding choices are preview-bound and split shared from personal config
         email: personalValues[1],
         work_tracker_account: personalValues[2],
       },
-      integrations: { work_tracker: { transport: "cli", account: personalValues[2] } },
+      providers: { work_tracker: { transport: "cli", account: personalValues[2] } },
     },
   }, null, 2)}\n`);
   git(root, "add", "onboarding.json");
@@ -86,10 +76,10 @@ test("onboarding choices are preview-bound and split shared from personal config
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), statusBefore, "preview must not write");
   const preview = JSON.parse(previewResult.stdout);
   assert.match(preview.preview_digest, /^[0-9a-f]{64}$/);
-  assert.equal(preview.devcontainer.agent_tools, "both");
-  assert.equal(preview.onboarding.documentation_delivery, "direct-push");
+  assert.equal(preview.execution.agent_tools, "both");
+  assert.deepEqual(preview.onboarding.execution, { mode: "orchestrated", max_parallel: 2, isolation: "managed-devcontainer" });
   assert.equal(preview.onboarding.web_access, "hosted-only");
-  assert.equal(preview.devcontainer.web_access, "hosted-only");
+  assert.equal(preview.execution.web_access, "hosted-only");
   assert.deepEqual(preview.onboarding.runtime_versions, { dotnet: "8" });
   assert.deepEqual(preview.onboarding.local.identity_fields, ["display_name", "email", "work_tracker_account"]);
   for (const value of personalValues) assert.doesNotMatch(JSON.stringify(preview), new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
@@ -107,10 +97,10 @@ test("onboarding choices are preview-bound and split shared from personal config
   assert.equal(existsSync(join(root, ".codex/rules/adw.rules")), true);
   assert.equal(existsSync(join(root, ".claude/settings.json")), true);
   const projectConfig = readFileSync(join(root, "adw.yaml"), "utf8");
-  assert.match(projectConfig, /delivery: direct-push/);
+  assert.match(projectConfig, /execution:\n  mode: orchestrated\n  max_parallel: 2\n  isolation: managed-devcontainer/);
   assert.match(projectConfig, /development:\n  runtime_versions:\n    dotnet: "8"/);
-  assert.match(projectConfig, /work_tracker:[\s\S]*provider: "github"[\s\S]*requirement: "required"/);
-  assert.match(projectConfig, /ensure: "link-only"/);
+  assert.match(projectConfig, /work_tracker:[\s\S]*provider: "github"[\s\S]*required: true/);
+  assert.doesNotMatch(projectConfig, /ensure:|cardinality:|profile:|workflows:/);
   const routing = readFileSync(join(root, "AGENTS.md"), "utf8");
   assert.match(routing, /Project workflow conventions/);
   assert.match(routing, /Create one draft pull request after validation/);

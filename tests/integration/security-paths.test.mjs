@@ -35,20 +35,43 @@ function repository(prefix = "adw-security-path-") {
   return root;
 }
 
-function planWith(overrides = {}) {
+function runWith(overrides = {}, groupOverrides = {}) {
   return {
-    schema: 2,
+    version: 1,
     change_id: "safe-change",
-    summary: "Exercise the boundary",
-    effective_policy: { components: ["app"], unowned_paths: [], project_policy_digest: "a".repeat(64), required_validation: [] },
-    tasks: [{
-      id: 1,
-      title: "Bounded task",
-      description: "Touch one project file",
-      affected_paths: ["src/index.js"],
-      validation: [{ command: "npm test", cwd: ".", timeout_ms: 1000, required: true, source: "package.json#scripts.test" }],
-    }],
-    documentation: { impact: "none", files: [] },
+    phase_id: "foundations",
+    plan_digest: "a".repeat(64),
+    base_branch: "main",
+    base_commit: "b".repeat(40),
+    started_at: "2026-08-13T12:00:00Z",
+    completed_at: null,
+    status: "running",
+    groups: {
+      contracts: {
+        branch: "adw/safe-change/contracts",
+        worktree: "worktrees/safe-change/contracts",
+        tasks: ["IMPLEMENT the bounded task"],
+        affected_paths: ["src/index.js"],
+        tracker: null,
+        pull_request: null,
+        implementation_commit: null,
+        review: { status: "pending", high_findings: [] },
+        validation: { status: "pending", commands: [] },
+        status: "prepared",
+        ...groupOverrides,
+      },
+    },
+    ...overrides,
+  };
+}
+
+function projectWith(overrides = {}) {
+  return {
+    adw: 1,
+    git: { base_branch: "main" },
+    docs: { branch: "docs", worktree: "worktrees/docs" },
+    execution: { mode: "sequential", max_parallel: 1, isolation: "provider-sandbox" },
+    components: { app: { path: ".", validate: ["npm test"] } },
     ...overrides,
   };
 }
@@ -98,19 +121,49 @@ test("run-validation rejects hostile cwd values before launching an explicit com
   }
 });
 
-test("artifact schemas reject malicious change IDs and path strings", async () => {
+test("handwritten run-record validation rejects malicious identifiers and path strings", async () => {
   for (const change_id of ["../escape", "/absolute", ".hidden", "bad/name", "bad;touch-pwned", "bad space", "bad\nline"]) {
-    const result = await dispatch("validate", { artifact: "plan", data: planWith({ change_id }) });
-    assert.equal(result.exitCode, EXIT.SCHEMA_INVALID, change_id);
+    const result = await dispatch("validate-run-record", { record: runWith({ change_id }) });
+    assert.equal(result.exitCode, EXIT.CONTRACT_INVALID, change_id);
     assert.ok(result.body.errors.some(({ path }) => path === "/change_id"), change_id);
   }
-  for (const affectedPath of ["../escape.js", "src/../../escape.js", "/absolute.js"]) {
-    const data = planWith();
-    data.tasks[0].affected_paths = [affectedPath];
-    const result = await dispatch("validate", { artifact: "plan", data });
-    assert.equal(result.exitCode, EXIT.SCHEMA_INVALID, affectedPath);
-    assert.ok(result.body.errors.some(({ path }) => path === "/tasks/0/affected_paths/0"), affectedPath);
+  for (const phase_id of ["../escape", "/absolute", "bad/name", "bad;touch", "bad space"]) {
+    const result = await dispatch("validate-run-record", { record: runWith({ phase_id }) });
+    assert.equal(result.exitCode, EXIT.CONTRACT_INVALID, phase_id);
+    assert.ok(result.body.errors.some(({ path }) => path === "/phase_id"), phase_id);
   }
+  for (const affectedPath of ["../escape.js", "src/../../escape.js", "/absolute.js", "C:\\windows\\escape.js"]) {
+    const result = await dispatch("validate-run-record", { record: runWith({}, { affected_paths: [affectedPath] }) });
+    assert.equal(result.exitCode, EXIT.CONTRACT_INVALID, affectedPath);
+    assert.ok(result.body.errors.some(({ path }) => path === "/groups/contracts/affected_paths/0"), affectedPath);
+  }
+  for (const worktree of ["../outside", "/tmp/anywhere", "worktrees/../../escape"]) {
+    const result = await dispatch("validate-run-record", { record: runWith({}, { worktree }) });
+    assert.equal(result.exitCode, EXIT.CONTRACT_INVALID, worktree);
+    assert.ok(result.body.errors.some(({ path }) => path === "/groups/contracts/worktree"), worktree);
+  }
+  for (const branch of ["-dashed", "has space", "ends.lock", "bad..range", "refs~1"]) {
+    const result = await dispatch("validate-run-record", { record: runWith({}, { branch }) });
+    assert.equal(result.exitCode, EXIT.CONTRACT_INVALID, branch);
+    assert.ok(result.body.errors.some(({ path }) => path === "/groups/contracts/branch"), branch);
+  }
+});
+
+test("handwritten project validation rejects malicious paths, branches, and credential-like settings", async () => {
+  for (const [overrides, expected] of [
+    [{ docs: { branch: "docs", worktree: "../outside" } }, "/docs/worktree"],
+    [{ docs: { branch: "docs", worktree: "." } }, "/docs/worktree"],
+    [{ git: { base_branch: "bad branch" } }, "/git/base_branch"],
+    [{ components: { app: { path: "../escape" } } }, "/components/app/path"],
+    [{ components: { app: { path: "/absolute" } } }, "/components/app/path"],
+    [{ components: { "Bad Id": { path: "." } } }, "/components/Bad Id"],
+    [{ providers: { code_host: { provider: "github", settings: { api_token: "leak" } } } }, "/providers/code_host/settings/api_token"],
+  ]) {
+    const result = await dispatch("validate-project", { data: projectWith(overrides) });
+    assert.equal(result.exitCode, EXIT.CONTRACT_INVALID, JSON.stringify(overrides));
+    assert.ok(result.body.errors.some(({ path }) => path === expected), `${JSON.stringify(overrides)} -> ${JSON.stringify(result.body.errors)}`);
+  }
+  assert.equal((await dispatch("validate-project", { data: projectWith() })).exitCode, EXIT.OK);
 });
 
 test("failed and interrupted-looking atomic writes leave prior bytes usable and rerunnable", async () => {

@@ -1,6 +1,39 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 - 2026-08-13
+
+Breaking. ADW 1.0 replaces the 0.6 schema-heavy sequential workflow with a simpler, generic, phased one. It restores capability that 0.6 removed and removes ceremony that 0.6 accumulated. See `docs/migrating-from-0.6.md`; there is no migration subsystem.
+
+### Restored capability
+
+- Restore dependency-ordered phases and parallel groups within a phase, each in its own branch and worktree, bounded by `execution.max_parallel`.
+- Add `plugin/execution/orchestrator.mjs`: deterministic preview, prepare, inspect, and cleanup guidance for group branches and worktrees, with a durable marker commit per group so an interrupted phase resumes from Git alone.
+- Rewrite `adw:execute` as a coordinator that runs implementation, independent review, high-severity fixes, truthful validation, and a scope check per group through the active provider's native subagents. Workers never commit, push, or touch external systems.
+- Restore `adw:review-plan` as a cold red-team pass and make it the default final step of `adw:plan`. It verifies anchors against live code, phase dependency order, parallel path overlap, worker-context completeness, real validation commands, and acceptance-criterion coverage, and emits `ship-ready`, `revise-recommended`, or `needs-rework`.
+- Support two delivery strategies per plan — one draft pull request per group, or one draft integration pull request — and merge neither.
+- Add machine-written phase run records at `changes/<change-id>/runs/<phase-id>.json` with truthful, monotonic state transitions.
+
+### Removed ceremony
+
+- Replace `spec.md` plus `plan.yaml` with one canonical `changes/<change-id>/plan.md` in a mandatory PART 1 / PART 2 shape.
+- Replace project schema 5 with a small handwritten `adw: 1` contract that a human can read without documentation.
+- Replace the ordered approval bundle with an exact-byte plan approval that never asks a human to copy a digest.
+- Remove `integrations.yaml`, standalone `validation.json`, `external-events/` receipts, `adw/work-items/*.yaml` payload profiles, effective-policy snapshots, and every policy, profile, requirement, and authorization digest.
+- Delete `plugin/schemas/` and the entire JSON Schema engine; drop AJV as a dependency and shrink the generated helper bundle by roughly half.
+- Reduce the helper to the operations that genuinely need conventional code, and reduce its CLI to fourteen commands.
+- Replace work-item payload profiles with adapter defaults, four provider-neutral operations (`read`, `create`, `update`, `link`), and four tracker intents.
+
+### Changed defaults
+
+- `provider-sandbox` is now the default isolation mode for a repository without a devcontainer. An existing project devcontainer is still preserved and selected automatically. The hardened managed devcontainer remains fully supported and tested, but is an explicit opt-in rather than a prerequisite for adopting ADW.
+- `adw:onboard` no longer requires Docker for a provider-sandbox project.
+- `adw:doctor` recognizes an 0.6 `schema: 5` project and returns exact transition guidance without modifying it.
+
+### Preserved
+
+Exact-byte human approval and drift detection, real exit-code/signal/timeout/bounded-output validation evidence, timeout process-tree termination, path confinement and symlink defenses, atomic managed-file writes, explicit authorization before every external write, Git-native resume and status reconstruction, provider-neutral capability boundaries, and every managed-container security control and its tests.
+
+## 0.6.1 - unreleased
 
 - Harden the Claude managed permission hook against quoted, escaped, dynamic, aliased, nested, and Git-global-option command obfuscation; unknown Git verbs now require approval.
 - Preserve initialization-selected runtime versions through managed-container repair, safely recovering consistent legacy evidence and failing closed on ambiguity.

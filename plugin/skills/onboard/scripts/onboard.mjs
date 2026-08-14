@@ -18,7 +18,7 @@ import {
   localConfigurationSummary,
   renderLocalConfiguration,
 } from "../../../lib/local-configuration.mjs";
-import { loadArtifactFile } from "../../../lib/adw-helper.mjs";
+import { loadProjectConfig } from "../../../lib/adw-helper.mjs";
 
 const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -69,23 +69,27 @@ async function parseProjectConfiguration(root) {
   const entry = lstatSync(path);
   if (entry.isSymbolicLink() || !entry.isFile()) fail("adw.yaml must be a non-symlink file");
   const source = readFileSync(path, "utf8");
-  const loaded = await loadArtifactFile({ project_root: root, path: "adw.yaml", artifact: "project" });
+  const loaded = await loadProjectConfig({ project_root: root, path: "adw.yaml" });
   const project = loaded.data;
   const validation = loaded.validation;
-  if (!validation.valid) fail(`adw.yaml is invalid: ${validation.errors.map((item) => `${item.path} ${item.message}`).join("; ")}`);
-  const { mode, branch, worktree } = project.documentation;
-  if (mode !== "branch") fail("documentation.mode must equal branch");
+  if (!validation.valid) {
+    if (project?.adw === undefined && project?.schema !== undefined) {
+      fail("adw.yaml uses the superseded ADW 0.6 project contract; follow docs/migrating-from-0.6.md before onboarding with this release");
+    }
+    fail(`adw.yaml is invalid: ${validation.errors.map((item) => `${item.path} ${item.message}`).join("; ")}`);
+  }
+  const { branch, worktree } = project.docs;
   if (branch.startsWith("-") || git(root, ["check-ref-format", `refs/heads/${branch}`], { allowFailure: true }).status !== 0) {
-    fail(`documentation.branch is not a safe Git branch name: ${branch}`);
+    fail(`docs.branch is not a safe Git branch name: ${branch}`);
   }
   const worktreeTarget = resolve(root, worktree);
   const relativeTarget = relative(root, worktreeTarget);
   if (!/^worktrees\/[^/]+$/.test(worktree) || relativeTarget === ".." || relativeTarget.startsWith(`..${sep}`)) {
-    fail("documentation.worktree must be a confined root-relative worktrees/<name> path");
+    fail("docs.worktree must be a confined root-relative worktrees/<name> path");
   }
 
-  const integrations = Object.fromEntries(CAPABILITIES.filter((capability) => project.integrations?.[capability]).map((capability) => [capability, project.integrations[capability]]));
-  return { source, documentation: { branch, worktree, target: worktreeTarget }, integrations };
+  const providers = Object.fromEntries(CAPABILITIES.filter((capability) => project.providers?.[capability]).map((capability) => [capability, project.providers[capability]]));
+  return { source, execution: project.execution, docs: { branch, worktree, target: worktreeTarget }, providers };
 }
 
 function worktreeRecords(root) {
@@ -102,36 +106,36 @@ function worktreeRecords(root) {
   }).filter((record) => record.worktree);
 }
 
-function docsPlan(root, documentation) {
-  const tracked = git(root, ["ls-files", "--error-unmatch", "--", documentation.worktree], { allowFailure: true });
-  if (tracked.status === 0) fail(`${documentation.worktree} is tracked by Git; repair project initialization before attaching a local worktree`);
-  const ignored = git(root, ["check-ignore", "--no-index", "--quiet", documentation.worktree], { allowFailure: true });
-  if (ignored.status !== 0) fail(`${documentation.worktree} is not ignored by Git; repair project initialization before attaching a local worktree`);
+function docsPlan(root, docs) {
+  const tracked = git(root, ["ls-files", "--error-unmatch", "--", docs.worktree], { allowFailure: true });
+  if (tracked.status === 0) fail(`${docs.worktree} is tracked by Git; repair project initialization before attaching a local worktree`);
+  const ignored = git(root, ["check-ignore", "--no-index", "--quiet", docs.worktree], { allowFailure: true });
+  if (ignored.status !== 0) fail(`${docs.worktree} is not ignored by Git; repair project initialization before attaching a local worktree`);
   const records = worktreeRecords(root);
-  const branchRef = `refs/heads/${documentation.branch}`;
-  const atTarget = records.find((record) => resolve(record.worktree) === documentation.target);
+  const branchRef = `refs/heads/${docs.branch}`;
+  const atTarget = records.find((record) => resolve(record.worktree) === docs.target);
   if (atTarget) {
-    if (atTarget.branch !== branchRef) fail(`${documentation.worktree} is registered for ${atTarget.branch ?? "a detached commit"}, not ${documentation.branch}`);
-    return { action: "reuse", path: documentation.worktree, branch: documentation.branch };
+    if (atTarget.branch !== branchRef) fail(`${docs.worktree} is registered for ${atTarget.branch ?? "a detached commit"}, not ${docs.branch}`);
+    return { action: "reuse", path: docs.worktree, branch: docs.branch };
   }
   const elsewhere = records.find((record) => record.branch === branchRef);
-  if (elsewhere) fail(`${documentation.branch} is already checked out at ${elsewhere.worktree}; move it to ${documentation.worktree} manually`);
-  if (existsSync(documentation.target)) fail(`${documentation.worktree} exists but is not the configured Git worktree; move it aside before onboarding`);
+  if (elsewhere) fail(`${docs.branch} is already checked out at ${elsewhere.worktree}; move it to ${docs.worktree} manually`);
+  if (existsSync(docs.target)) fail(`${docs.worktree} exists but is not the configured Git worktree; move it aside before onboarding`);
 
   const local = git(root, ["show-ref", "--verify", "--quiet", branchRef], { allowFailure: true });
-  if (local.status === 0) return { action: "attach-local", path: documentation.worktree, branch: documentation.branch };
+  if (local.status === 0) return { action: "attach-local", path: docs.worktree, branch: docs.branch };
 
   const remoteNames = git(root, ["remote"]).stdout.split("\n").filter(Boolean);
-  const configuredRefs = new Set(remoteNames.map((remote) => `refs/remotes/${remote}/${documentation.branch}`));
+  const configuredRefs = new Set(remoteNames.map((remote) => `refs/remotes/${remote}/${docs.branch}`));
   const remoteRefs = git(root, ["for-each-ref", "--format=%(refname)", "refs/remotes"]).stdout
     .split("\n")
     .filter((ref) => configuredRefs.has(ref));
-  if (remoteRefs.length === 0) fail(`no local or remote-tracking ${documentation.branch} branch is available; fetch the configured docs branch and rerun adw:onboard`);
-  if (remoteRefs.length > 1) fail(`multiple remotes expose ${documentation.branch}; choose and create the local tracking branch before onboarding`);
+  if (remoteRefs.length === 0) fail(`no local or remote-tracking ${docs.branch} branch is available; fetch the configured docs branch and rerun adw:onboard`);
+  if (remoteRefs.length > 1) fail(`multiple remotes expose ${docs.branch}; choose and create the local tracking branch before onboarding`);
   return {
     action: "attach-remote",
-    path: documentation.worktree,
-    branch: documentation.branch,
+    path: docs.worktree,
+    branch: docs.branch,
     start_point: remoteRefs[0],
   };
 }
@@ -201,20 +205,30 @@ try {
   const args = parseArguments(process.argv.slice(2));
   const root = projectRoot(args.projectRoot);
   const project = await parseProjectConfiguration(root);
-  const local = loadLocalAnswers(args.answersPath, project.integrations, pluginRoot);
-  const docs = docsPlan(root, project.documentation);
+  const local = loadLocalAnswers(args.answersPath, project.providers, pluginRoot);
+  const docs = docsPlan(root, project.docs);
   const localFile = localPlan(root, local);
   const digest = previewDigest(root, project, docs, localFile);
+  const isolation = project.execution.isolation;
   const summary = {
     ok: true,
     mode: args.action,
     preview_digest: digest,
     project_root: root,
+    // A provider-sandbox project needs no container, so onboarding never
+    // requires Docker, a rebuild, or a reopened workspace to finish.
+    execution: {
+      isolation,
+      mode: project.execution.mode,
+      container_required: isolation !== "provider-sandbox",
+    },
     docs,
     local: { path: localFile.relativePath, action: localFile.action, ...localConfigurationSummary(local) },
-    integrations: Object.fromEntries(Object.entries(project.integrations).map(([capability, value]) => [capability, {
+    providers: Object.fromEntries(Object.entries(project.providers).map(([capability, value]) => [capability, {
       provider: value.provider,
-      requirement: value.requirement,
+      required: value.required === true,
+      transport: value.transport ?? "auto",
+      availability: "not-probed",
     }])),
   };
   if (args.action === "preview") {

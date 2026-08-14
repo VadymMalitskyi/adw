@@ -12,6 +12,7 @@ function read(relativePath) {
 }
 
 const bundle = read("plugin/lib/adw-helper.mjs");
+const source = read("src/helpers/runtime-bundle.mjs");
 
 test("the generated helper is self-contained and runnable on Node 20", () => {
   assert.match(bundle, /^#!\/usr\/bin\/env node\n/);
@@ -22,13 +23,12 @@ test("the generated helper is self-contained and runnable on Node 20", () => {
 });
 
 test("the canonical source and generated bundle expose every operational helper", () => {
-  const source = read("src/helpers/runtime-bundle.mjs");
   const operations = [
-    "computeApprovalBundle", "createApprovalBundle", "verifyApprovalBundle", "computeAuthorizationDigest",
-    "computeRequirementsDigest", "recordExternalAction", "resolveProjectPath", "applyAtomicWrites",
-    "computePolicyDigest", "resolveProjectPolicy", "resolveValidationSet",
-    "validateWorkItemPayload", "validateJsonSchema", "validateArtifact", "parseYaml", "loadArtifactFile",
-    "recordValidation", "runValidationCommand",
+    "computeDigest", "parseYaml", "validateProjectConfig", "loadProjectConfig",
+    "createPlanApproval", "validatePlanApproval", "verifyPlanApproval", "supersedePlanApproval",
+    "createRunRecord", "validateRunRecord", "updateRunRecord",
+    "recordValidation", "resolveValidationCommands", "runValidationCommand",
+    "resolveProjectPath", "resolveProjectDirectory", "applyAtomicWrites",
   ];
   for (const name of operations) {
     assert.match(source, new RegExp(`export (?:async )?function ${name}\\b`), `canonical source: missing ${name}`);
@@ -37,14 +37,35 @@ test("the canonical source and generated bundle expose every operational helper"
 });
 
 test("security- and evidence-critical canonical invariants are represented in the bundle", () => {
-  const source = read("src/helpers/runtime-bundle.mjs");
   const markers = [
-    "ADW-APPROVAL-BUNDLE-V2\\0", "ADW-EXTERNAL-AUTHORIZATION-V1\\0", "timingSafeEqual", "expected_content",
-    ".adw-atomic-write-", "ADW-EFFECTIVE-POLICY-V1\\0", "project_policy_digest",
-    "ADW-INTEGRATION-REQUIREMENTS-V1\\0", "[REDACTED]", "timed_out", "readback_digest",
+    "ADW-PLAN-APPROVAL-V1\\0", "timingSafeEqual", "expected_content", ".adw-atomic-write-",
+    "[REDACTED]", "timed_out", "cannot be passed while a required command failed",
+    "cannot move backwards", "credential-like",
   ];
   for (const marker of markers) {
     assert.ok(source.includes(marker), `canonical source: missing invariant ${JSON.stringify(marker)}`);
     assert.ok(bundle.includes(marker), `generated bundle: missing invariant ${JSON.stringify(marker)}`);
   }
+});
+
+test("the 0.6 schema, policy, and receipt framework is absent from the released helper", () => {
+  const removed = [
+    "ARTIFACT_SCHEMAS", "validateJsonSchema", "validateArtifact", "loadArtifactFile",
+    "computeApprovalBundle", "createApprovalBundle", "verifyApprovalBundle",
+    "resolveProjectPolicy", "computePolicyDigest", "project_policy_digest",
+    "computeRequirementsDigest", "computeAuthorizationDigest", "recordExternalAction",
+    "validateWorkItemPayload", "readback_digest", "Ajv",
+  ];
+  for (const name of removed) {
+    assert.ok(!source.includes(name), `canonical source still contains removed machinery: ${name}`);
+    assert.ok(!bundle.includes(name), `generated bundle still contains removed machinery: ${name}`);
+  }
+  assert.ok(!/"ajv"/.test(read("package.json")), "AJV must not remain a dependency");
+});
+
+test("the helper bundle stays small enough to ship inside the plugin", () => {
+  // The only bundled dependency left is the YAML 1.2 parser, which is required
+  // for duplicate-key-safe project-configuration parsing.
+  assert.ok(bundle.length < 600_000, `helper bundle grew to ${bundle.length} bytes`);
+  assert.match(bundle, /yaml/i, "the YAML parser is the one intentional bundled dependency");
 });

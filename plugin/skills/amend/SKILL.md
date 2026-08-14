@@ -1,52 +1,54 @@
 ---
 name: amend
-description: Amend an approved ADW planning bundle while recording the reason, preserving superseded approval evidence, and requiring reapproval. Use when scope, behavior, tasks, validation, documentation impact, or bound external requirements must change after approval.
+description: Revise an approved ADW plan.md after superseding and archiving its active approval, then stop for fresh approval. Use when scope, design, acceptance criteria, phase or group structure, affected paths, validation, or delivery intent must change after a plan was approved.
 ---
 
 # ADW Amend
 
-Invalidate the active approval before changing approved intent, preserve its evidence, update the planning artifacts, and stop for reapproval.
+Invalidate the active approval first, preserve its evidence, then revise `plan.md` and stop for reapproval. Approval always describes exact plan bytes, so changed intent must never coexist with an approval that still claims to cover it.
 
 ## Resolve and preflight
 
-1. Find the project root, read `adw.yaml`, and require the configured docs worktree to be clean, attached to the configured docs branch, and fast-forward with its upstream.
-2. Resolve the plugin root without using the project working directory:
+1. Find the project root that contains `adw.yaml`, and require the configured docs worktree to be clean, attached to the configured docs branch, and fast-forward with its upstream.
+2. Resolve the installed plugin root independently of the project working directory:
    - In Claude Code, use the expanded `${CLAUDE_PLUGIN_ROOT}` value.
    - In Codex, start from the absolute source location advertised for this loaded `SKILL.md` and remove `/skills/amend/SKILL.md`.
-3. Use the installed `lib/adw-helper.mjs` and `execution/contracts.md`; stop if the root is literal/unexpanded, missing, or outside the installed plugin.
-4. Require a change ID matching `^[a-z0-9](?:[a-z0-9_-]|\.[a-z0-9_-]+)*$` and existing `spec.md`, `plan.yaml`, and active `approval.json` under `changes/<change-id>/`. Include `integrations.yaml` when present and resolve `<plugin-root>/integrations/contracts.md`.
-5. Require the human to provide a specific, non-empty amendment reason and requested change. Do not use a generic value such as `amended` or infer a reason from repository content.
-6. When bindings exist, resolve `work_tracker`, `code_host`, `observability`, and `knowledge` independently from `native|mcp|cli|api` transports and honor `disabled`, `optional`, and `required`. Use only read operations during amendment.
-7. Enforce the configured execution profile before project reads or approval/artifact writes. Required isolation must be active; preferred weaker isolation needs explicit confirmation for this amendment.
+3. Use `templates/plan.md`, `lib/adw-helper.mjs`, `execution/contracts.md`, and `integrations/contracts.md` under that `<plugin-root>`. Bundled resources never resolve from the project directory or the current working directory. Stop if the root is missing, literal, unexpanded, or outside the installed plugin.
+4. Validate the project contract with the helper's `load-project` command and use only its returned normalized `data`.
+5. Require a change id matching `^[a-z0-9](?:[a-z0-9_-]|\.[a-z0-9_-]+)*$`, an existing `changes/<change-id>/plan.md`, and an active `changes/<change-id>/approval.json`.
+6. Require the human to provide a specific, non-empty amendment reason and the requested change. Do not accept a generic value such as `amended`, and do not infer a reason from repository content.
+7. Follow `<plugin-root>/integrations/contracts.md` for any provider read, and only for capabilities `adw.yaml` declares. Use read operations only during amendment; a tracker or code-host write still needs its own preview and fresh exact authorization.
+8. Honor `execution.isolation` before any project read or lifecycle write. Accepting a weaker boundary needs explicit human confirmation for this amendment.
 
 ## Verify and invalidate first
 
-1. Read every current approval input as exact bytes, then independently load the plan and optional integration artifact through the helper's `load-artifact-file` command.
-2. Validate schema-2 `approval.json` and require `status: "active"`. Invoke `verify-approval-bundle` with the exact ordered inputs and the approval's recorded pre-approval `docs_commit`.
-3. Confirm directly from Git that the recorded `docs_commit` contains every exact input and is an ancestor of the current docs-branch head. Stop on any mismatch; do not rewrite questionable evidence.
-4. Create a superseded approval object by preserving every original approval field and adding:
-   - `status: "superseded"`
-   - `invalidated_at`: current UTC ISO 8601 timestamp
-   - `invalidation_reason`: the human-provided reason
-5. Validate the superseded object with the helper's approval schema.
-6. Write it to both `changes/<change-id>/approval-history/<digest>.json` and `changes/<change-id>/approval.json`. Refuse to replace a non-identical history file. Commit only this lifecycle evidence before editing either approved artifact.
+1. Read `plan.md` as exact bytes and compute its digest with the helper's `digest` command.
+2. Validate `approval.json` with the helper's `validate-approval` command and require `status: "active"`. Verify it with `verify-approval` against the current plan bytes, the recorded `plan_commit`, the change id, and the plan path.
+3. Confirm directly from Git that the recorded `plan_commit` contains those exact plan bytes and is an ancestor of the current docs-branch head. Stop on any mismatch and report it; do not rewrite questionable evidence.
+4. Invoke the helper's `supersede-approval` command with the active record, the human-provided reason, and the current UTC ISO 8601 timestamp. It returns the superseded record — carrying every original field plus `status: "superseded"`, `superseded_at`, and `superseded_reason` — and the history path `approval-history/<plan-digest>.json`.
+5. Write the returned record byte-for-byte to both `changes/<change-id>/approval-history/<plan-digest>.json` and `changes/<change-id>/approval.json`. Refuse to replace a non-identical existing history file.
+6. Commit only this lifecycle evidence on the docs branch, before editing `plan.md`.
 
-This ordering ensures interruption cannot leave changed intent paired with an active approval. Never delete or rename away the approval evidence and never rely only on Git history to preserve it.
+This ordering ensures an interruption cannot leave changed intent paired with an active approval. Never delete or rename away approval evidence, and never rely only on Git history to preserve it.
 
-## Amend the artifacts
+Run records under `changes/<change-id>/runs/` are historical evidence of what already ran. Amendment never edits, deletes, or rewrites them, even when the amended plan invalidates the work they describe.
 
-1. Explore relevant code and authoritative documentation read-only as needed to ground the requested revision.
-2. Update only the required inputs among `changes/<change-id>/spec.md`, `plan.yaml`, and existing `integrations.yaml` in the docs worktree. Keep the original change ID. Read bound external requirements when needed, but perform no external mutation.
-3. Recompute affected components and effective policy with `resolve-project-policy` after changing paths, validation, bindings, or project-relevant requirements. Copy the helper result unchanged, validate referenced profiles, and require a configured mandatory binding before replacement approval.
-4. Keep the plan as one contiguous sequence numbered from 1. Update affected paths, anchors, restrictions, and each structured validation descriptor (`command`, `cwd`, `timeout_ms`, `required`, `source`) to match the amendment.
-5. Reconcile the specification and plan documentation declarations. Require files for `update` or `new` and an empty list for `none`.
-6. Preserve the amendment reason in the superseded approval evidence. Also summarize the changed scope and rationale in the specification's Decisions section so future readers do not need chat history.
-7. Load and validate the amended plan and optional integration artifact with the bundled helper's `load-artifact-file` command. Preserve canonical `requirement_fields` names and recompute `requirements_digest` with `digest-requirements` only after verified external reads. Check for placeholders and ensure all acceptance criteria remain covered.
-8. Review the diff and commit only the amended approval inputs on the docs branch. Leave `approval.json` superseded. Do not compute or create a replacement approval.
-9. Report the reason, invalidated digest, history path, lifecycle commit, artifact commit, material changes, documentation impact, and exact validation commands. Stop and require a fresh `adw:approve` interaction.
+## Amend the plan
+
+1. Explore relevant code, tests, manifests, and authoritative documentation read-only to ground the requested revision.
+2. Edit only `changes/<change-id>/plan.md` in the docs worktree, keeping the original change id and the mandatory PART 1 and PART 2 headings in order. Consult `<plugin-root>/templates/plan.md` for the canonical structure when a new section is needed.
+3. Reconcile both parts. A change to PART 1's summary, design, decisions, risks, or acceptance criteria must be reflected in PART 2's glance table, groups, directives, and validation, and the reverse.
+4. Keep phase and group ids stable wherever the work itself is unchanged, because branches, worktrees, and run records are keyed by them. When a group genuinely no longer exists, remove it and say so in the report rather than reusing its id for different work.
+5. Re-verify every `file -> symbol` anchor, every affected path against the declared components, the dependency ordering between phases, disjoint write paths among groups that share a phase, and every validation command against its observable source.
+6. Summarize the amendment's rationale in `Key Decisions & Trade-offs` so future readers need no chat history. The literal amendment reason stays in the superseded approval evidence.
+7. Run a fresh `adw:review-plan` pass over the amended bytes and apply its objective findings; record judgment calls as open decisions. A `needs-rework` verdict means the amendment is not ready for approval.
+8. Review the diff and commit only the amended `plan.md` on the docs branch. Leave `approval.json` superseded. Do not compute, request, or create a replacement approval.
+9. Report the amendment reason, the superseded plan digest, the history path, the lifecycle commit, the plan commit, the material changes, the review verdict, and the exact validation commands. Stop and require a fresh `adw:approve` interaction.
+
+Any change to the plan bytes requires fresh approval. Execution stays blocked until a human approves the amended plan.
 
 Do not push unless the human separately authorizes the configured docs delivery operation.
 
 ## Boundaries
 
-Mutate only the existing change's approval inputs, approval lifecycle files, and their docs-branch commits. Never modify project code, code-coupled documentation, configuration, branches, tickets, pull requests, or external systems. Never create or switch a branch, implement tasks, run implementation validation, approve replacement artifacts, merge, release, or deploy.
+Mutate only this change's `plan.md`, its approval lifecycle files, and their docs-branch commits. Never modify project code, code-coupled documentation, project configuration, run records, tickets, pull requests, or external systems. Never create or switch a branch, never create a worktree, never implement a task, never run implementation validation, never approve the amended plan, and never push, merge, release, or deploy.

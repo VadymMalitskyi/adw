@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { applyAtomicWrites, loadArtifactFile, parseYaml } from "../../../lib/adw-helper.mjs";
+import { applyAtomicWrites, loadProjectConfig, parseYaml } from "../../../lib/adw-helper.mjs";
 
 const skillDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pluginRoot = resolve(skillDirectory, "../..");
@@ -41,12 +41,12 @@ function git(root, arguments_, { allowFailure = false, locks = false } = {}) {
 }
 
 async function loadProject(root) {
-  const loaded = await loadArtifactFile({ project_root: root, path: "adw.yaml", artifact: "project" });
+  const loaded = await loadProjectConfig({ project_root: root, path: "adw.yaml" });
   if (!loaded.validation.valid) throw new Error(`adw.yaml is invalid: ${loaded.validation.errors.map((item) => `${item.path} ${item.message}`).join("; ")}`);
   const project = loaded.data;
-  if (gitCheckRef(project.documentation.branch) === false) throw new Error(`invalid documentation branch name: ${project.documentation.branch}`);
+  if (gitCheckRef(project.docs.branch) === false) throw new Error(`invalid documentation branch name: ${project.docs.branch}`);
   return {
-    documentation: project.documentation,
+    docs: project.docs,
     components: Object.entries(project.components).map(([name, component]) => ({ name, path: component.path })),
   };
 }
@@ -104,18 +104,18 @@ function classify(path, components) {
 }
 
 function reportState(root, config) {
-  const docsRoot = realpathSync(join(root, config.documentation.worktree));
+  const docsRoot = realpathSync(join(root, config.docs.worktree));
   const docsRelative = relative(root, docsRoot);
   if (docsRelative === ".." || docsRelative.startsWith(`..${sep}`)) throw new Error("configured docs worktree resolves outside the project root");
   const docsTop = realpathSync(git(docsRoot, ["rev-parse", "--show-toplevel"]).stdout);
   if (docsTop !== docsRoot) throw new Error("configured documentation worktree is not a Git top level");
   const docsBranch = git(docsRoot, ["branch", "--show-current"]).stdout;
-  if (docsBranch !== config.documentation.branch) throw new Error(`configured docs worktree is on ${docsBranch || "detached HEAD"}, expected ${config.documentation.branch}`);
+  if (docsBranch !== config.docs.branch) throw new Error(`configured docs worktree is on ${docsBranch || "detached HEAD"}, expected ${config.docs.branch}`);
   assertClean(root, "code");
   assertClean(docsRoot, "docs");
-  const tracking = assertLocalBranchCanPush(docsRoot, config.documentation.branch);
-  const markerPath = join(docsRoot, config.documentation.sync_marker);
-  if (!existsSync(markerPath)) throw new Error(`missing documentation sync marker ${config.documentation.sync_marker}`);
+  const tracking = assertLocalBranchCanPush(docsRoot, config.docs.branch);
+  const markerPath = join(docsRoot, config.docs.sync_marker);
+  if (!existsSync(markerPath)) throw new Error(`missing documentation sync marker ${config.docs.sync_marker}`);
   const marker = parseMarker(readFileSync(markerPath, "utf8"));
   const codeBranch = git(root, ["branch", "--show-current"]).stdout;
   if (!codeBranch || codeBranch !== marker.code_branch) throw new Error(`code checkout must be on marker branch ${marker.code_branch}; found ${codeBranch || "detached HEAD"}`);
@@ -180,10 +180,9 @@ try {
     const operations = proposalOperations(args.proposal, state.docsRoot);
     const markerRelative = relative(state.docsRoot, state.markerPath);
     operations.push({ path: markerRelative, content: markerText(state.marker, state.head), expected_content: readFileSync(state.markerPath, "utf8") });
-    if (args.pushAuthorized) {
-      if (config.documentation.delivery !== "direct-push") throw new Error("configured documentation delivery is not direct-push");
-      git(state.docsRoot, ["var", "GIT_AUTHOR_IDENT"]);
-    }
+    // Fail before any write when the commit identity is missing, so an
+    // authorized push cannot leave the docs worktree modified but uncommitted.
+    if (args.pushAuthorized) git(state.docsRoot, ["var", "GIT_AUTHOR_IDENT"]);
     await applyAtomicWrites(state.docsRoot, operations);
     const diff = git(state.docsRoot, ["diff", "--no-ext-diff", "--", ...operations.map((item) => item.path)]).stdout;
     const result = { ...baseReport, read_only: false, written: operations.map((item) => item.path), diff, committed: false, pushed: false };

@@ -15,7 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import test from "node:test";
-import { createApprovalBundle } from "../../plugin/lib/adw-helper.mjs";
+import { computeDigest, createPlanApproval } from "../../plugin/lib/adw-helper.mjs";
 
 const repositoryRoot = resolve(new URL("../..", import.meta.url).pathname);
 const initScript = join(repositoryRoot, "plugin/skills/init/scripts/init.mjs");
@@ -167,7 +167,7 @@ test("shell syntax stays config data and repository text cannot grant init autho
   assert.equal(treeFingerprint(root), before);
   applyInit(root);
   assert.equal(existsSync(marker), false);
-  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /command: "npm run lint"\n\s+source: "package\.json#scripts\.lint"/);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /command: "npm run lint"\n(?:\s+\S+: .*\n)*?\s+source: "package\.json#scripts\.lint"/);
   assert.equal(JSON.parse(readFileSync(join(root, "package.json"), "utf8")).scripts.lint, command);
 });
 
@@ -178,11 +178,11 @@ test("doctor and status snapshots remain read-only and ignore hostile change ent
   applyInit(root);
   const changes = join(root, "worktrees/docs/changes");
   mkdirSync(join(changes, "safe-change"));
-  writeFileSync(join(changes, "safe-change/spec.md"), "safe spec\n");
+  writeFileSync(join(changes, "safe-change/plan.md"), "# PART 1 — Feature Overview\n");
   mkdirSync(join(changes, "bad;touch-pwned"));
-  writeFileSync(join(changes, "bad;touch-pwned/spec.md"), "hostile id\n");
+  writeFileSync(join(changes, "bad;touch-pwned/plan.md"), "hostile id\n");
   const outside = mkdtempSync(join(tmpdir(), "adw-outside-change-record-"));
-  writeFileSync(join(outside, "spec.md"), "outside secret that must not be read\n");
+  writeFileSync(join(outside, "plan.md"), "outside secret that must not be read\n");
   symlinkSync(outside, join(changes, "linked-record"));
 
   const before = treeFingerprint(root);
@@ -201,7 +201,7 @@ test("doctor and status snapshots remain read-only and ignore hostile change ent
   assert.equal(git(join(root, "worktrees/docs"), "rev-parse", "HEAD"), docsHead);
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), codeStatus);
   assert.equal(git(join(root, "worktrees/docs"), "status", "--porcelain=v1", "--untracked-files=all"), docsStatus);
-  assert.equal(readFileSync(join(outside, "spec.md"), "utf8"), "outside secret that must not be read\n");
+  assert.equal(readFileSync(join(outside, "plan.md"), "utf8"), "outside secret that must not be read\n");
 });
 
 test("status treats line-ending drift as a stale exact-byte approval without mutation", () => {
@@ -211,24 +211,25 @@ test("status treats line-ending drift as a stale exact-byte approval without mut
   const docs = join(root, "worktrees/docs");
   const change = join(docs, "changes/crlf-drift");
   mkdirSync(change);
-  const spec = Buffer.from("# Spec\r\n\r\nExact CRLF bytes.\r\n");
-  const plan = Buffer.from("schema: 2\r\nchange_id: crlf-drift\r\n");
-  writeFileSync(join(change, "spec.md"), spec);
-  writeFileSync(join(change, "plan.yaml"), plan);
-  const approval = createApprovalBundle({
-    approver: "security-test",
-    approved_at: "2026-08-05T12:00:00Z",
-    plugin_version: "0.5.0",
-    docs_commit: git(docs, "rev-parse", "HEAD"),
-    inputs: [{ path: "spec.md", content: spec }, { path: "plan.yaml", content: plan }],
+  const plan = Buffer.from("# PART 1 — Feature Overview\r\n\r\nExact CRLF bytes.\r\n");
+  writeFileSync(join(change, "plan.md"), plan);
+  git(docs, "add", "--all");
+  git(docs, "-c", "core.hooksPath=/dev/null", "commit", "-m", "Add plan");
+  const approval = createPlanApproval({
+    change_id: "crlf-drift",
+    plan_digest: computeDigest(plan),
+    plan_commit: git(docs, "rev-parse", "HEAD"),
+    approved_by: "security-test",
+    approved_at: "2026-08-13T12:00:00Z",
   });
   writeFileSync(join(change, "approval.json"), `${JSON.stringify(approval, null, 2)}\n`);
-  writeFileSync(join(change, "spec.md"), spec.toString("utf8").replaceAll("\r\n", "\n"));
+  // Only the line endings change; the approval must still refuse to verify.
+  writeFileSync(join(change, "plan.md"), plan.toString("utf8").replaceAll("\r\n", "\n"));
   const before = treeFingerprint(root);
 
   const status = run(statusScript, ["--project-root", root]);
-  assert.equal(status.changes[0].approval.state, "invalid");
-  assert.equal(status.changes[0].approval.reason, "approval digest is stale");
+  assert.equal(status.changes[0].approval.state, "stale");
+  assert.match(status.changes[0].approval.reason, /plan bytes changed/);
   assert.equal(status.changes[0].state, "planned");
   assert.equal(treeFingerprint(root), before);
 });

@@ -16,7 +16,7 @@ test("quick has valid minimal skill metadata and portable helper resolution", ()
   assert.match(quickAgent, /display_name: "ADW Quick"/);
   assert.match(quickAgent, /default_prompt: "Use \$quick /);
   assert.match(quick, /\$\{CLAUDE_PLUGIN_ROOT\}/);
-  assert.match(quick, /absolute loaded path ending in `\/skills\/quick\/SKILL\.md`/);
+  assert.match(quick, /Codex[^\n]*`\/skills\/quick\/SKILL\.md`|`\/skills\/quick\/SKILL\.md`[^\n]*absolute loaded/);
   assert.match(quick, /<plugin-root>\/lib\/adw-helper\.mjs/);
 });
 

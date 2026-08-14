@@ -14,21 +14,21 @@ function git(root, ...args) {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 }
 
-function config(schema) {
+function config() {
   return [
-    `schema: ${schema}`, "", "git:", "  default_branch: main", "", "documentation:",
-    "  mode: branch", "  branch: docs", "  worktree: worktrees/docs", "  sync_marker: SYNC.yaml", "  delivery: direct-push", "",
-    "execution:", "  isolation: provider-sandbox", "  enforcement: preferred", "  permissions:", "    profile: managed-development", "",
-    "components:", "  app:", "    path: .", "", "validation:", "  default:", "    - npm test", "",
+    "adw: 1", "", "git:", "  base_branch: main", "",
+    "docs:", "  branch: docs", "  worktree: worktrees/docs", "  sync_marker: SYNC.yaml", "",
+    "execution:", "  mode: orchestrated", "  max_parallel: 3", "  isolation: provider-sandbox", "",
+    "components:", "  app:", "    path: .", "    validate:", "      - npm test", "",
   ].join("\n");
 }
 
-function fixture(schema) {
+function fixture() {
   const root = mkdtempSync(join(tmpdir(), "adw-update-"));
   git(root, "init", "-q", "-b", "main");
   git(root, "config", "user.name", "ADW Test");
   git(root, "config", "user.email", "adw@example.invalid");
-  writeFileSync(join(root, "adw.yaml"), config(schema));
+  writeFileSync(join(root, "adw.yaml"), config());
   mkdirSync(join(root, "changes/historical"), { recursive: true });
   writeFileSync(join(root, "changes/historical/approval.json"), "historical bytes\n");
   git(root, "add", ".");
@@ -44,7 +44,7 @@ function run(root, action, options = {}) {
 }
 
 test("provider-sandbox preview and digest-bound apply are no-op managed-file checks", () => {
-  const root = fixture(5);
+  const root = fixture();
   const head = git(root, "rev-parse", "HEAD");
   const before = readFileSync(join(root, "adw.yaml"), "utf8");
   const previewResult = run(root, "preview");
@@ -61,7 +61,11 @@ test("provider-sandbox preview and digest-bound apply are no-op managed-file che
 });
 
 test("invalid project configuration is rejected without writes or format-specific recovery", () => {
-  const root = fixture(999);
+  const root = fixture();
+  // A superseded 0.6 contract is diagnosed by adw:doctor, never reinterpreted here.
+  writeFileSync(join(root, "adw.yaml"), "schema: 5\ngit:\n  default_branch: main\n");
+  git(root, "add", "adw.yaml");
+  git(root, "commit", "-q", "-m", "superseded contract");
   const before = readFileSync(join(root, "adw.yaml"), "utf8");
   const result = run(root, "preview");
   assert.equal(result.status, 2);
@@ -81,16 +85,16 @@ test("managed projects preview and atomically repair release-owned files", () =>
   writeFileSync(onboardingPath, `${JSON.stringify({ schema: 1, development: { runtime_versions: { dotnet: "8" } } }, null, 2)}\n`);
   git(root, "add", "App.csproj", "onboarding.json");
   git(root, "commit", "-q", "-m", "fixture");
-  const initPreview = spawnSync(process.execPath, [initScript, "preview", "--project-root", root, "--onboarding", onboardingPath], { encoding: "utf8" });
+  const initPreview = spawnSync(process.execPath, [initScript, "preview", "--execution", "managed-devcontainer", "--project-root", root, "--onboarding", onboardingPath], { encoding: "utf8" });
   assert.equal(initPreview.status, 0, initPreview.stderr);
   const initDigest = JSON.parse(initPreview.stdout).preview_digest;
-  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", initDigest, "--project-root", root, "--onboarding", onboardingPath], { encoding: "utf8" });
+  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", initDigest, "--execution", "managed-devcontainer", "--project-root", root, "--onboarding", onboardingPath], { encoding: "utf8" });
   assert.equal(initialized.status, 0, initialized.stderr);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /development:\n  runtime_versions:\n    dotnet: "8"/);
   const initializedContainer = JSON.parse(readFileSync(join(root, ".devcontainer/devcontainer.json"), "utf8"));
   assert.equal(initializedContainer.features["ghcr.io/devcontainers/features/dotnet:1"].version, "8");
 
-  // Emulate a project initialized before schema 5 persisted the chosen version.
+  // Emulate a project initialized before the chosen version was persisted in adw.yaml.
   const projectConfigPath = join(root, "adw.yaml");
   writeFileSync(projectConfigPath, readFileSync(projectConfigPath, "utf8").replace(/\ndevelopment:\n  runtime_versions:\n    dotnet: "8"\n/, "\n"));
 
@@ -113,7 +117,7 @@ test("managed projects preview and atomically repair release-owned files", () =>
   assert.equal(applied.status, 0, applied.stderr);
   assert.notEqual(readFileSync(join(root, ".devcontainer/Dockerfile"), "utf8"), "drifted\n");
   assert.doesNotMatch(readFileSync(join(root, ".devcontainer/allowed-domains.txt"), "utf8"), /evil\.example\.com/);
-  assert.equal(JSON.parse(readFileSync(markerPath, "utf8")).plugin_version, "0.6.0");
+  assert.equal(JSON.parse(readFileSync(markerPath, "utf8")).plugin_version, readFileSync(join(repositoryRoot, "VERSION"), "utf8").trim());
   const repairedContainer = JSON.parse(readFileSync(join(root, ".devcontainer/devcontainer.json"), "utf8"));
   assert.equal(repairedContainer.features["ghcr.io/devcontainers/features/dotnet:1"].version, "8");
 });
@@ -128,8 +132,8 @@ test("managed repair rejects inconsistent legacy onboarding runtime evidence", (
   writeFileSync(onboardingPath, `${JSON.stringify({ schema: 1, development: { runtime_versions: { dotnet: "8" } } }, null, 2)}\n`);
   git(root, "add", ".");
   git(root, "commit", "-q", "-m", "fixture");
-  const preview = JSON.parse(spawnSync(process.execPath, [initScript, "preview", "--project-root", root, "--onboarding", onboardingPath], { encoding: "utf8" }).stdout);
-  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--project-root", root, "--onboarding", onboardingPath], { encoding: "utf8" });
+  const preview = JSON.parse(spawnSync(process.execPath, [initScript, "preview", "--execution", "managed-devcontainer", "--project-root", root, "--onboarding", onboardingPath], { encoding: "utf8" }).stdout);
+  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--execution", "managed-devcontainer", "--project-root", root, "--onboarding", onboardingPath], { encoding: "utf8" });
   assert.equal(initialized.status, 0, initialized.stderr);
   const projectConfigPath = join(root, "adw.yaml");
   writeFileSync(projectConfigPath, readFileSync(projectConfigPath, "utf8").replace(/\ndevelopment:\n  runtime_versions:\n    dotnet: "8"\n/, "\n"));

@@ -1,54 +1,57 @@
-# ADW project configuration. Commands must cite an observable project source.
-schema: 5
+# ADW project configuration. Small, handwritten, and readable without schema
+# documentation. Every generated command cites an observable project source.
+adw: 1
 
 git:
-  default_branch: main
+  base_branch: main
 
-documentation:
-  mode: branch
+docs:
   branch: docs
   worktree: worktrees/docs
-  sync_marker: SYNC.yaml
-  delivery: direct-push
+  # sync_marker: SYNC.yaml
 
 execution:
-  isolation: managed-devcontainer
-  enforcement: required
-  permissions:
-    profile: managed-development
+  # orchestrated  runs the independent groups of one phase in parallel worktrees
+  # sequential    runs one branch and worktree at a time
+  mode: orchestrated
+  max_parallel: 3
+  # provider-sandbox      lightweight default; the agent provider's own sandbox
+  # project-devcontainer  an existing project-owned container, left unchanged
+  # managed-devcontainer  the generated reproducible hardened container
+  isolation: provider-sandbox
+  # Managed devcontainer only: public-pages | hosted-only
+  # web_access: public-pages
 
-# Optional. Persist versions chosen during initialization when the repository
-# does not declare a sufficiently precise runtime version itself.
+# Optional. Record the versions chosen during initialization when the
+# repository does not declare a precise runtime version itself.
 # development:
 #   runtime_versions:
 #     dotnet: "8"
 
+# At least one component. A single root component uses path ".".
+# Each entry of `validate` is either an exact command string or an object with
+# `command` and optional `cwd`, `timeout_ms`, `required`, and `source`.
 components:
   app:
-    path: .
+    path: "."
+    validate: []
 
-validation:
-  default: []
-
-# Optional. Omit this block for lightweight projects.
-# integrations:
+# Optional. Omit every capability the project does not use.
+# providers:
 #   work_tracker:
 #     provider: azure-devops
-#     requirement: optional
+#     required: false
 #     transport: auto
 #     access: read-write
 #     settings:
 #       organization: "<organization>"
 #       project: "<project>"
+#   code_host:
+#     provider: github
+#     required: false
 
-# Optional project workflow policy. A required binding is resolved during
-# planning; configuration never authorizes the external mutation itself.
-# workflows:
-#   work_tracker:
-#     binding: required
-#     ensure: create-or-link
-#     stage: plan
-#     cardinality: one-per-change
-#     profile: adw/work-items/feature-story.yaml
-#     # Required only for one-parent-plus-plan-tasks:
-#     child_profile: adw/work-items/implementation-task.yaml
+# Optional plain-language conventions. They guide formatting and never
+# authorize external writes, merging, deployment, or release.
+# conventions:
+#   branches: Use ADW branch names.
+#   pull_requests: Keep group pull requests small and draft until reviewed.

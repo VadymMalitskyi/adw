@@ -231,7 +231,7 @@ test("init derives a reviewable project-specific development environment from re
   git(root, "add", ".");
   git(root, "commit", "-q", "-m", "fixture");
 
-  const previewResult = spawnSync(process.execPath, [initScript, "preview", "--project-root", root], { encoding: "utf8" });
+  const previewResult = spawnSync(process.execPath, [initScript, "preview", "--execution", "managed-devcontainer", "--project-root", root], { encoding: "utf8" });
   assert.equal(previewResult.status, 0, previewResult.stderr);
   const preview = JSON.parse(previewResult.stdout);
   assert.deepEqual(preview.development_environment.selected_versions, { dotnet: "8.0.408", go: "1.22.4", node: "20", python: "3.11" });
@@ -245,7 +245,7 @@ test("init derives a reviewable project-specific development environment from re
   assert.ok(preview.development_environment.unresolved.some(({ requirement }) => requirement === "environment variable DATABASE_URL"));
   assert.ok(preview.docs.generated_files.includes("components/services-dotnet.md"));
 
-  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--project-root", root], { encoding: "utf8" });
+  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--execution", "managed-devcontainer", "--project-root", root], { encoding: "utf8" });
   assert.equal(initialized.status, 0, initialized.stderr);
   const config = JSON.parse(readFileSync(join(root, ".devcontainer/devcontainer.json"), "utf8"));
   assert.equal(config.build.args.NODE_MAJOR, "20");
@@ -291,10 +291,10 @@ test("doctor blocks a required managed profile outside its runtime and passes it
   writeFileSync(join(root, "README.md"), "# fixture\n");
   git(root, "add", ".");
   git(root, "commit", "-q", "-m", "fixture");
-  const previewResult = spawnSync(process.execPath, [initScript, "preview", "--project-root", root], { encoding: "utf8" });
+  const previewResult = spawnSync(process.execPath, [initScript, "preview", "--execution", "managed-devcontainer", "--project-root", root], { encoding: "utf8" });
   assert.equal(previewResult.status, 0, previewResult.stderr);
   const preview = JSON.parse(previewResult.stdout);
-  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--project-root", root], { encoding: "utf8" });
+  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--execution", "managed-devcontainer", "--project-root", root], { encoding: "utf8" });
   assert.equal(initialized.status, 0, initialized.stderr);
 
   const outside = spawnSync(process.execPath, [doctorScript, "--project-root", root], { encoding: "utf8" });

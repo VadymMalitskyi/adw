@@ -5,92 +5,39 @@ import { spawn } from "node:child_process";
 import { link, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import Ajv2020 from "ajv/dist/2020.js";
 import { parseDocument } from "yaml";
 
-export const EXIT = Object.freeze({ OK: 0, INPUT: 2, SCHEMA_INVALID: 3, APPROVAL_INVALID: 4, VALIDATION_FAILED: 5, PATH_VIOLATION: 7, ATOMIC_WRITE_FAILED: 8, INTERNAL: 9 });
-export const ARTIFACT_SCHEMAS = Object.freeze({
-  project: Object.freeze({ 5: new URL("../schemas/project.v5.schema.json", import.meta.url) }),
-  plan: Object.freeze({ 2: new URL("../schemas/plan.v2.schema.json", import.meta.url) }),
-  approval: Object.freeze({ 2: new URL("../schemas/approval.v2.schema.json", import.meta.url) }),
-  validation: Object.freeze({ 1: new URL("../schemas/validation.v1.schema.json", import.meta.url) }),
-  integration: Object.freeze({ 1: new URL("../schemas/integration.v1.schema.json", import.meta.url) }),
-  "external-action": Object.freeze({ 1: new URL("../schemas/external-action.v1.schema.json", import.meta.url) }),
-  "incident-report": Object.freeze({ 1: new URL("../schemas/incident-report.v1.schema.json", import.meta.url) }),
-  "work-item-profile": Object.freeze({ 1: new URL("../schemas/work-item-profile.v1.schema.json", import.meta.url) })
-});
+export const EXIT = Object.freeze({ OK: 0, INPUT: 2, CONTRACT_INVALID: 3, APPROVAL_INVALID: 4, VALIDATION_FAILED: 5, PATH_VIOLATION: 7, ATOMIC_WRITE_FAILED: 8, INTERNAL: 9 });
 
-const BUNDLE_DOMAIN = Buffer.from("ADW-APPROVAL-BUNDLE-V2\0", "utf8");
-const REQUIREMENTS_DOMAIN = Buffer.from("ADW-INTEGRATION-REQUIREMENTS-V1\0", "utf8");
-const AUTHORIZATION_DOMAIN = Buffer.from("ADW-EXTERNAL-AUTHORIZATION-V1\0", "utf8");
+export const CAPABILITIES = Object.freeze(["work_tracker", "code_host", "observability", "knowledge"]);
+export const EXECUTION_MODES = Object.freeze(["orchestrated", "sequential"]);
+export const ISOLATION_MODES = Object.freeze(["provider-sandbox", "project-devcontainer", "managed-devcontainer"]);
+export const GROUP_STATUSES = Object.freeze(["prepared", "implementing", "reviewing", "validating", "passed", "failed", "blocked"]);
+export const PHASE_STATUSES = Object.freeze(["running", "passed", "failed", "blocked"]);
+
+const WEB_ACCESS_MODES = new Set(["public-pages", "hosted-only"]);
+const TRANSPORTS = new Set(["auto", "native", "mcp", "cli", "api"]);
+const ACCESS_MODES = new Set(["read-only", "read-write"]);
+const RUNTIMES = new Set(["node", "python", "go", "rust", "java", "ruby", "dotnet"]);
+const SECRET_LIKE_KEY = /(?:password|passwd|token|api[_-]?key|secret|credential|authorization|cookie|private[_-]?key)/i;
+const IDENTIFIER = /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/;
+const CHANGE_ID = /^[a-z0-9](?:[a-z0-9_-]|\.[a-z0-9_-]+)*$/;
+const SHA256 = /^[0-9a-f]{64}$/;
+const COMMIT = /^[0-9a-f]{40}$/;
+const PLACEHOLDER = /^\s*<[^>]+>\s*$/;
+const MAX_PARALLEL = 16;
+const DEFAULT_TIMEOUT_MS = 120000;
 const VALIDATION_TERMINATION_GRACE_MS = 250;
 const VALIDATION_PIPE_CLOSE_GRACE_MS = 100;
-const schemaCache = new Map();
-const validatorCache = new WeakMap();
-const ajv = new Ajv2020({ allErrors: true, strict: true, addUsedSchema: false });
-ajv.addFormat("date-time", (value) => typeof value === "string" && /^\d{4}-\d\d-\d\dT/.test(value) && !Number.isNaN(Date.parse(value)));
+const APPROVAL_DOMAIN = Buffer.from("ADW-PLAN-APPROVAL-V1\0", "utf8");
 
-function framedField(label, content) {
-  const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content, "utf8");
-  return Buffer.concat([Buffer.from(`${label}:${bytes.length}\n`, "utf8"), bytes, Buffer.from("\n", "utf8")]);
-}
+// ---------------------------------------------------------------------------
+// Digests and YAML
+// ---------------------------------------------------------------------------
 
-function contentDigest(content) {
-  if (!(typeof content === "string" || Buffer.isBuffer(content))) throw new TypeError("approval input content must be a string or buffer");
+export function computeDigest(content) {
+  if (!(typeof content === "string" || Buffer.isBuffer(content))) throw new InputError("digest input must be a string or buffer");
   return createHash("sha256").update(content).digest("hex");
-}
-
-function normalizeApprovalInputs(inputs) {
-  if (!Array.isArray(inputs)) throw new TypeError("approval inputs must be an array");
-  const expected = ["spec.md", "plan.yaml", "integrations.yaml"];
-  if (inputs.length < 2 || inputs.length > 3) throw new TypeError("approval inputs must contain spec.md, plan.yaml, and optional integrations.yaml");
-  return inputs.map((input, index) => {
-    if (!input || input.path !== expected[index]) throw new TypeError(`approval input ${index + 1} must be ${expected[index]}`);
-    return { path: input.path, content: input.content };
-  });
-}
-
-export function computeApprovalBundle(inputs) {
-  const normalized = normalizeApprovalInputs(inputs);
-  const hash = createHash("sha256").update(BUNDLE_DOMAIN);
-  const descriptors = normalized.map(({ path, content }) => {
-    hash.update(framedField(path, content));
-    return { path, digest: contentDigest(content) };
-  });
-  return { inputs: descriptors, digest: hash.digest("hex") };
-}
-
-export function createApprovalBundle({ approver, approved_at, plugin_version, docs_commit, inputs }) {
-  const bundle = computeApprovalBundle(inputs);
-  return { schema: 2, status: "active", approver, approved_at, plugin_version, docs_commit, digest_algorithm: "sha256", inputs: bundle.inputs, digest: bundle.digest };
-}
-
-export function verifyApprovalBundle(inputs, approval) {
-  if (!approval || approval.schema !== 2 || approval.digest_algorithm !== "sha256" || !/^[0-9a-f]{64}$/.test(approval.digest ?? "")) return false;
-  let bundle;
-  try { bundle = computeApprovalBundle(inputs); } catch { return false; }
-  if (JSON.stringify(bundle.inputs) !== JSON.stringify(approval.inputs)) return false;
-  return timingSafeEqual(Buffer.from(bundle.digest, "hex"), Buffer.from(approval.digest, "hex"));
-}
-
-function childPointer(path, part) {
-  return `${path}/${String(part).replaceAll("~", "~0").replaceAll("/", "~1")}`;
-}
-
-export function validateJsonSchema(schema, value) {
-  let validate = validatorCache.get(schema);
-  if (!validate) {
-    validate = ajv.compile(schema);
-    validatorCache.set(schema, validate);
-  }
-  const valid = validate(value);
-  const errors = (validate.errors ?? []).map((error) => {
-    let path = error.instancePath || "";
-    if (error.keyword === "required") path = childPointer(path, error.params.missingProperty);
-    if (error.keyword === "additionalProperties") path = childPointer(path, error.params.additionalProperty);
-    return { path: path || "/", keyword: error.keyword, message: error.message ?? "schema constraint failed" };
-  });
-  return { valid: Boolean(valid), errors };
 }
 
 export function parseYaml(source, label = "YAML document") {
@@ -105,133 +52,557 @@ export function parseYaml(source, label = "YAML document") {
   return data;
 }
 
-export async function loadArtifactFile({ project_root, path, artifact }) {
-  if (typeof project_root !== "string" || typeof path !== "string" || typeof artifact !== "string") throw new InputError("load-artifact-file requires project_root, path, and artifact");
+// ---------------------------------------------------------------------------
+// Shared handwritten validation primitives
+// ---------------------------------------------------------------------------
+
+function isObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+class Errors {
+  constructor() { this.items = []; }
+  add(path, message) { this.items.push({ path, message }); return false; }
+  get valid() { return this.items.length === 0; }
+}
+
+function checkObject(errors, value, path) {
+  if (!isObject(value)) return errors.add(path, "must be a mapping object");
+  return true;
+}
+
+function checkKnownKeys(errors, value, allowed, path) {
+  let ok = true;
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) ok = errors.add(`${path}/${key}`, `is not a supported key; expected one of: ${[...allowed].join(", ")}`);
+  }
+  return ok;
+}
+
+function checkNonEmptyString(errors, value, path, maximum = 4000) {
+  if (typeof value !== "string" || value.length === 0) return errors.add(path, "must be a non-empty string");
+  if (value.length > maximum) return errors.add(path, `must be at most ${maximum} characters`);
+  if (value.includes("\0")) return errors.add(path, "must not contain NUL bytes");
+  return true;
+}
+
+function checkSingleLine(errors, value, path, maximum = 2000) {
+  if (!checkNonEmptyString(errors, value, path, maximum)) return false;
+  if (/[\u0000-\u001f\u007f]/.test(value)) return errors.add(path, "must be a single-line string without control characters");
+  return true;
+}
+
+// Project-relative, traversal-free, NUL-free, and never absolute.
+function checkRelativePath(errors, value, path) {
+  if (!checkNonEmptyString(errors, value, path, 1024)) return false;
+  if (value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value)) return errors.add(path, "must be a project-relative path, not an absolute path");
+  if (value.includes("\\")) return errors.add(path, "must use forward slashes");
+  const segments = value.split("/");
+  if (segments.includes("..")) return errors.add(path, "must not contain a `..` segment");
+  return true;
+}
+
+function normalizeRelativePath(value) {
+  const trimmed = value.replace(/^\.\//, "").replace(/\/+$/, "");
+  return trimmed.length === 0 ? "." : trimmed;
+}
+
+function checkBranchName(errors, value, path) {
+  if (!checkNonEmptyString(errors, value, path, 255)) return false;
+  if (/\s/.test(value)) return errors.add(path, "must not contain whitespace");
+  if (value.startsWith("-") || value.startsWith("/") || value.endsWith("/") || value.endsWith(".lock")) return errors.add(path, "is not a valid Git branch name");
+  if (value.includes("..") || value.includes("//") || value.includes("@{")) return errors.add(path, "is not a valid Git branch name");
+  if (/[~^:?*[\\\u007f]/.test(value)) return errors.add(path, "is not a valid Git branch name");
+  return true;
+}
+
+function checkNoSecretLikeKeys(errors, value, path) {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => checkNoSecretLikeKeys(errors, item, `${path}/${index}`));
+    return errors.valid;
+  }
+  if (!isObject(value)) return true;
+  for (const [key, nested] of Object.entries(value)) {
+    if (SECRET_LIKE_KEY.test(key)) errors.add(`${path}/${key}`, "credential-like keys are forbidden; keep credentials in provider clients or credential stores");
+    checkNoSecretLikeKeys(errors, nested, `${path}/${key}`);
+  }
+  return errors.valid;
+}
+
+function checkIsoTimestamp(errors, value, path) {
+  if (typeof value !== "string" || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(value) || Number.isNaN(Date.parse(value))) {
+    return errors.add(path, "must be an ISO 8601 timestamp");
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Project configuration: the handwritten `adw: 1` contract
+// ---------------------------------------------------------------------------
+
+const PROJECT_KEYS = new Set(["adw", "git", "docs", "execution", "development", "components", "providers", "conventions"]);
+
+function validateValidationCommand(errors, item, path, componentPath) {
+  if (typeof item === "string") {
+    if (!checkNonEmptyString(errors, item, path)) return null;
+    if (PLACEHOLDER.test(item)) return errors.add(path, "must be a real command, not an unresolved placeholder") && null;
+    return { command: item, cwd: componentPath, timeout_ms: DEFAULT_TIMEOUT_MS, required: true };
+  }
+  if (!checkObject(errors, item, path)) return null;
+  checkKnownKeys(errors, item, new Set(["command", "cwd", "timeout_ms", "required", "source"]), path);
+  if (!checkNonEmptyString(errors, item.command, `${path}/command`)) return null;
+  if (PLACEHOLDER.test(item.command)) return errors.add(`${path}/command`, "must be a real command, not an unresolved placeholder") && null;
+  let cwd = componentPath;
+  if (item.cwd !== undefined) {
+    if (!checkRelativePath(errors, item.cwd, `${path}/cwd`)) return null;
+    cwd = normalizeRelativePath(item.cwd);
+  }
+  let timeout = DEFAULT_TIMEOUT_MS;
+  if (item.timeout_ms !== undefined) {
+    if (!Number.isInteger(item.timeout_ms) || item.timeout_ms < 1) return errors.add(`${path}/timeout_ms`, "must be a positive integer") && null;
+    timeout = item.timeout_ms;
+  }
+  if (item.required !== undefined && typeof item.required !== "boolean") return errors.add(`${path}/required`, "must be a boolean") && null;
+  if (item.source !== undefined) checkSingleLine(errors, item.source, `${path}/source`);
+  const normalized = { command: item.command, cwd, timeout_ms: timeout, required: item.required !== false };
+  if (item.source !== undefined) normalized.source = item.source;
+  return normalized;
+}
+
+function validateComponents(errors, value, normalized) {
+  if (!checkObject(errors, value, "/components")) return;
+  const entries = Object.entries(value);
+  if (entries.length === 0) return void errors.add("/components", "must declare at least one component");
+  const paths = new Map();
+  for (const [id, raw] of entries) {
+    const path = `/components/${id}`;
+    if (!IDENTIFIER.test(id)) { errors.add(path, "component id must be lowercase alphanumeric with `-` or `_` separators"); continue; }
+    if (!checkObject(errors, raw, path)) continue;
+    checkKnownKeys(errors, raw, new Set(["path", "validate"]), path);
+    if (!checkRelativePath(errors, raw.path, `${path}/path`)) continue;
+    const componentPath = normalizeRelativePath(raw.path);
+    if (paths.has(componentPath)) errors.add(`${path}/path`, `duplicates the path already owned by component ${paths.get(componentPath)}`);
+    else paths.set(componentPath, id);
+    const commands = [];
+    if (raw.validate !== undefined) {
+      if (!Array.isArray(raw.validate)) { errors.add(`${path}/validate`, "must be an array of commands"); continue; }
+      for (const [index, item] of raw.validate.entries()) {
+        const command = validateValidationCommand(errors, item, `${path}/validate/${index}`, componentPath);
+        if (command) commands.push(command);
+      }
+    }
+    normalized.components[id] = { path: componentPath, validate: commands };
+  }
+}
+
+function validateProviders(errors, value, normalized) {
+  if (!checkObject(errors, value, "/providers")) return;
+  checkKnownKeys(errors, value, new Set(CAPABILITIES), "/providers");
+  for (const [capability, raw] of Object.entries(value)) {
+    const path = `/providers/${capability}`;
+    if (!CAPABILITIES.includes(capability)) continue;
+    if (!checkObject(errors, raw, path)) continue;
+    checkKnownKeys(errors, raw, new Set(["provider", "required", "transport", "access", "settings"]), path);
+    if (!checkSingleLine(errors, raw.provider, `${path}/provider`, 100)) continue;
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(raw.provider)) { errors.add(`${path}/provider`, "must be a lowercase provider name such as github"); continue; }
+    const entry = { provider: raw.provider, required: false };
+    if (raw.required !== undefined) {
+      if (typeof raw.required !== "boolean") { errors.add(`${path}/required`, "must be a boolean"); continue; }
+      entry.required = raw.required;
+    }
+    if (raw.transport !== undefined) {
+      if (!TRANSPORTS.has(raw.transport)) { errors.add(`${path}/transport`, `must be one of: ${[...TRANSPORTS].join(", ")}`); continue; }
+      entry.transport = raw.transport;
+    }
+    if (raw.access !== undefined) {
+      if (!ACCESS_MODES.has(raw.access)) { errors.add(`${path}/access`, `must be one of: ${[...ACCESS_MODES].join(", ")}`); continue; }
+      entry.access = raw.access;
+    }
+    if (raw.settings !== undefined) {
+      if (!checkObject(errors, raw.settings, `${path}/settings`)) continue;
+      entry.settings = {};
+      // Unknown provider-specific keys are allowed only here, and never secret-like.
+      for (const [key, setting] of Object.entries(raw.settings)) {
+        if (SECRET_LIKE_KEY.test(key)) { errors.add(`${path}/settings/${key}`, "credential-like settings are forbidden; keep credentials in the provider or client credential store"); continue; }
+        if (typeof setting === "string" || typeof setting === "number" || typeof setting === "boolean") entry.settings[key] = setting;
+        else errors.add(`${path}/settings/${key}`, "must be a string, number, or boolean");
+      }
+    }
+    normalized.providers[capability] = entry;
+  }
+}
+
+export function validateProjectConfig(data) {
+  const errors = new Errors();
+  if (!checkObject(errors, data, "/")) return { valid: false, errors: errors.items };
+  checkKnownKeys(errors, data, PROJECT_KEYS, "");
+  checkNoSecretLikeKeys(errors, data, "");
+  if (data.adw !== 1) errors.add("/adw", "must equal 1; this release does not read earlier ADW project contracts");
+
+  const normalized = {
+    adw: 1,
+    git: { base_branch: "main" },
+    docs: { branch: "docs", worktree: "worktrees/docs", sync_marker: "SYNC.yaml" },
+    execution: { mode: "sequential", max_parallel: 1, isolation: "provider-sandbox" },
+    development: { runtime_versions: {} },
+    components: {},
+    providers: {},
+    conventions: {},
+  };
+
+  if (data.git === undefined) errors.add("/git", "is required");
+  else if (checkObject(errors, data.git, "/git")) {
+    checkKnownKeys(errors, data.git, new Set(["base_branch"]), "/git");
+    if (checkBranchName(errors, data.git.base_branch, "/git/base_branch")) normalized.git.base_branch = data.git.base_branch;
+  }
+
+  if (data.docs === undefined) errors.add("/docs", "is required");
+  else if (checkObject(errors, data.docs, "/docs")) {
+    checkKnownKeys(errors, data.docs, new Set(["branch", "worktree", "sync_marker"]), "/docs");
+    if (checkBranchName(errors, data.docs.branch, "/docs/branch")) normalized.docs.branch = data.docs.branch;
+    if (checkRelativePath(errors, data.docs.worktree, "/docs/worktree")) {
+      normalized.docs.worktree = normalizeRelativePath(data.docs.worktree);
+      if (normalized.docs.worktree === ".") errors.add("/docs/worktree", "must be a dedicated directory inside the project, not the project root");
+    }
+    if (data.docs.sync_marker !== undefined) {
+      if (checkRelativePath(errors, data.docs.sync_marker, "/docs/sync_marker")) normalized.docs.sync_marker = normalizeRelativePath(data.docs.sync_marker);
+    }
+  }
+
+  if (data.execution === undefined) errors.add("/execution", "is required");
+  else if (checkObject(errors, data.execution, "/execution")) {
+    checkKnownKeys(errors, data.execution, new Set(["mode", "max_parallel", "isolation", "web_access"]), "/execution");
+    if (!EXECUTION_MODES.includes(data.execution.mode)) errors.add("/execution/mode", `must be one of: ${EXECUTION_MODES.join(", ")}`);
+    else normalized.execution.mode = data.execution.mode;
+    if (!ISOLATION_MODES.includes(data.execution.isolation)) errors.add("/execution/isolation", `must be one of: ${ISOLATION_MODES.join(", ")}`);
+    else normalized.execution.isolation = data.execution.isolation;
+    if (data.execution.max_parallel === undefined) normalized.execution.max_parallel = normalized.execution.mode === "orchestrated" ? 3 : 1;
+    else if (!Number.isInteger(data.execution.max_parallel) || data.execution.max_parallel < 1 || data.execution.max_parallel > MAX_PARALLEL) {
+      errors.add("/execution/max_parallel", `must be an integer between 1 and ${MAX_PARALLEL}`);
+    } else normalized.execution.max_parallel = data.execution.max_parallel;
+    if (data.execution.web_access !== undefined) {
+      if (!WEB_ACCESS_MODES.has(data.execution.web_access)) errors.add("/execution/web_access", `must be one of: ${[...WEB_ACCESS_MODES].join(", ")}`);
+      else normalized.execution.web_access = data.execution.web_access;
+    }
+  }
+
+  if (data.development !== undefined && checkObject(errors, data.development, "/development")) {
+    checkKnownKeys(errors, data.development, new Set(["runtime_versions"]), "/development");
+    if (data.development.runtime_versions !== undefined && checkObject(errors, data.development.runtime_versions, "/development/runtime_versions")) {
+      for (const [runtime, version] of Object.entries(data.development.runtime_versions)) {
+        const path = `/development/runtime_versions/${runtime}`;
+        if (!RUNTIMES.has(runtime)) { errors.add(path, `is not a supported runtime; expected one of: ${[...RUNTIMES].join(", ")}`); continue; }
+        if (typeof version !== "string" || !/^\d+(?:\.\d+){0,2}$/.test(version)) { errors.add(path, "must be a numeric version such as 8 or 8.0.408"); continue; }
+        normalized.development.runtime_versions[runtime] = version;
+      }
+    }
+  }
+
+  if (data.components === undefined) errors.add("/components", "is required");
+  else validateComponents(errors, data.components, normalized);
+
+  if (data.providers !== undefined) validateProviders(errors, data.providers, normalized);
+
+  if (data.conventions !== undefined && checkObject(errors, data.conventions, "/conventions")) {
+    for (const [key, value] of Object.entries(data.conventions)) {
+      const path = `/conventions/${key}`;
+      if (!/^[a-z][a-z0-9_]*$/.test(key)) { errors.add(path, "must be a snake_case convention name"); continue; }
+      if (checkSingleLine(errors, value, path)) normalized.conventions[key] = value;
+    }
+  }
+
+  return errors.valid ? { valid: true, errors: [], data: normalized } : { valid: false, errors: errors.items };
+}
+
+export async function loadProjectConfig({ project_root, path = "adw.yaml" }) {
+  if (typeof project_root !== "string" || typeof path !== "string") throw new InputError("load-project requires project_root and path");
   const target = await resolveProjectPath(project_root, path);
   let stat;
   try { stat = await lstat(target); }
-  catch (error) { if (error.code === "ENOENT") throw new PathError(`artifact does not exist: ${path}`); throw error; }
-  if (stat.isSymbolicLink() || !stat.isFile()) throw new PathError(`artifact must be a regular non-symlink file: ${path}`);
+  catch (error) { if (error.code === "ENOENT") throw new PathError(`project configuration does not exist: ${path}`); throw error; }
+  if (stat.isSymbolicLink() || !stat.isFile()) throw new PathError(`project configuration must be a regular non-symlink file: ${path}`);
   const bytes = await readFile(target);
-  const data = parseYaml(bytes, path);
-  const validation = await validateArtifact(artifact, data);
-  return { data, validation, digest: contentDigest(bytes) };
+  const raw = parseYaml(bytes, path);
+  const validation = validateProjectConfig(raw);
+  return { data: validation.data ?? raw, validation: { valid: validation.valid, errors: validation.errors }, digest: computeDigest(bytes) };
 }
 
-export async function loadArtifactSchema(artifact, version) {
-  const versions = ARTIFACT_SCHEMAS[artifact];
-  if (!versions) throw new InputError(`unknown artifact ${JSON.stringify(artifact)}; expected ${Object.keys(ARTIFACT_SCHEMAS).join(", ")}`);
-  const url = versions[version];
-  if (!url) throw new InputError(`unsupported ${artifact} schema ${JSON.stringify(version)}; expected ${Object.keys(versions).join(", ")}`);
-  const key = `${artifact}:${version}`;
-  if (!schemaCache.has(key)) schemaCache.set(key, JSON.parse(await readFile(url, "utf8")));
-  return schemaCache.get(key);
+// ---------------------------------------------------------------------------
+// Plan approval: exact plan bytes bound to a docs commit
+// ---------------------------------------------------------------------------
+
+function approvalDigest(planDigest) {
+  return createHash("sha256").update(APPROVAL_DOMAIN).update(planDigest, "utf8").digest("hex");
 }
 
-export async function validateArtifact(artifact, data) {
-  if (!data || !Number.isInteger(data.schema)) return { valid: false, errors: [{ path: "/schema", keyword: "required", message: "must be an integer artifact schema version" }] };
-  let schema;
-  try { schema = await loadArtifactSchema(artifact, data.schema); }
-  catch (error) { return { valid: false, errors: [{ path: "/schema", keyword: "version", message: error.message }] }; }
-  const result = validateJsonSchema(schema, data);
-  if (artifact === "plan" && Array.isArray(data?.tasks)) {
-    data.tasks.forEach((task, index) => { if (task?.id !== index + 1) result.errors.push({ path: `/tasks/${index}/id`, keyword: "sequence", message: `must be ${index + 1} so tasks execute sequentially` }); });
-    if (data.documentation?.impact !== "none" && Array.isArray(data.documentation?.files) && data.documentation.files.length === 0) result.errors.push({ path: "/documentation/files", keyword: "documentation", message: "must list files when documentation impact is update or new" });
-    if (data.documentation?.impact === "none" && Array.isArray(data.documentation?.files) && data.documentation.files.length !== 0) result.errors.push({ path: "/documentation/files", keyword: "documentation", message: "must be empty when documentation impact is none" });
-    const components = data.effective_policy?.components ?? [];
-    if (new Set(components).size !== components.length) result.errors.push({ path: "/effective_policy/components", keyword: "unique", message: "components must be unique" });
-    const unownedPaths = data.effective_policy?.unowned_paths ?? [];
-    if (new Set(unownedPaths).size !== unownedPaths.length) result.errors.push({ path: "/effective_policy/unowned_paths", keyword: "unique", message: "unowned paths must be unique" });
-    const tracker = data.effective_policy?.work_tracker;
-    if (tracker && ((tracker.profile === undefined) !== (tracker.profile_digest === undefined))) result.errors.push({ path: "/effective_policy/work_tracker", keyword: "profile", message: "profile and profile_digest must appear together" });
-    if (tracker && ((tracker.child_profile === undefined) !== (tracker.child_profile_digest === undefined))) result.errors.push({ path: "/effective_policy/work_tracker", keyword: "profile", message: "child_profile and child_profile_digest must appear together" });
-    result.valid = result.errors.length === 0;
+export function validatePlanApproval(approval) {
+  const errors = new Errors();
+  if (!checkObject(errors, approval, "/")) return { valid: false, errors: errors.items };
+  checkKnownKeys(errors, approval, new Set(["version", "change_id", "plan_path", "plan_digest", "plan_commit", "approved_by", "approved_at", "status", "superseded_at", "superseded_reason"]), "");
+  if (approval.version !== 1) errors.add("/version", "must equal 1");
+  if (typeof approval.change_id !== "string" || !CHANGE_ID.test(approval.change_id)) errors.add("/change_id", "must be a safe change id");
+  if (checkRelativePath(errors, approval.plan_path, "/plan_path") && approval.plan_path !== `changes/${approval.change_id}/plan.md`) {
+    errors.add("/plan_path", "must be changes/<change-id>/plan.md");
   }
-  if (result.valid && artifact === "validation") {
-    const shouldFail = data.commands.some((item) => item.required && item.exit_code !== 0) || data.deferred.some((item) => item.required);
-    if ((data.status === "failed") !== shouldFail) result.errors.push({ path: "/status", keyword: "evidence", message: `must be ${shouldFail ? "failed" : "passed"} based on required command results and deferrals` });
-    result.valid = result.errors.length === 0;
+  if (typeof approval.plan_digest !== "string" || !SHA256.test(approval.plan_digest)) errors.add("/plan_digest", "must be a sha256 hex digest of the exact plan bytes");
+  if (typeof approval.plan_commit !== "string" || !COMMIT.test(approval.plan_commit)) errors.add("/plan_commit", "must be a 40-hex docs commit");
+  checkSingleLine(errors, approval.approved_by, "/approved_by", 200);
+  checkIsoTimestamp(errors, approval.approved_at, "/approved_at");
+  if (approval.status !== "active" && approval.status !== "superseded") errors.add("/status", "must be active or superseded");
+  if (approval.status === "active" && (approval.superseded_at !== undefined || approval.superseded_reason !== undefined)) {
+    errors.add("/status", "active approvals must not carry supersession fields");
   }
-  if (result.valid && artifact === "approval") {
-    const invalidationFields = [data.invalidated_at, data.invalidation_reason, data.replaced_by].filter((value) => value !== undefined);
-    if (data.status === "active" && invalidationFields.length !== 0) result.errors.push({ path: "/status", keyword: "lifecycle", message: "active approvals cannot contain invalidation fields" });
-    if (data.status === "superseded" && (!data.invalidated_at || !data.invalidation_reason)) result.errors.push({ path: "/status", keyword: "lifecycle", message: "superseded approvals require invalidated_at and invalidation_reason" });
-    const expectedPaths = ["spec.md", "plan.yaml", "integrations.yaml"];
-    const paths = data.inputs.map(({ path }) => path);
-    if (paths.some((path, index) => path !== expectedPaths[index])) result.errors.push({ path: "/inputs", keyword: "order", message: "must contain spec.md, plan.yaml, and optional integrations.yaml in canonical order" });
-    if (new Set(paths).size !== paths.length) result.errors.push({ path: "/inputs", keyword: "unique", message: "must not contain duplicate paths" });
-    result.valid = result.errors.length === 0;
+  if (approval.status === "superseded") {
+    checkIsoTimestamp(errors, approval.superseded_at, "/superseded_at");
+    checkSingleLine(errors, approval.superseded_reason, "/superseded_reason", 1000);
   }
-  if (result.valid && artifact === "project") {
-    const forbidden = /(?:password|passwd|token|api[_-]?key|secret|credential)/i;
-    for (const [capability, integration] of Object.entries(data.integrations ?? {})) {
-      for (const key of Object.keys(integration.settings ?? {})) {
-        if (forbidden.test(key)) result.errors.push({ path: `/integrations/${capability}/settings/${key}`, keyword: "secret", message: "credential-like settings are forbidden; keep credentials in the provider or client credential store" });
-      }
-    }
-    result.valid = result.errors.length === 0;
-  }
-  if (result.valid && artifact === "project") {
-    if (data.execution.isolation === "managed-devcontainer" && data.execution.enforcement !== "required") {
-      result.errors.push({ path: "/execution/enforcement", keyword: "security", message: "managed-devcontainer isolation must be required" });
-    }
-    if (data.workflows?.work_tracker) {
-      const tracker = data.workflows.work_tracker;
-      if (!data.integrations?.work_tracker || data.integrations.work_tracker.requirement === "disabled") result.errors.push({ path: "/workflows/work_tracker", keyword: "capability", message: "requires an enabled integrations.work_tracker capability" });
-      if (tracker.binding === "required" && data.integrations?.work_tracker?.requirement !== "required") result.errors.push({ path: "/workflows/work_tracker/binding", keyword: "capability", message: "required binding requires integrations.work_tracker.requirement to be required" });
-      if (tracker.ensure === "create-or-link" && data.integrations?.work_tracker?.access !== "read-write") result.errors.push({ path: "/workflows/work_tracker/ensure", keyword: "access", message: "create-or-link requires read-write work_tracker access" });
-      if (tracker.ensure === "create-or-link" && !tracker.profile) result.errors.push({ path: "/workflows/work_tracker/profile", keyword: "required", message: "is required when ensure is create-or-link" });
-      if (tracker.cardinality === "one-parent-plus-plan-tasks" && !tracker.child_profile) result.errors.push({ path: "/workflows/work_tracker/child_profile", keyword: "required", message: "is required for one-parent-plus-plan-tasks" });
-    }
-    result.valid = result.errors.length === 0;
-  }
-  if (result.valid && artifact === "integration") {
-    const names = data.bindings.map(({ name }) => name);
-    if (new Set(names).size !== names.length) result.errors.push({ path: "/bindings", keyword: "unique", message: "binding names must be unique" });
-    for (const [index, binding] of data.bindings.entries()) {
-      const hasDigest = binding.requirements_digest !== undefined;
-      const hasFields = binding.requirement_fields !== undefined;
-      if (hasDigest !== hasFields) result.errors.push({ path: `/bindings/${index}`, keyword: "requirements", message: "requirements_digest and requirement_fields must appear together" });
-    }
-    result.valid = result.errors.length === 0;
-  }
-  if (result.valid && artifact === "external-action") {
-    if (data.effect === "write" && (!data.authorized_by || !data.authorization_digest)) result.errors.push({ path: "/authorized_by", keyword: "authorization", message: "write actions require explicit authorization evidence" });
-    if (data.status === "succeeded" && data.verified !== true) result.errors.push({ path: "/verified", keyword: "readback", message: "successful actions require verified readback" });
-    if (data.status === "succeeded" && !data.readback_digest) result.errors.push({ path: "/readback_digest", keyword: "readback", message: "successful actions require a readback digest" });
-    result.valid = result.errors.length === 0;
-  }
-  if (result.valid && artifact === "incident-report") {
-    const evidenceIds = data.evidence.map(({ id }) => id);
-    const knownEvidenceIds = new Set(evidenceIds);
-    if (knownEvidenceIds.size !== evidenceIds.length) result.errors.push({ path: "/evidence", keyword: "unique", message: "evidence ids must be unique" });
-    if (Date.parse(data.source.window.from) > Date.parse(data.source.window.to)) result.errors.push({ path: "/source/window", keyword: "order", message: "from must not be later than to" });
-    if (data.repository.deployed_revision_verified && data.repository.inspected_revision === null) result.errors.push({ path: "/repository/inspected_revision", keyword: "deployment", message: "a verified deployed revision must identify the inspected commit" });
-    for (const [index, item] of data.timeline.entries()) {
-      if (item.evidence_ref && !knownEvidenceIds.has(item.evidence_ref)) result.errors.push({ path: `/timeline/${index}/evidence_ref`, keyword: "reference", message: "must reference an evidence id in this report" });
-    }
-    for (const [index, hypothesis] of data.hypotheses.entries()) {
-      for (const [referenceIndex, reference] of hypothesis.evidence_refs.entries()) {
-        if (!knownEvidenceIds.has(reference)) result.errors.push({ path: `/hypotheses/${index}/evidence_refs/${referenceIndex}`, keyword: "reference", message: "must reference an evidence id in this report" });
-      }
-    }
-    if (data.proposed_fix.needed === "no" && data.proposed_fix.route !== "none") result.errors.push({ path: "/proposed_fix/route", keyword: "routing", message: "must be none when no code fix is needed" });
-    if (data.proposed_fix.needed === "yes" && data.proposed_fix.route === "none") result.errors.push({ path: "/proposed_fix/route", keyword: "routing", message: "must select adw:quick or adw:plan when a code fix is needed" });
-    result.valid = result.errors.length === 0;
-  }
-  if (result.valid && artifact === "work-item-profile") {
-    for (const key of ["required_fields", "allowed_fields", "requirement_fields"]) {
-      const values = data[key] ?? [];
-      if (new Set(values).size !== values.length) result.errors.push({ path: `/${key}`, keyword: "unique", message: `${key} must be unique` });
-    }
-    const declared = new Set([...(data.required_fields ?? []), ...(data.allowed_fields ?? []), ...Object.keys(data.defaults ?? {})]);
-    for (const field of data.requirement_fields ?? []) if (!declared.has(field)) result.errors.push({ path: "/requirement_fields", keyword: "declared", message: `requirement field is not declared by the profile: ${field}` });
-    const forbidden = /(?:password|passwd|token|api[_-]?key|secret|credential)/i;
-    for (const field of declared) if (forbidden.test(field)) result.errors.push({ path: "/required_fields", keyword: "secret", message: `credential-like work-item field is forbidden: ${field}` });
-    result.valid = result.errors.length === 0;
-  }
-  return result;
+  return { valid: errors.valid, errors: errors.items };
 }
+
+export function createPlanApproval({ change_id, plan_path, plan_digest, plan_commit, approved_by, approved_at }) {
+  const approval = {
+    version: 1,
+    change_id,
+    plan_path: plan_path ?? `changes/${change_id}/plan.md`,
+    plan_digest,
+    plan_commit,
+    approved_by,
+    approved_at,
+    status: "active",
+  };
+  const validation = validatePlanApproval(approval);
+  if (!validation.valid) throw new InputError(`approval is invalid: ${validation.errors.map(({ path, message }) => `${path} ${message}`).join("; ")}`);
+  return approval;
+}
+
+export function supersedePlanApproval(approval, { reason, superseded_at }) {
+  const current = validatePlanApproval(approval);
+  if (!current.valid) throw new InputError("cannot supersede an invalid approval");
+  if (approval.status !== "active") throw new InputError("only an active approval can be superseded");
+  if (typeof reason !== "string" || reason.trim().length === 0) throw new InputError("supersession requires a specific human-provided reason");
+  const superseded = { ...approval, status: "superseded", superseded_at, superseded_reason: reason };
+  const validation = validatePlanApproval(superseded);
+  if (!validation.valid) throw new InputError(`superseded approval is invalid: ${validation.errors.map(({ path, message }) => `${path} ${message}`).join("; ")}`);
+  return superseded;
+}
+
+// `plan_bytes` (exact file content) or a precomputed `plan_digest` proves the
+// plan; `plan_commit` proves the docs commit that contained those exact bytes.
+export function verifyPlanApproval({ approval, plan_bytes, plan_digest, plan_commit, change_id, plan_path }) {
+  const validation = validatePlanApproval(approval);
+  if (!validation.valid) return { verified: false, reason: "approval record is invalid", errors: validation.errors };
+  if (approval.status !== "active") return { verified: false, reason: "approval has been superseded", errors: [] };
+  const currentDigest = plan_bytes !== undefined ? computeDigest(plan_bytes) : plan_digest;
+  if (typeof currentDigest !== "string" || !SHA256.test(currentDigest)) return { verified: false, reason: "current plan digest is missing or malformed", errors: [] };
+  if (!timingSafeEqual(Buffer.from(approvalDigest(currentDigest), "hex"), Buffer.from(approvalDigest(approval.plan_digest), "hex"))) {
+    return { verified: false, reason: "plan bytes changed after approval; run adw:amend and reapprove", errors: [] };
+  }
+  if (change_id !== undefined && change_id !== approval.change_id) return { verified: false, reason: "approval belongs to a different change", errors: [] };
+  if (plan_path !== undefined && plan_path !== approval.plan_path) return { verified: false, reason: "approval binds a different plan path", errors: [] };
+  if (plan_commit !== undefined && plan_commit !== approval.plan_commit) return { verified: false, reason: "approval is bound to a different docs commit", errors: [] };
+  return { verified: true, reason: "approval matches the exact plan bytes and docs commit", errors: [] };
+}
+
+// ---------------------------------------------------------------------------
+// Phase run records: machine-generated execution state
+// ---------------------------------------------------------------------------
+
+const GROUP_KEYS = new Set(["branch", "worktree", "tasks", "affected_paths", "tracker", "pull_request", "implementation_commit", "review", "validation", "status"]);
+const REVIEW_STATUSES = new Set(["pending", "passed", "failed"]);
+const VALIDATION_STATUSES = new Set(["pending", "passed", "failed"]);
+const GROUP_PROGRESS = new Map(GROUP_STATUSES.map((status, index) => [status, index]));
+
+function validateCommandEvidence(errors, item, path) {
+  if (!checkObject(errors, item, path)) return;
+  checkKnownKeys(errors, item, new Set(["command", "cwd", "exit_code", "signal", "timed_out", "duration_ms", "summary", "required"]), path);
+  checkNonEmptyString(errors, item.command, `${path}/command`);
+  if (item.cwd !== undefined) checkRelativePath(errors, item.cwd, `${path}/cwd`);
+  if (!(item.exit_code === null || Number.isInteger(item.exit_code))) errors.add(`${path}/exit_code`, "must be an integer or null");
+  if (!(item.signal === null || typeof item.signal === "string")) errors.add(`${path}/signal`, "must be a string or null");
+  if (typeof item.timed_out !== "boolean") errors.add(`${path}/timed_out`, "must be a boolean");
+  if (item.required !== undefined && typeof item.required !== "boolean") errors.add(`${path}/required`, "must be a boolean");
+  if (item.summary !== undefined && typeof item.summary !== "string") errors.add(`${path}/summary`, "must be a string");
+}
+
+function commandFailed(item) {
+  return item.required !== false && (item.exit_code !== 0 || item.signal !== null || item.timed_out === true);
+}
+
+function validateGroupRecord(errors, group, path) {
+  if (!checkObject(errors, group, path)) return;
+  checkKnownKeys(errors, group, GROUP_KEYS, path);
+  checkBranchName(errors, group.branch, `${path}/branch`);
+  checkRelativePath(errors, group.worktree, `${path}/worktree`);
+  if (!Array.isArray(group.tasks)) errors.add(`${path}/tasks`, "must be an array of interpreted directives");
+  else group.tasks.forEach((task, index) => checkNonEmptyString(errors, task, `${path}/tasks/${index}`));
+  if (!Array.isArray(group.affected_paths)) errors.add(`${path}/affected_paths`, "must be an array of project-relative paths");
+  else group.affected_paths.forEach((item, index) => checkRelativePath(errors, item, `${path}/affected_paths/${index}`));
+  if (group.tracker !== null && group.tracker !== undefined) {
+    if (checkObject(errors, group.tracker, `${path}/tracker`)) {
+      checkKnownKeys(errors, group.tracker, new Set(["provider", "operation", "external_id", "url", "status"]), `${path}/tracker`);
+      checkSingleLine(errors, group.tracker.provider, `${path}/tracker/provider`, 100);
+      checkNoSecretLikeKeys(errors, group.tracker, `${path}/tracker`);
+    }
+  }
+  if (group.pull_request !== null && group.pull_request !== undefined) {
+    if (checkObject(errors, group.pull_request, `${path}/pull_request`)) {
+      checkKnownKeys(errors, group.pull_request, new Set(["provider", "url", "number", "state"]), `${path}/pull_request`);
+      checkSingleLine(errors, group.pull_request.provider, `${path}/pull_request/provider`, 100);
+      checkNoSecretLikeKeys(errors, group.pull_request, `${path}/pull_request`);
+    }
+  }
+  if (!(group.implementation_commit === null || (typeof group.implementation_commit === "string" && COMMIT.test(group.implementation_commit)))) {
+    errors.add(`${path}/implementation_commit`, "must be a 40-hex commit or null");
+  }
+  if (checkObject(errors, group.review, `${path}/review`)) {
+    checkKnownKeys(errors, group.review, new Set(["status", "high_findings"]), `${path}/review`);
+    if (!REVIEW_STATUSES.has(group.review.status)) errors.add(`${path}/review/status`, `must be one of: ${[...REVIEW_STATUSES].join(", ")}`);
+    if (!Array.isArray(group.review.high_findings)) errors.add(`${path}/review/high_findings`, "must be an array");
+    else group.review.high_findings.forEach((item, index) => checkNonEmptyString(errors, item, `${path}/review/high_findings/${index}`));
+  }
+  if (checkObject(errors, group.validation, `${path}/validation`)) {
+    checkKnownKeys(errors, group.validation, new Set(["status", "commands", "deferred", "recorded_at"]), `${path}/validation`);
+    if (!VALIDATION_STATUSES.has(group.validation.status)) errors.add(`${path}/validation/status`, `must be one of: ${[...VALIDATION_STATUSES].join(", ")}`);
+    if (!Array.isArray(group.validation.commands)) errors.add(`${path}/validation/commands`, "must be an array");
+    else group.validation.commands.forEach((item, index) => validateCommandEvidence(errors, item, `${path}/validation/commands/${index}`));
+    const deferred = group.validation.deferred ?? [];
+    if (!Array.isArray(deferred)) errors.add(`${path}/validation/deferred`, "must be an array");
+    // A passing validation may never contain a required failure, signal,
+    // timeout, or deferral. This is the truthful-evidence invariant.
+    if (group.validation.status === "passed") {
+      if (Array.isArray(group.validation.commands) && group.validation.commands.some(commandFailed)) {
+        errors.add(`${path}/validation/status`, "cannot be passed while a required command failed, was signaled, or timed out");
+      }
+      if (Array.isArray(deferred) && deferred.some((item) => item?.required !== false)) {
+        errors.add(`${path}/validation/status`, "cannot be passed while a required check is deferred");
+      }
+    }
+  }
+  if (!GROUP_PROGRESS.has(group.status)) errors.add(`${path}/status`, `must be one of: ${GROUP_STATUSES.join(", ")}`);
+  if (group.status === "passed") {
+    if (group.review?.status !== "passed") errors.add(`${path}/status`, "cannot be passed before independent review passes");
+    if (group.validation?.status !== "passed") errors.add(`${path}/status`, "cannot be passed before validation passes");
+  }
+}
+
+export function validateRunRecord(record) {
+  const errors = new Errors();
+  if (!checkObject(errors, record, "/")) return { valid: false, errors: errors.items };
+  checkKnownKeys(errors, record, new Set(["version", "change_id", "phase_id", "plan_digest", "base_branch", "base_commit", "started_at", "completed_at", "status", "groups"]), "");
+  if (record.version !== 1) errors.add("/version", "must equal 1");
+  if (typeof record.change_id !== "string" || !CHANGE_ID.test(record.change_id)) errors.add("/change_id", "must be a safe change id");
+  if (typeof record.phase_id !== "string" || !IDENTIFIER.test(record.phase_id)) errors.add("/phase_id", "must be a safe phase id");
+  if (typeof record.plan_digest !== "string" || !SHA256.test(record.plan_digest)) errors.add("/plan_digest", "must be the sha256 digest of the approved plan bytes");
+  checkBranchName(errors, record.base_branch, "/base_branch");
+  if (typeof record.base_commit !== "string" || !COMMIT.test(record.base_commit)) errors.add("/base_commit", "must be a 40-hex commit");
+  checkIsoTimestamp(errors, record.started_at, "/started_at");
+  if (!PHASE_STATUSES.includes(record.status)) errors.add("/status", `must be one of: ${PHASE_STATUSES.join(", ")}`);
+  if (record.status === "running") {
+    if (record.completed_at !== null) errors.add("/completed_at", "must be null while the phase is running");
+  } else checkIsoTimestamp(errors, record.completed_at, "/completed_at");
+
+  if (!checkObject(errors, record.groups, "/groups")) return { valid: errors.valid, errors: errors.items };
+  const groupIds = Object.keys(record.groups);
+  if (groupIds.length === 0) errors.add("/groups", "must contain at least one group");
+  const branches = new Set();
+  const worktrees = new Set();
+  for (const [id, group] of Object.entries(record.groups)) {
+    const path = `/groups/${id}`;
+    if (!IDENTIFIER.test(id)) { errors.add(path, "group id must be lowercase alphanumeric with `-` or `_` separators"); continue; }
+    validateGroupRecord(errors, group, path);
+    if (typeof group?.branch === "string") {
+      if (branches.has(group.branch)) errors.add(`${path}/branch`, "duplicates another group's branch");
+      branches.add(group.branch);
+    }
+    if (typeof group?.worktree === "string") {
+      const normalizedWorktree = normalizeRelativePath(group.worktree);
+      if (worktrees.has(normalizedWorktree)) errors.add(`${path}/worktree`, "duplicates another group's worktree");
+      worktrees.add(normalizedWorktree);
+    }
+  }
+  if (record.status === "passed" && Object.values(record.groups).some((group) => group?.status !== "passed")) {
+    errors.add("/status", "cannot be passed while a group has not passed");
+  }
+  return { valid: errors.valid, errors: errors.items };
+}
+
+export function createRunRecord({ change_id, phase_id, plan_digest, base_branch, base_commit, started_at, groups }) {
+  if (!Array.isArray(groups) || groups.length === 0) throw new InputError("a phase run record requires at least one group");
+  const record = {
+    version: 1,
+    change_id,
+    phase_id,
+    plan_digest,
+    base_branch,
+    base_commit,
+    started_at,
+    completed_at: null,
+    status: "running",
+    groups: {},
+  };
+  for (const group of groups) {
+    if (!isObject(group) || typeof group.group_id !== "string") throw new InputError("each group requires a group_id");
+    if (Object.hasOwn(record.groups, group.group_id)) throw new InputError(`duplicate group id: ${group.group_id}`);
+    record.groups[group.group_id] = {
+      branch: group.branch ?? `adw/${change_id}/${group.group_id}`,
+      worktree: group.worktree ?? `worktrees/${change_id}/${group.group_id}`,
+      tasks: [...(group.tasks ?? [])],
+      affected_paths: [...(group.affected_paths ?? [])],
+      tracker: group.tracker ?? null,
+      pull_request: group.pull_request ?? null,
+      implementation_commit: null,
+      review: { status: "pending", high_findings: [] },
+      validation: { status: "pending", commands: [] },
+      status: "prepared",
+    };
+  }
+  const validation = validateRunRecord(record);
+  if (!validation.valid) throw new InputError(`run record is invalid: ${validation.errors.map(({ path, message }) => `${path} ${message}`).join("; ")}`);
+  return record;
+}
+
+// Group status may only move forward through the pipeline, or terminate in
+// `failed`/`blocked`. Phases may only move out of `running`.
+function assertGroupTransition(id, from, to) {
+  if (from === to) return;
+  if (to === "failed" || to === "blocked") return;
+  if (from === "failed" || from === "blocked") throw new InputError(`group ${id} cannot leave the terminal status ${from}`);
+  if (from === "passed") throw new InputError(`group ${id} cannot leave the terminal status passed`);
+  if (GROUP_PROGRESS.get(to) <= GROUP_PROGRESS.get(from)) throw new InputError(`group ${id} cannot move backwards from ${from} to ${to}`);
+}
+
+export function updateRunRecord(record, update) {
+  const current = validateRunRecord(record);
+  if (!current.valid) throw new InputError(`cannot update an invalid run record: ${current.errors.map(({ path, message }) => `${path} ${message}`).join("; ")}`);
+  if (!isObject(update)) throw new InputError("run-record update must be an object");
+  const next = structuredClone(record);
+  if (update.status !== undefined) {
+    if (record.status !== "running" && update.status !== record.status) throw new InputError(`phase ${record.phase_id} cannot leave the terminal status ${record.status}`);
+    next.status = update.status;
+  }
+  if (update.completed_at !== undefined) next.completed_at = update.completed_at;
+  if (next.status !== "running" && next.completed_at === null) throw new InputError("a finished phase requires completed_at");
+  for (const [id, patch] of Object.entries(update.groups ?? {})) {
+    const group = next.groups[id];
+    if (!group) throw new InputError(`unknown group: ${id}`);
+    if (!isObject(patch)) throw new InputError(`group ${id} update must be an object`);
+    for (const key of Object.keys(patch)) if (!GROUP_KEYS.has(key)) throw new InputError(`group ${id} update contains an unsupported field: ${key}`);
+    if (patch.branch !== undefined && patch.branch !== group.branch) throw new InputError(`group ${id} branch is immutable once prepared`);
+    if (patch.worktree !== undefined && patch.worktree !== group.worktree) throw new InputError(`group ${id} worktree is immutable once prepared`);
+    if (patch.status !== undefined) {
+      if (!GROUP_PROGRESS.has(patch.status)) throw new InputError(`group ${id} status is not a known status: ${patch.status}`);
+      assertGroupTransition(id, group.status, patch.status);
+    }
+    Object.assign(group, patch);
+  }
+  const validation = validateRunRecord(next);
+  if (!validation.valid) throw new InputError(`run record update is invalid: ${validation.errors.map(({ path, message }) => `${path} ${message}`).join("; ")}`);
+  return next;
+}
+
+// ---------------------------------------------------------------------------
+// Validation evidence
+// ---------------------------------------------------------------------------
 
 function redactAndBound(text) {
   return String(text ?? "")
@@ -240,176 +611,41 @@ function redactAndBound(text) {
     .slice(-4000);
 }
 
-export function recordValidation({ change_id, plugin_version, code_commit, docs_commit, recorded_at, commands = [], deferred = [] }) {
-  const normalized = commands.map((item) => ({ command: item.command, cwd: item.cwd, exit_code: item.exit_code, signal: item.signal ?? null, timed_out: item.timed_out === true, duration_ms: item.duration_ms, summary: redactAndBound(item.summary), required: item.required !== false }));
+export function recordValidation({ recorded_at, commands = [], deferred = [] }) {
+  const normalized = commands.map((item) => ({
+    command: item.command,
+    cwd: item.cwd,
+    exit_code: item.exit_code ?? null,
+    signal: item.signal ?? null,
+    timed_out: item.timed_out === true,
+    duration_ms: item.duration_ms,
+    summary: redactAndBound(item.summary),
+    required: item.required !== false,
+  }));
   const normalizedDeferred = deferred.map((item) => ({ command: item.command, reason: item.reason, required: item.required !== false }));
-  const failed = normalized.some((item) => item.required && item.exit_code !== 0) || normalizedDeferred.some((item) => item.required);
-  return { schema: 1, change_id, plugin_version, code_commit, docs_commit, recorded_at, status: failed ? "failed" : "passed", commands: normalized, deferred: normalizedDeferred };
+  const failed = normalized.some(commandFailed) || normalizedDeferred.some((item) => item.required);
+  return { recorded_at, status: failed ? "failed" : "passed", commands: normalized, deferred: normalizedDeferred };
 }
 
-function jsonDigest(value) {
-  return createHash("sha256").update(JSON.stringify(value ?? null)).digest("hex");
-}
-
-function canonicalJson(value) {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
-  if (typeof value === "number" && Number.isFinite(value)) return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value && typeof value === "object") {
-    const entries = Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`);
-    return `{${entries.join(",")}}`;
-  }
-  throw new InputError("requirements fields must contain only JSON-compatible values");
-}
-
-export function computePolicyDigest(policy) {
-  return createHash("sha256").update("ADW-EFFECTIVE-POLICY-V1\0").update(canonicalJson(policy)).digest("hex");
-}
-
-function safePolicyPath(path, label) {
-  if (typeof path !== "string" || path.length === 0 || path.startsWith("/") || path.includes("\0") || path.split("/").includes("..")) throw new InputError(`${label} must be a safe project-relative path`);
-  return path.replace(/^\.\//, "").replace(/\/$/, "") || ".";
-}
-
-function componentMatches(componentPath, affectedPath) {
-  return componentPath === "." || affectedPath === componentPath || affectedPath.startsWith(`${componentPath}/`);
-}
-
-function resolvedValidation(item, sourcePath, defaultCwd = ".") {
-  const command = typeof item === "string" ? item : item.command;
-  if (typeof command !== "string" || command.length === 0 || /^\s*<[^>]+>\s*$/.test(command)) throw new InputError(`validation command from ${sourcePath} is unresolved or invalid`);
-  if (typeof item === "string") return { command, cwd: defaultCwd, timeout_ms: 120000, required: true, source: sourcePath };
-  return { command, cwd: item.cwd ?? defaultCwd, timeout_ms: item.timeout_ms ?? 120000, required: item.required !== false, source: item.source };
-}
-
-export function validateWorkItemPayload(profile, payload) {
-  const errors = [];
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return { valid: false, errors: ["payload must be an object"] };
-  if (payload.provider !== profile.provider) errors.push(`payload provider must be ${profile.provider}`);
-  if (payload.object_type !== profile.object_type) errors.push(`payload object_type must be ${profile.object_type}`);
-  if (!payload.fields || typeof payload.fields !== "object" || Array.isArray(payload.fields)) errors.push("payload fields must be an object");
-  if (errors.length) return { valid: false, errors };
-  const fields = { ...(profile.defaults ?? {}), ...payload.fields };
-  const forbidden = /(?:password|passwd|token|api[_-]?key|secret|credential)/i;
-  for (const field of profile.required_fields ?? []) if (!(field in fields)) errors.push(`required field is missing: ${field}`);
-  const allowed = new Set([...(profile.required_fields ?? []), ...(profile.allowed_fields ?? []), ...Object.keys(profile.defaults ?? {})]);
-  for (const field of Object.keys(fields)) if (!allowed.has(field)) errors.push(`field is not allowed by profile: ${field}`);
-  for (const field of Object.keys(fields)) if (forbidden.test(field)) errors.push(`credential-like field is forbidden: ${field}`);
-  for (const [field, value] of Object.entries(fields)) if (!(typeof value === "string" || typeof value === "number" || typeof value === "boolean" || (Array.isArray(value) && value.every((item) => typeof item === "string")))) errors.push(`field value must be a scalar or string array: ${field}`);
-  return errors.length ? { valid: false, errors } : { valid: true, errors: [], normalized: { provider: profile.provider, object_type: profile.object_type, fields } };
-}
-
-export function resolveProjectPolicy({ project, affected_paths, profiles = {} }) {
-  if (!project || project.schema !== 5) throw new InputError("effective policy resolution requires project schema 5");
-  if (!Array.isArray(affected_paths) || affected_paths.length === 0) throw new InputError("affected_paths must be a non-empty array");
-  const paths = [...new Set(affected_paths.map((path) => safePolicyPath(path, "affected path")))];
-  const components = Object.entries(project.components ?? {}).map(([name, value]) => ({ name, ...value, path: safePolicyPath(value.path, `component ${name} path`) }));
-  const selected = new Set();
-  const unownedPaths = [];
-  for (const path of paths) {
-    const candidates = components.filter((component) => componentMatches(component.path, path));
-    if (candidates.length === 0) { unownedPaths.push(path); continue; }
-    const longest = Math.max(...candidates.map((component) => component.path === "." ? 0 : component.path.length));
-    const owners = candidates.filter((component) => (component.path === "." ? 0 : component.path.length) === longest);
-    if (owners.length !== 1) throw new InputError(`affected path ${path} has ambiguous component ownership: ${owners.map(({ name }) => name).sort().join(", ")}`);
-    selected.add(owners[0].name);
-  }
-  const validations = [];
-  for (const [index, item] of (project.validation?.default ?? []).entries()) validations.push(resolvedValidation(item, `adw.yaml#validation.default[${index}]`));
-  for (const name of [...selected].sort()) {
-    const component = project.components[name];
-    for (const [index, item] of (component.validation?.default ?? []).entries()) validations.push(resolvedValidation(item, `adw.yaml#components.${name}.validation.default[${index}]`, component.path));
-  }
-  const deduplicated = new Map();
-  for (const item of validations) {
-    const key = `${item.cwd}\0${item.command}`;
-    const previous = deduplicated.get(key);
-    if (!previous) deduplicated.set(key, item);
-    else if (item.required && !previous.required) deduplicated.set(key, { ...previous, required: true });
-  }
-  const effective = { components: [...selected].sort(), unowned_paths: unownedPaths.sort(), required_validation: [...deduplicated.values()] };
-  const tracker = project.workflows?.work_tracker;
-  if (tracker) {
-    if (!project.integrations?.work_tracker || project.integrations.work_tracker.requirement === "disabled") throw new InputError("work_tracker workflow requires an enabled work_tracker integration");
-    if (tracker.binding === "required" && project.integrations.work_tracker.requirement !== "required") throw new InputError("required work_tracker binding requires a required work_tracker integration");
-    if (tracker.ensure === "create-or-link" && project.integrations.work_tracker.access !== "read-write") throw new InputError("create-or-link work_tracker workflow requires read-write access");
-    const resolvedTracker = { ...tracker };
-    if (tracker.ensure === "create-or-link" && !tracker.profile) throw new InputError("create-or-link work_tracker workflow requires a profile");
-    if (tracker.profile) {
-      const profile = profiles[tracker.profile];
-      if (!profile) throw new InputError(`work-item profile was not supplied: ${tracker.profile}`);
-      if (profile.provider !== project.integrations.work_tracker.provider) throw new InputError("work-item profile provider must match the configured work_tracker provider");
-      resolvedTracker.profile_digest = computePolicyDigest(profile);
-    }
-    if (tracker.cardinality === "one-parent-plus-plan-tasks" && !tracker.child_profile) throw new InputError("one-parent-plus-plan-tasks work_tracker workflow requires a child_profile");
-    if (tracker.child_profile) {
-      const childProfile = profiles[tracker.child_profile];
-      if (!childProfile) throw new InputError(`work-item child profile was not supplied: ${tracker.child_profile}`);
-      if (childProfile.provider !== project.integrations.work_tracker.provider) throw new InputError("work-item child profile provider must match the configured work_tracker provider");
-      resolvedTracker.child_profile_digest = computePolicyDigest(childProfile);
-    }
-    effective.work_tracker = resolvedTracker;
-  }
-  return { ...effective, project_policy_digest: computePolicyDigest(effective) };
-}
-
-export function resolveValidationSet({ effective_policy, tasks }) {
-  const candidates = [...(effective_policy?.required_validation ?? [])];
-  for (const task of tasks ?? []) for (const item of task.validation ?? []) candidates.push({ ...item, source: item.source ?? `plan task ${task.id}` });
+// Deduplicate identical command/cwd pairs conservatively: the strictest
+// `required` flag and the shortest timeout win.
+export function resolveValidationCommands(sources) {
   const resolved = new Map();
-  for (const item of candidates) {
-    const key = `${item.cwd}\0${item.command}`;
+  for (const item of sources ?? []) {
+    if (typeof item?.command !== "string" || item.command.length === 0) throw new InputError("each validation entry requires a command");
+    const cwd = item.cwd ?? ".";
+    const key = `${cwd}\0${item.command}`;
+    const timeout = item.timeout_ms ?? DEFAULT_TIMEOUT_MS;
+    const required = item.required !== false;
     const previous = resolved.get(key);
-    if (!previous) resolved.set(key, { ...item });
-    else resolved.set(key, { ...previous, required: previous.required || item.required, timeout_ms: Math.min(previous.timeout_ms, item.timeout_ms) });
+    if (!previous) resolved.set(key, { command: item.command, cwd, timeout_ms: timeout, required, ...(item.source ? { source: item.source } : {}) });
+    else resolved.set(key, { ...previous, required: previous.required || required, timeout_ms: Math.min(previous.timeout_ms, timeout) });
   }
   return [...resolved.values()];
 }
 
-export function computeRequirementsDigest(fields) {
-  if (!fields || typeof fields !== "object" || Array.isArray(fields)) throw new InputError("requirements fields must be a JSON object");
-  return createHash("sha256").update(REQUIREMENTS_DOMAIN).update(canonicalJson(fields)).digest("hex");
-}
-
-export function computeAuthorizationDigest({ target, operation, payload }) {
-  if (typeof target !== "string" || target.length === 0 || typeof operation !== "string" || operation.length === 0) throw new InputError("authorization digest requires target and operation");
-  return createHash("sha256").update(AUTHORIZATION_DOMAIN).update(canonicalJson({ target, operation, payload: payload ?? null })).digest("hex");
-}
-
-export function recordExternalAction(input) {
-  const authorization = input.authorized_by ?? input.authorization;
-  const receipt = {
-    schema: 1,
-    change_id: input.change_id,
-    sequence: input.sequence,
-    capability: input.capability,
-    provider: input.provider,
-    transport: input.transport,
-    operation: input.operation,
-    effect: input.effect,
-    target: input.target,
-    idempotency_key: input.idempotency_key,
-    requested_at: input.requested_at,
-    status: input.status ?? "succeeded",
-    request_digest: input.request_digest ?? jsonDigest(input.payload),
-    readback_digest: input.readback_digest ?? jsonDigest(input.readback),
-    verified: input.verified === true,
-    summary: redactAndBound(input.summary)
-  };
-  if (authorization !== undefined) receipt.authorized_by = typeof authorization === "string" ? authorization : authorization.actor;
-  if (input.effect === "write") {
-    if (typeof input.authorization_digest === "string") {
-      const expected = computeAuthorizationDigest(input);
-      if (input.authorization_digest !== expected) throw new InputError("authorization digest does not match the exact target, operation, and payload");
-      receipt.authorization_digest = expected;
-    }
-  } else if (input.authorization_digest !== undefined) receipt.authorization_digest = input.authorization_digest;
-  for (const key of ["external_id", "url", "before_revision", "after_revision"]) if (input[key] !== undefined) receipt[key] = input[key];
-  return receipt;
-}
-
 export async function runValidationCommand(input, cwd) {
-  if (!input || typeof input.command !== "string" || input.command.length === 0 || /^\s*<[^>]+>\s*$/.test(input.command)) throw new InputError("each validation command requires a resolved non-placeholder command string");
+  if (!input || typeof input.command !== "string" || input.command.length === 0 || PLACEHOLDER.test(input.command)) throw new InputError("each validation command requires a resolved non-placeholder command string");
   const started = Date.now();
   if (input.timeout_ms !== undefined && (!Number.isInteger(input.timeout_ms) || input.timeout_ms < 1)) throw new InputError("timeout_ms must be a positive integer");
   return await new Promise((done) => {
@@ -479,6 +715,10 @@ export async function runValidationCommand(input, cwd) {
     });
   });
 }
+
+// ---------------------------------------------------------------------------
+// Confined paths and atomic managed-file writes
+// ---------------------------------------------------------------------------
 
 export async function resolveProjectPath(projectRoot, explicitRelativePath) {
   if (typeof projectRoot !== "string" || typeof explicitRelativePath !== "string" || !projectRoot || !explicitRelativePath || isAbsolute(explicitRelativePath) || explicitRelativePath.includes("\0")) throw new PathError("paths must be explicit project-relative paths");
@@ -588,77 +828,67 @@ function requireObject(value) {
 export async function dispatch(command, rawInput) {
   const input = requireObject(rawInput);
   switch (command) {
-    case "validate": {
-      const validation = await validateArtifact(input.artifact, input.data);
-      return { exitCode: validation.valid ? EXIT.OK : EXIT.SCHEMA_INVALID, body: { ok: validation.valid, artifact: input.artifact, errors: validation.errors } };
+    case "digest": {
+      if (typeof input.content === "string") return { exitCode: EXIT.OK, body: { ok: true, algorithm: "sha256", digest: computeDigest(input.content) } };
+      if (typeof input.project_root !== "string" || typeof input.path !== "string") throw new InputError("digest requires content or project_root and path");
+      const target = await resolveProjectPath(input.project_root, input.path);
+      const stat = await lstat(target);
+      if (stat.isSymbolicLink() || !stat.isFile()) throw new PathError(`digest target must be a regular non-symlink file: ${input.path}`);
+      return { exitCode: EXIT.OK, body: { ok: true, algorithm: "sha256", path: input.path, digest: computeDigest(await readFile(target)) } };
     }
-    case "load-artifact-file": {
-      const loaded = await loadArtifactFile(input);
-      return { exitCode: loaded.validation.valid ? EXIT.OK : EXIT.SCHEMA_INVALID, body: { ok: loaded.validation.valid, artifact: input.artifact, data: loaded.data, digest: loaded.digest, errors: loaded.validation.errors } };
+    case "validate-project": {
+      const validation = validateProjectConfig(input.data);
+      return { exitCode: validation.valid ? EXIT.OK : EXIT.CONTRACT_INVALID, body: { ok: validation.valid, errors: validation.errors, ...(validation.valid ? { data: validation.data } : {}) } };
     }
-    case "digest-bundle": {
-      const bundle = computeApprovalBundle(input.inputs);
-      return { exitCode: EXIT.OK, body: { ok: true, algorithm: "sha256", ...bundle } };
+    case "load-project": {
+      const loaded = await loadProjectConfig(input);
+      return { exitCode: loaded.validation.valid ? EXIT.OK : EXIT.CONTRACT_INVALID, body: { ok: loaded.validation.valid, data: loaded.data, digest: loaded.digest, errors: loaded.validation.errors } };
     }
-    case "create-approval-bundle": {
-      const approval = createApprovalBundle(input);
-      const validation = await validateArtifact("approval", approval);
-      return { exitCode: validation.valid ? EXIT.OK : EXIT.SCHEMA_INVALID, body: validation.valid ? { ok: true, approval } : { ok: false, errors: validation.errors } };
+    case "create-approval": {
+      const approval = createPlanApproval(input);
+      return { exitCode: EXIT.OK, body: { ok: true, approval } };
     }
-    case "verify-approval-bundle": {
-      const validation = await validateArtifact("approval", input.approval);
-      const commitMatches = input.docs_commit === undefined || input.docs_commit === input.approval?.docs_commit;
-      const verified = validation.valid && input.approval.status === "active" && commitMatches && verifyApprovalBundle(input.inputs, input.approval);
-      const reason = verified ? "approval matches the exact input bundle and docs commit" : !validation.valid ? "approval artifact is invalid" : input.approval.status !== "active" ? "approval has been superseded" : !commitMatches ? "approval is bound to a different docs commit" : "approval digest does not match the exact input bundle";
-      return { exitCode: verified ? EXIT.OK : EXIT.APPROVAL_INVALID, body: { ok: verified, verified, errors: validation.errors, reason } };
+    case "validate-approval": {
+      const validation = validatePlanApproval(input.approval);
+      return { exitCode: validation.valid ? EXIT.OK : EXIT.CONTRACT_INVALID, body: { ok: validation.valid, errors: validation.errors } };
     }
+    case "verify-approval": {
+      const result = verifyPlanApproval(input);
+      return { exitCode: result.verified ? EXIT.OK : EXIT.APPROVAL_INVALID, body: { ok: result.verified, ...result } };
+    }
+    case "supersede-approval": {
+      const approval = supersedePlanApproval(input.approval, { reason: input.reason, superseded_at: input.superseded_at });
+      return { exitCode: EXIT.OK, body: { ok: true, approval, history_path: `approval-history/${approval.plan_digest}.json` } };
+    }
+    case "create-run-record": {
+      const record = createRunRecord(input);
+      return { exitCode: EXIT.OK, body: { ok: true, record } };
+    }
+    case "validate-run-record": {
+      const validation = validateRunRecord(input.record);
+      return { exitCode: validation.valid ? EXIT.OK : EXIT.CONTRACT_INVALID, body: { ok: validation.valid, errors: validation.errors } };
+    }
+    case "update-run-record": {
+      const record = updateRunRecord(input.record, input.update);
+      return { exitCode: EXIT.OK, body: { ok: true, record } };
+    }
+    case "resolve-validation":
+      return { exitCode: EXIT.OK, body: { ok: true, commands: resolveValidationCommands(input.commands) } };
     case "record-validation": {
       const evidence = recordValidation(input);
-      const validation = await validateArtifact("validation", evidence);
-      if (!validation.valid) return { exitCode: EXIT.SCHEMA_INVALID, body: { ok: false, errors: validation.errors } };
       return { exitCode: evidence.status === "passed" ? EXIT.OK : EXIT.VALIDATION_FAILED, body: { ok: evidence.status === "passed", evidence } };
     }
     case "run-validation": {
       if (typeof input.project_root !== "string") throw new InputError("project_root is required");
+      const resolved = resolveValidationCommands(input.commands);
       const commands = [];
-      for (const item of input.commands ?? []) {
-        const relativeCwd = item.cwd ?? input.cwd ?? ".";
-        const cwd = await resolveProjectDirectory(input.project_root, relativeCwd);
-        commands.push(await runValidationCommand(item, cwd));
+      for (const item of resolved) {
+        const cwd = await resolveProjectDirectory(input.project_root, item.cwd ?? input.cwd ?? ".");
+        // Report the project-relative cwd rather than the absolute local path.
+        commands.push({ ...(await runValidationCommand(item, cwd)), cwd: item.cwd ?? "." });
       }
-      const evidence = recordValidation({ change_id: input.change_id, plugin_version: input.plugin_version, code_commit: input.code_commit, docs_commit: input.docs_commit, recorded_at: input.recorded_at, commands, deferred: input.deferred ?? [] });
-      const validation = await validateArtifact("validation", evidence);
-      if (!validation.valid) return { exitCode: EXIT.SCHEMA_INVALID, body: { ok: false, errors: validation.errors } };
+      const evidence = recordValidation({ recorded_at: input.recorded_at, commands, deferred: input.deferred ?? [] });
       return { exitCode: evidence.status === "passed" ? EXIT.OK : EXIT.VALIDATION_FAILED, body: { ok: evidence.status === "passed", evidence } };
-    }
-    case "record-external-action": {
-      const receipt = recordExternalAction(input);
-      const validation = await validateArtifact("external-action", receipt);
-      return { exitCode: validation.valid ? EXIT.OK : EXIT.SCHEMA_INVALID, body: validation.valid ? { ok: true, receipt } : { ok: false, errors: validation.errors } };
-    }
-    case "digest-requirements":
-      return { exitCode: EXIT.OK, body: { ok: true, algorithm: "sha256", digest: computeRequirementsDigest(input.fields) } };
-    case "digest-authorization":
-      return { exitCode: EXIT.OK, body: { ok: true, algorithm: "sha256", digest: computeAuthorizationDigest(input) } };
-    case "resolve-project-policy": {
-      const projectValidation = await validateArtifact("project", input.project);
-      if (!projectValidation.valid) return { exitCode: EXIT.SCHEMA_INVALID, body: { ok: false, errors: projectValidation.errors } };
-      for (const [path, profile] of Object.entries(input.profiles ?? {})) {
-        const profileValidation = await validateArtifact("work-item-profile", profile);
-        if (!profileValidation.valid) return { exitCode: EXIT.SCHEMA_INVALID, body: { ok: false, profile: path, errors: profileValidation.errors } };
-      }
-      const policy = resolveProjectPolicy(input);
-      return { exitCode: EXIT.OK, body: { ok: true, policy } };
-    }
-    case "digest-policy":
-      return { exitCode: EXIT.OK, body: { ok: true, algorithm: "sha256", digest: computePolicyDigest(input.policy) } };
-    case "resolve-validation-set":
-      return { exitCode: EXIT.OK, body: { ok: true, commands: resolveValidationSet(input) } };
-    case "validate-work-item-payload": {
-      const profileValidation = await validateArtifact("work-item-profile", input.profile);
-      if (!profileValidation.valid) return { exitCode: EXIT.SCHEMA_INVALID, body: { ok: false, errors: profileValidation.errors } };
-      const result = validateWorkItemPayload(input.profile, input.payload);
-      return { exitCode: result.valid ? EXIT.OK : EXIT.SCHEMA_INVALID, body: { ok: result.valid, ...result } };
     }
     case "apply-atomic-writes":
       await applyAtomicWrites(input.project_root, input.operations);

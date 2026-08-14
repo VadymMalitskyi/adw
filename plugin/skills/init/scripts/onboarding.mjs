@@ -9,22 +9,16 @@ import {
 } from "../../../lib/local-configuration.mjs";
 
 const CAPABILITY_SET = new Set(CAPABILITIES);
-const EXECUTION_MODES = new Set(["managed-devcontainer", "project-devcontainer", "provider-sandbox"]);
-const DOCUMENTATION_DELIVERIES = new Set(["direct-push"]);
-const REQUIREMENTS = new Set(["disabled", "optional", "required"]);
+const ISOLATION_MODES = new Set(["managed-devcontainer", "project-devcontainer", "provider-sandbox"]);
+const EXECUTION_MODES = new Set(["orchestrated", "sequential"]);
+const MAX_PARALLEL = 16;
 const TRANSPORTS = new Set(["auto", "native", "mcp", "cli", "api"]);
 const ACCESS_MODES = new Set(["read-only", "read-write"]);
 const WEB_ACCESS_MODES = new Set(["hosted-only", "public-pages"]);
 const RUNTIMES = new Set(["node", "python", "go", "rust", "java", "ruby", "dotnet"]);
-const WORKFLOW_VALUES = {
-  binding: new Set(["optional", "required"]),
-  ensure: new Set(["link-only", "create-or-link"]),
-  stage: new Set(["plan"]),
-  cardinality: new Set(["one-per-change", "one-parent-plus-plan-tasks"]),
-};
+const CONVENTION_KEY = /^[a-z][a-z0-9_]*$/;
 const SECRET_LIKE_KEY = /(?:password|passwd|token|api[_-]?key|secret|credential|authorization|cookie|private[_-]?key)/i;
 const DOMAIN = /^[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,}$/;
-const PROFILE_PATH = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$)).+\.ya?ml$/;
 
 function fail(path, message) {
   throw new Error(`${path}: ${message}`);
@@ -99,20 +93,27 @@ function readProviderRegistry(pluginRoot) {
   return providers;
 }
 
+// Execution answers carry only the workflow shape. Isolation stays optional so
+// repository evidence can still choose between an existing project container
+// and the lightweight provider sandbox.
 function normalizeExecution(value) {
-  if (value === undefined) return undefined;
+  const normalized = { mode: "orchestrated", maxParallel: 3 };
+  if (value === undefined) return normalized;
   value = object(value, "onboarding.execution");
-  rejectUnknown(value, new Set(["isolation"]), "onboarding.execution");
-  if (value.isolation === undefined) fail("onboarding.execution.isolation", "is required when execution is present");
-  return { isolation: enumValue(value.isolation, EXECUTION_MODES, "onboarding.execution.isolation") };
-}
-
-function normalizeDocumentation(value) {
-  if (value === undefined) return undefined;
-  value = object(value, "onboarding.documentation");
-  rejectUnknown(value, new Set(["delivery"]), "onboarding.documentation");
-  if (value.delivery === undefined) fail("onboarding.documentation.delivery", "is required when documentation is present");
-  return { delivery: enumValue(value.delivery, DOCUMENTATION_DELIVERIES, "onboarding.documentation.delivery") };
+  rejectUnknown(value, new Set(["isolation", "mode", "max_parallel"]), "onboarding.execution");
+  if (value.mode !== undefined) normalized.mode = enumValue(value.mode, EXECUTION_MODES, "onboarding.execution.mode");
+  if (normalized.mode === "sequential") normalized.maxParallel = 1;
+  if (value.max_parallel !== undefined) {
+    if (!Number.isInteger(value.max_parallel) || value.max_parallel < 1 || value.max_parallel > MAX_PARALLEL) {
+      fail("onboarding.execution.max_parallel", `must be an integer between 1 and ${MAX_PARALLEL}`);
+    }
+    normalized.maxParallel = value.max_parallel;
+  }
+  if (normalized.mode === "sequential" && normalized.maxParallel !== 1) {
+    fail("onboarding.execution.max_parallel", "must equal 1 for sequential execution");
+  }
+  if (value.isolation !== undefined) normalized.isolation = enumValue(value.isolation, ISOLATION_MODES, "onboarding.execution.isolation");
+  return normalized;
 }
 
 function normalizeDomains(value, path) {
@@ -133,77 +134,53 @@ function normalizeDomains(value, path) {
   return domains;
 }
 
-function normalizeIntegrations(value, providers) {
-  if (value === undefined) return { integrations: {}, networkDomains: [] };
-  value = object(value, "onboarding.integrations");
-  const integrations = {};
+// A capability the project does not use is simply absent. Availability is the
+// boolean `required` flag; there is no disabled state to configure.
+function normalizeProviders(value, registry) {
+  if (value === undefined) return { providers: {}, networkDomains: [] };
+  value = object(value, "onboarding.providers");
+  const providers = {};
   const domains = new Set();
   for (const [capability, raw] of Object.entries(value)) {
-    if (!CAPABILITY_SET.has(capability)) fail(`onboarding.integrations.${capability}`, "is not a known capability");
-    const path = `onboarding.integrations.${capability}`;
-    const integration = object(raw, path);
-    rejectUnknown(integration, new Set(["provider", "requirement", "transport", "access", "settings", "network_domains"]), path);
-    const provider = nonemptyString(integration.provider, `${path}.provider`);
-    const providerEntry = providers.get(provider);
-    if (!providerEntry) fail(`${path}.provider`, `unknown provider: ${provider}`);
-    if (!providerEntry.capabilities.has(capability)) fail(`${path}.provider`, `${provider} does not support ${capability}`);
-    const normalized = {
-      provider,
-      requirement: enumValue(integration.requirement, REQUIREMENTS, `${path}.requirement`),
-    };
-    if (integration.transport !== undefined) {
-      normalized.transport = enumValue(integration.transport, TRANSPORTS, `${path}.transport`);
-      if (normalized.transport !== "auto" && !providerEntry.transports.has(normalized.transport)) {
+    if (!CAPABILITY_SET.has(capability)) fail(`onboarding.providers.${capability}`, "is not a known capability");
+    const path = `onboarding.providers.${capability}`;
+    const declaration = object(raw, path);
+    rejectUnknown(declaration, new Set(["provider", "required", "transport", "access", "settings", "network_domains"]), path);
+    const provider = nonemptyString(declaration.provider, `${path}.provider`);
+    const entry = registry.get(provider);
+    if (!entry) fail(`${path}.provider`, `unknown provider: ${provider}`);
+    if (!entry.capabilities.has(capability)) fail(`${path}.provider`, `${provider} does not support ${capability}`);
+    const normalized = { provider, required: false };
+    if (declaration.required !== undefined) {
+      if (typeof declaration.required !== "boolean") fail(`${path}.required`, "must be a boolean");
+      normalized.required = declaration.required;
+    }
+    if (declaration.transport !== undefined) {
+      normalized.transport = enumValue(declaration.transport, TRANSPORTS, `${path}.transport`);
+      if (normalized.transport !== "auto" && !entry.transports.has(normalized.transport)) {
         fail(`${path}.transport`, `${provider} does not support ${normalized.transport}`);
       }
     }
-    if (integration.access !== undefined) normalized.access = enumValue(integration.access, ACCESS_MODES, `${path}.access`);
-    if (integration.settings !== undefined) {
-      const settings = object(integration.settings, `${path}.settings`);
+    if (declaration.access !== undefined) normalized.access = enumValue(declaration.access, ACCESS_MODES, `${path}.access`);
+    if (declaration.settings !== undefined) {
+      const settings = object(declaration.settings, `${path}.settings`);
       normalized.settings = {};
       for (const [key, setting] of Object.entries(settings)) normalized.settings[key] = nonemptyString(setting, `${path}.settings.${key}`);
       normalized.settings = sortedObject(normalized.settings);
     }
-    for (const domain of normalizeDomains(integration.network_domains, `${path}.network_domains`)) domains.add(domain);
-    integrations[capability] = normalized;
+    for (const domain of normalizeDomains(declaration.network_domains, `${path}.network_domains`)) domains.add(domain);
+    providers[capability] = normalized;
   }
-  return { integrations: sortedObject(integrations), networkDomains: [...domains].sort() };
-}
-
-function normalizeWorkflow(value, integrations) {
-  if (value === undefined) return {};
-  value = object(value, "onboarding.workflows");
-  rejectUnknown(value, new Set(["work_tracker"]), "onboarding.workflows");
-  if (value.work_tracker === undefined) return {};
-  const path = "onboarding.workflows.work_tracker";
-  const raw = object(value.work_tracker, path);
-  rejectUnknown(raw, new Set(["binding", "ensure", "stage", "cardinality", "profile", "child_profile"]), path);
-  const workflow = {};
-  for (const [field, allowed] of Object.entries(WORKFLOW_VALUES)) {
-    if (raw[field] === undefined) fail(`${path}.${field}`, "is required");
-    workflow[field] = enumValue(raw[field], allowed, `${path}.${field}`);
-  }
-  for (const field of ["profile", "child_profile"]) {
-    if (raw[field] === undefined) continue;
-    workflow[field] = singleLine(raw[field], `${path}.${field}`);
-    if (!PROFILE_PATH.test(workflow[field])) fail(`${path}.${field}`, "must be a project-relative YAML path without parent traversal");
-  }
-  const integration = integrations.work_tracker;
-  if (!integration || integration.requirement === "disabled") fail(path, "requires an enabled work_tracker integration");
-  if (workflow.binding === "required" && integration.requirement !== "required") fail(`${path}.binding`, "required binding requires a required work_tracker integration");
-  if (workflow.ensure === "create-or-link" && integration.access !== "read-write") fail(`${path}.ensure`, "create-or-link requires read-write work_tracker access");
-  if (workflow.ensure === "create-or-link" && !workflow.profile) fail(`${path}.profile`, "is required when ensure is create-or-link");
-  if (workflow.cardinality === "one-parent-plus-plan-tasks" && !workflow.child_profile) fail(`${path}.child_profile`, "is required for one-parent-plus-plan-tasks");
-  return { work_tracker: workflow };
+  return { providers: sortedObject(providers), networkDomains: [...domains].sort() };
 }
 
 function normalizeConventions(value) {
   if (value === undefined) return {};
   value = object(value, "onboarding.conventions");
-  rejectUnknown(value, new Set(["branches", "pull_requests", "work_items"]), "onboarding.conventions");
   const result = {};
-  for (const field of ["branches", "pull_requests", "work_items"]) {
-    if (value[field] !== undefined) result[field] = singleLine(value[field], `onboarding.conventions.${field}`);
+  for (const key of Object.keys(value).sort()) {
+    if (!CONVENTION_KEY.test(key)) fail(`onboarding.conventions.${key}`, "must be a snake_case convention name");
+    result[key] = singleLine(value[key], `onboarding.conventions.${key}`);
   }
   return result;
 }
@@ -227,10 +204,10 @@ function normalizeDevelopment(value) {
 function normalizeOnboarding(raw, pluginRoot) {
   raw = object(raw, "onboarding");
   rejectSecretLikeKeys(raw);
-  rejectUnknown(raw, new Set(["schema", "web_access", "execution", "documentation", "development", "integrations", "workflows", "conventions", "local"]), "onboarding");
+  rejectUnknown(raw, new Set(["schema", "web_access", "execution", "development", "providers", "conventions", "local"]), "onboarding");
   if (raw.schema !== 1) fail("onboarding.schema", "must equal 1");
-  const providers = readProviderRegistry(pluginRoot);
-  const { integrations, networkDomains } = normalizeIntegrations(raw.integrations, providers);
+  const registry = readProviderRegistry(pluginRoot);
+  const { providers, networkDomains } = normalizeProviders(raw.providers, registry);
   const agentTools = "both";
   const webAccess = raw.web_access === undefined
     ? "public-pages"
@@ -239,16 +216,13 @@ function normalizeOnboarding(raw, pluginRoot) {
     schema: 1,
     agentTools,
     webAccess,
-    documentation: normalizeDocumentation(raw.documentation) ?? { delivery: "direct-push" },
+    execution: normalizeExecution(raw.execution),
     development: normalizeDevelopment(raw.development),
-    integrations,
+    providers,
     networkDomains,
-    workflows: normalizeWorkflow(raw.workflows, integrations),
     conventions: normalizeConventions(raw.conventions),
-    local: normalizeLocalConfiguration(raw.local, integrations, pluginRoot, "onboarding.local"),
+    local: normalizeLocalConfiguration(raw.local, providers, pluginRoot, "onboarding.local"),
   };
-  const execution = normalizeExecution(raw.execution);
-  if (execution) normalized.execution = execution;
   normalized.digest = onboardingDigest(normalized);
   return normalized;
 }
@@ -258,13 +232,12 @@ export function defaultOnboarding() {
     schema: 1,
     agentTools: "both",
     webAccess: "public-pages",
-    documentation: { delivery: "direct-push" },
+    execution: { mode: "orchestrated", maxParallel: 3 },
     development: { runtimeVersions: {} },
-    integrations: {},
+    providers: {},
     networkDomains: [],
-    workflows: {},
     conventions: {},
-    local: { identity: {}, integrations: {} },
+    local: { identity: {}, providers: {} },
   };
   onboarding.digest = onboardingDigest(onboarding);
   return onboarding;
@@ -282,28 +255,30 @@ export function loadOnboarding(path, pluginRoot) {
 }
 
 export function onboardingSummary(onboarding) {
-  const integrations = {};
+  const providers = {};
   for (const capability of CAPABILITIES) {
-    const integration = onboarding.integrations?.[capability];
-    if (!integration) continue;
-    integrations[capability] = {
-      provider: integration.provider,
-      requirement: integration.requirement,
-      ...(integration.transport === undefined ? {} : { transport: integration.transport }),
-      ...(integration.access === undefined ? {} : { access: integration.access }),
-      settings: Object.keys(integration.settings ?? {}).sort(),
+    const declaration = onboarding.providers?.[capability];
+    if (!declaration) continue;
+    providers[capability] = {
+      provider: declaration.provider,
+      required: declaration.required,
+      ...(declaration.transport === undefined ? {} : { transport: declaration.transport }),
+      ...(declaration.access === undefined ? {} : { access: declaration.access }),
+      settings: Object.keys(declaration.settings ?? {}).sort(),
     };
   }
   return {
     schema: 1,
     agent_tools: onboarding.agentTools,
     web_access: onboarding.webAccess,
-    execution: onboarding.execution?.isolation ?? null,
-    documentation_delivery: onboarding.documentation?.delivery ?? null,
+    execution: {
+      mode: onboarding.execution?.mode ?? "orchestrated",
+      max_parallel: onboarding.execution?.maxParallel ?? 3,
+      isolation: onboarding.execution?.isolation ?? null,
+    },
     runtime_versions: onboarding.development?.runtimeVersions ?? {},
-    integrations,
+    providers,
     network_domains: [...(onboarding.networkDomains ?? [])],
-    workflows: onboarding.workflows ?? {},
     conventions: onboarding.conventions ?? {},
     local: localConfigurationSummary(onboarding.local),
   };

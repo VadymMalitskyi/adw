@@ -15,31 +15,27 @@ function git(root, ...args) {
 
 function projectConfiguration() {
   return [
-    "schema: 5",
+    "adw: 1",
     "git:",
-    "  default_branch: main",
-    "documentation:",
-    "  mode: branch",
+    "  base_branch: main",
+    "docs:",
     "  branch: docs",
     "  worktree: worktrees/docs",
     "  sync_marker: SYNC.yaml",
-    "  delivery: direct-push",
     "execution:",
+    "  mode: orchestrated",
+    "  max_parallel: 3",
     "  isolation: provider-sandbox",
-    "  enforcement: preferred",
-    "  permissions:",
-    "    profile: managed-development",
     "components:",
     "  app:",
     "    path: .",
-    "validation:",
-    "  default:",
-    "    - command: npm test",
-    "      source: package.json",
-    "integrations:",
+    "    validate:",
+    "      - command: npm test",
+    "        source: package.json",
+    "providers:",
     "  code_host:",
     "    provider: github",
-    "    requirement: required",
+    "    required: true",
     "    transport: auto",
     "    access: read-write",
     "",
@@ -92,7 +88,7 @@ test("fresh-clone onboarding attaches remote docs and writes redacted local stat
   const answers = writeAnswers(parent, "answers.json", {
     schema: 1,
     identity: { display_name: values[0], email: values[1] },
-    integrations: { code_host: { transport: "cli", account: values[2] } },
+    providers: { code_host: { transport: "cli", account: values[2] } },
   });
   const before = git(checkout, "status", "--porcelain=v1", "--untracked-files=all");
   const previewResult = run(checkout, "preview", "--answers", answers);
@@ -103,8 +99,8 @@ test("fresh-clone onboarding attaches remote docs and writes redacted local stat
   assert.equal(preview.docs.start_point, "refs/remotes/origin/docs");
   assert.equal(preview.local.action, "create-local");
   assert.deepEqual(preview.local.identity_fields, ["display_name", "email"]);
-  assert.deepEqual(preview.local.integrations.code_host, ["account", "transport"]);
-  assert.equal(preview.integrations.code_host.requirement, "required");
+  assert.deepEqual(preview.local.providers.code_host, ["account", "transport"]);
+  assert.equal(preview.providers.code_host.required, true);
   assert.match(preview.preview_digest, /^[a-f0-9]{64}$/);
   for (const value of values) assert.equal(previewResult.stdout.includes(value), false);
 
@@ -181,11 +177,11 @@ test("onboarding refuses missing docs branches and secret-like answers", () => {
 
   const disabled = writeAnswers(configured.parent, "disabled.json", {
     schema: 1,
-    integrations: { observability: { transport: "api" } },
+    providers: { observability: { transport: "api" } },
   });
   const disabledResult = run(configured.checkout, "preview", "--answers", disabled);
   assert.equal(disabledResult.status, 2);
-  assert.match(disabledResult.stderr, /requires an enabled observability integration/);
+  assert.match(disabledResult.stderr, /requires a configured observability provider/);
 });
 
 test("onboarding refuses tracked personal state and an unignored docs worktree", () => {

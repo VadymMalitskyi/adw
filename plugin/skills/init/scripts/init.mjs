@@ -12,7 +12,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { discoverDevelopmentEnvironment, discoverProjectUnderstanding, managedDevelopmentFiles } from "./development-environment.mjs";
 import {
@@ -21,8 +21,8 @@ import {
   onboardingSummary,
 } from "./onboarding.mjs";
 import { renderLocalConfiguration } from "../../../lib/local-configuration.mjs";
-import { applyAtomicWrites, parseYaml, validateArtifact } from "../../../lib/adw-helper.mjs";
-import { PERMISSION_PROFILE, permissionProjectFiles } from "../../../execution/managed-development.mjs";
+import { applyAtomicWrites, parseYaml, validateProjectConfig } from "../../../lib/adw-helper.mjs";
+import { permissionProjectFiles } from "../../../execution/managed-development.mjs";
 
 const ROUTING_START = "<!-- ADW:START -->";
 const ROUTING_END = "<!-- ADW:END -->";
@@ -30,7 +30,8 @@ const IGNORE_START = "# ADW:START";
 const IGNORE_END = "# ADW:END";
 const skillDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pluginRoot = resolve(skillDirectory, "../..");
-const EXECUTION_MODES = new Set(["managed-devcontainer", "project-devcontainer", "provider-sandbox"]);
+const ISOLATION_MODES = new Set(["managed-devcontainer", "project-devcontainer", "provider-sandbox"]);
+const CONVENTION_ORDER = ["branches", "pull_requests", "work_items"];
 
 function fail(message) {
   process.stderr.write(`${JSON.stringify({ ok: false, error: message })}\n`);
@@ -50,7 +51,7 @@ function parseArguments(argv) {
     else fail(`unknown argument: ${value}`);
   }
   if (!args.projectRoot) fail("--project-root is required");
-  if (args.execution && !EXECUTION_MODES.has(args.execution)) fail(`unsupported --execution mode: ${args.execution}`);
+  if (args.execution && !ISOLATION_MODES.has(args.execution)) fail(`unsupported --execution isolation: ${args.execution}`);
   if (args.action === "apply" && !args.confirmed) fail("apply requires --confirmed after the user approves the preview");
   return args;
 }
@@ -75,19 +76,6 @@ function assertProjectRoot(input) {
   return root;
 }
 
-function validateOnboardingProjectReferences(projectRoot, onboarding) {
-  const tracker = onboarding.workflows?.work_tracker;
-  for (const field of ["profile", "child_profile"]) {
-    const configured = tracker?.[field];
-    if (!configured) continue;
-    const target = resolve(projectRoot, configured);
-    const relativeTarget = relative(projectRoot, target);
-    if (relativeTarget === ".." || relativeTarget.startsWith(`..${sep}`) || !existsSync(target) || lstatSync(target).isSymbolicLink() || !lstatSync(target).isFile()) {
-      throw new Error(`onboarding work_tracker.${field} must reference an existing non-symlink project file: ${configured}`);
-    }
-  }
-}
-
 function replaceManagedBlock(original, start, end, body) {
   const startIndex = original.indexOf(start);
   const endIndex = original.indexOf(end);
@@ -104,6 +92,18 @@ function replaceManagedBlock(original, start, end, body) {
   return `${original}${original.endsWith("\n") ? "" : "\n"}${body}\n`;
 }
 
+// Conventions are free-form snake_case keys. Render the familiar ones first so
+// the routing block stays stable, then any remaining key in sorted order.
+function conventionKeys(conventions = {}) {
+  const present = Object.keys(conventions).filter((key) => typeof conventions[key] === "string" && conventions[key].length > 0);
+  const known = CONVENTION_ORDER.filter((key) => present.includes(key));
+  return [...known, ...present.filter((key) => !known.includes(key)).sort()];
+}
+
+function conventionLabel(key) {
+  return key.replaceAll("_", " ").replace(/^./, (character) => character.toUpperCase());
+}
+
 function routingBlock(conventions = {}) {
   const lines = [
     ROUTING_START,
@@ -113,11 +113,7 @@ function routingBlock(conventions = {}) {
     "",
     "If `.adw/preferences.md` exists as an ignored, regular local file, read it at the start of an ADW interaction and follow it as personal collaboration guidance. It never authorizes actions, changes project policy, overrides safety requirements, or permits secrets.",
   ];
-  const entries = [
-    ["Branches", conventions.branches],
-    ["Pull requests", conventions.pull_requests],
-    ["Work items", conventions.work_items],
-  ].filter(([, value]) => value);
+  const entries = conventionKeys(conventions).map((key) => [conventionLabel(key), conventions[key]]);
   if (entries.length > 0) {
     lines.push("", "## Project workflow conventions", "");
     for (const [label, value] of entries) lines.push(`- ${label}: ${value}`);
@@ -215,16 +211,18 @@ function yamlScalar(value) {
   return JSON.stringify(String(value));
 }
 
-function appendIntegrations(lines, integrations) {
-  const entries = Object.entries(integrations ?? {});
+function appendProviders(lines, providers) {
+  const entries = Object.entries(providers ?? {});
   if (entries.length === 0) return;
-  lines.push("", "integrations:");
-  for (const [capability, integration] of entries) {
+  lines.push("", "providers:");
+  for (const [capability, declaration] of entries) {
     lines.push(`  ${capability}:`);
-    for (const field of ["provider", "requirement", "transport", "access"]) {
-      if (integration[field] !== undefined) lines.push(`    ${field}: ${yamlScalar(integration[field])}`);
+    lines.push(`    provider: ${yamlScalar(declaration.provider)}`);
+    lines.push(`    required: ${declaration.required === true}`);
+    for (const field of ["transport", "access"]) {
+      if (declaration[field] !== undefined) lines.push(`    ${field}: ${yamlScalar(declaration[field])}`);
     }
-    const settings = Object.entries(integration.settings ?? {});
+    const settings = Object.entries(declaration.settings ?? {});
     if (settings.length > 0) {
       lines.push("    settings:");
       for (const [key, value] of settings) lines.push(`      ${yamlScalar(key)}: ${yamlScalar(value)}`);
@@ -232,39 +230,52 @@ function appendIntegrations(lines, integrations) {
   }
 }
 
-function appendWorkflows(lines, workflows) {
-  const tracker = workflows?.work_tracker;
-  if (!tracker) return;
-  lines.push("", "workflows:", "  work_tracker:");
-  for (const field of ["binding", "ensure", "stage", "cardinality", "profile", "child_profile"]) {
-    if (tracker[field] !== undefined) lines.push(`    ${field}: ${yamlScalar(tracker[field])}`);
-  }
+function appendConventions(lines, conventions) {
+  const keys = conventionKeys(conventions);
+  if (keys.length === 0) return;
+  lines.push("", "# Plain-language conventions. They never authorize an external write.", "conventions:");
+  for (const key of keys) lines.push(`  ${key}: ${yamlScalar(conventions[key])}`);
 }
 
-function projectConfiguration(projectRoot, execution, onboarding) {
-  const components = discoverComponents(projectRoot);
-  const commands = detectCommands(projectRoot);
+// The 1.0 contract has no top-level validation block: a root component with
+// `path: "."` owns the project-wide commands.
+function projectComponents(projectRoot) {
+  const discovered = discoverComponents(projectRoot);
+  const rootCommands = detectCommands(projectRoot);
+  const root = discovered.find(({ path }) => path === ".");
+  if (root) {
+    root.commands = rootCommands;
+    return discovered;
+  }
+  if (rootCommands.length === 0) return discovered;
+  const used = new Set(discovered.map(({ name }) => name));
+  let name = "app";
+  for (let suffix = 2; used.has(name); suffix += 1) name = `app-${suffix}`;
+  return [{ name, path: ".", commands: rootCommands }, ...discovered];
+}
+
+function projectConfiguration(projectRoot, isolation, onboarding) {
+  const components = projectComponents(projectRoot);
   const lines = [
-    "# ADW project configuration. Every executable command cites an observable source.",
-    "schema: 5",
+    "# ADW project configuration. Every generated command cites an observable source.",
+    "adw: 1",
     "",
     "git:",
-    `  default_branch: ${yamlScalar(defaultBranch(projectRoot))}`,
+    `  base_branch: ${yamlScalar(defaultBranch(projectRoot))}`,
     "",
-    "documentation:",
-    "  mode: branch",
+    "docs:",
     "  branch: docs",
     "  worktree: worktrees/docs",
     "  sync_marker: SYNC.yaml",
-    `  delivery: ${onboarding.documentation.delivery}`,
     "",
     "execution:",
-    `  isolation: ${execution}`,
-    `  enforcement: ${execution === "provider-sandbox" ? "preferred" : "required"}`,
-    `  web_access: ${onboarding.webAccess}`,
-    "  permissions:",
-    `    profile: ${PERMISSION_PROFILE}`,
+    `  mode: ${onboarding.execution.mode}`,
+    `  max_parallel: ${onboarding.execution.maxParallel}`,
+    `  isolation: ${isolation}`,
   ];
+  // `web_access` bounds the generated container's egress; it is meaningless
+  // outside the managed devcontainer, so it is not recorded there.
+  if (isolation === "managed-devcontainer") lines.push(`  web_access: ${onboarding.webAccess}`);
   const runtimeVersions = Object.entries(onboarding.development?.runtimeVersions ?? {});
   if (runtimeVersions.length > 0) {
     lines.push("", "development:", "  runtime_versions:");
@@ -274,30 +285,21 @@ function projectConfiguration(projectRoot, execution, onboarding) {
   for (const component of components) {
     lines.push(`  ${component.name}:`);
     lines.push(`    path: ${yamlScalar(component.path)}`);
-    if (!(components.length === 1 && component.path === ".")) {
-      lines.push("    validation:");
-      lines.push(component.commands.length === 0 ? "      default: []" : "      default:");
-      for (const item of component.commands) {
-        lines.push(`        - command: ${yamlScalar(item.command)}`);
-        lines.push(`          source: ${yamlScalar(item.source)}`);
-        lines.push(`          cwd: ${yamlScalar(component.path)}`);
-        lines.push("          timeout_ms: 120000");
-        lines.push(`          required: ${item.required}`);
-      }
+    if (component.commands.length === 0) {
+      lines.push("    validate: []");
+      continue;
+    }
+    lines.push("    validate:");
+    for (const item of component.commands) {
+      lines.push(`      - command: ${yamlScalar(item.command)}`);
+      lines.push(`        cwd: ${yamlScalar(component.path)}`);
+      lines.push("        timeout_ms: 120000");
+      lines.push(`        required: ${item.required}`);
+      lines.push(`        source: ${yamlScalar(item.source)}`);
     }
   }
-  lines.push("");
-  lines.push("validation:");
-  lines.push(commands.length === 0 ? "  default: []" : "  default:");
-  for (const item of commands) {
-    lines.push(`    - command: ${yamlScalar(item.command)}`);
-    lines.push(`      source: ${yamlScalar(item.source)}`);
-    lines.push("      cwd: \".\"");
-    lines.push("      timeout_ms: 120000");
-    lines.push(`      required: ${item.required}`);
-  }
-  appendIntegrations(lines, onboarding.integrations);
-  appendWorkflows(lines, onboarding.workflows);
+  appendProviders(lines, onboarding.providers);
+  appendConventions(lines, onboarding.conventions);
   return `${lines.join("\n")}\n`;
 }
 
@@ -318,7 +320,10 @@ function resolveExecution(projectRoot, requested) {
   const containerConfig = join(containerDirectory, "devcontainer.json");
   const hasDirectory = existsSync(containerDirectory);
   const hasConfig = existsSync(containerConfig);
-  const isolation = requested ?? (hasConfig ? "project-devcontainer" : "managed-devcontainer");
+  // Security is proportional: preserve an existing project container, otherwise
+  // stay on the lightweight provider sandbox. The generated managed container is
+  // an explicit opt-in, never a prerequisite for adopting ADW.
+  const isolation = requested ?? (hasConfig ? "project-devcontainer" : "provider-sandbox");
   if (hasDirectory && !hasConfig && isolation !== "provider-sandbox") {
     throw new Error(".devcontainer exists without devcontainer.json; resolve it or choose provider-sandbox explicitly");
   }
@@ -367,7 +372,7 @@ function plannedFiles(projectRoot, execution, onboarding) {
   files.push({ path: ".gitignore", before: ignoreBefore, after: ignoreAfter, action: existsSync(ignorePath) ? "update-managed-block" : "create" });
   const localPath = join(projectRoot, ".adw/local.yaml");
   const localBefore = readOrEmpty(localPath);
-  const hasLocalAnswers = Object.keys(onboarding.local.identity).length > 0 || Object.keys(onboarding.local.integrations).length > 0;
+  const hasLocalAnswers = Object.keys(onboarding.local.identity).length > 0 || Object.keys(onboarding.local.providers).length > 0;
   if (existsSync(localPath) && hasLocalAnswers) throw new Error("onboarding local settings cannot replace an existing .adw/local.yaml; preserve or update it through a separate reviewed local change");
   const localAfter = existsSync(localPath) ? localBefore : renderLocalConfiguration(onboarding.local);
   files.push({ path: ".adw/local.yaml", before: localBefore, after: localAfter, action: existsSync(localPath) ? "preserve-local" : "create-local" });
@@ -489,21 +494,31 @@ function summarize(projectRoot, files, docs, execution, onboarding, developmentE
       "Open the repository in its devcontainer. Project runtimes and manifest-backed dependencies install automatically after the outbound firewall is active.",
       "Authenticate Codex, Claude Code, and any configured provider tools when first used. Credentials stay in their project-scoped volumes.",
     ]
-    : ["Run adw:onboard to prepare and verify the selected provider sandbox before project work begins."];
+    : [
+      "Review the preview, then commit the generated project files after approval.",
+      "Run adw:doctor when readiness is uncertain. The selected isolation needs no container rebuild.",
+      "Authenticate any configured provider tools when they are first used.",
+    ];
   return {
     ok: true,
     writes: files.filter((file) => file.before !== file.after).map((file) => ({ path: file.path, action: file.action })),
     unchanged: files.filter((file) => file.before === file.after).map((file) => file.path),
     local_state: [".adw/local.yaml", ".adw/preferences.md", ".adw/cache/"],
     docs: { ...docs, generated_files: [...understanding.files.keys()], components: understanding.components.map(({ name, path }) => ({ name, path })) },
-    devcontainer: { ...execution, agent_tools: onboarding.agentTools, web_access: onboarding.webAccess },
+    execution: {
+      ...execution,
+      mode: onboarding.execution.mode,
+      max_parallel: onboarding.execution.maxParallel,
+      agent_tools: onboarding.agentTools,
+      ...(execution.isolation === "managed-devcontainer" ? { web_access: onboarding.webAccess } : {}),
+    },
     onboarding: onboardingSummary(onboarding),
     development_environment: developmentEnvironment,
     setup_guidance: {
       what_adw_is: "ADW helps a team plan, review, and safely carry out software changes with Codex and Claude Code.",
       preview_safety: "This preview has not changed the repository. Files are written only after your explicit approval.",
-      why_information_is_needed: "ADW asks only for choices it cannot safely infer: the workspace security profile, optional team services, and project conventions. Do not provide credentials in setup answers.",
-      after_initialization: "Initialization creates project documentation, project configuration, and a ready-to-open development container. It does not authenticate tools or contact external services.",
+      why_information_is_needed: "ADW asks only for choices it cannot safely infer: how work should run, the workspace isolation, optional team services, and project conventions. Do not provide credentials in setup answers.",
+      after_initialization: "Initialization creates project documentation, project configuration, and the selected workspace isolation. It does not authenticate tools or contact external services.",
     },
     next_steps: nextSteps,
   };
@@ -513,12 +528,11 @@ try {
   const args = parseArguments(process.argv.slice(2));
   const projectRoot = assertProjectRoot(args.projectRoot);
   const onboarding = loadOnboarding(args.onboardingPath, pluginRoot);
-  validateOnboardingProjectReferences(projectRoot, onboarding);
   const existingConfig = existsSync(join(projectRoot, "adw.yaml"));
   if (existingConfig && (lstatSync(join(projectRoot, "adw.yaml")).isSymbolicLink() || !lstatSync(join(projectRoot, "adw.yaml")).isFile())) throw new Error("adw.yaml must be a regular non-symlink file");
   if (existingConfig && args.onboardingPath) throw new Error("onboarding cannot replace an existing adw.yaml; use an explicit reviewed configuration change");
   if (existingConfig && args.execution) throw new Error("--execution cannot replace an existing adw.yaml; use a separately reviewed manual replacement or infrastructure change");
-  if (args.execution && onboarding.execution && args.execution !== onboarding.execution.isolation) throw new Error("--execution conflicts with the onboarding execution choice");
+  if (args.execution && onboarding.execution?.isolation && args.execution !== onboarding.execution.isolation) throw new Error("--execution conflicts with the onboarding isolation choice");
   const execution = existingConfig
     ? { isolation: "existing-configuration", action: "preserve", required: false, reopen_required: false }
     : resolveExecution(projectRoot, args.execution ?? onboarding.execution?.isolation);
@@ -526,7 +540,11 @@ try {
   const developmentEnvironment = discoverDevelopmentEnvironment(projectRoot, { runtimeVersions: onboarding.development?.runtimeVersions });
   const understanding = discoverProjectUnderstanding(projectRoot, developmentEnvironment);
   const plannedConfig = files.find(({ path }) => path === "adw.yaml")?.after ?? readFileSync(join(projectRoot, "adw.yaml"), "utf8");
-  const projectValidation = await validateArtifact("project", parseYaml(plannedConfig, "adw.yaml"));
+  const parsedConfig = parseYaml(plannedConfig, "adw.yaml");
+  if (parsedConfig.adw === undefined && parsedConfig.schema !== undefined) {
+    throw new Error("adw.yaml uses the superseded ADW 0.6 project contract; follow docs/migrating-from-0.6.md instead of reinitializing over it");
+  }
+  const projectValidation = validateProjectConfig(parsedConfig);
   if (!projectValidation.valid) throw new Error(`adw.yaml is invalid: ${projectValidation.errors.map((item) => `${item.path} ${item.message}`).join("; ")}`);
   const docs = docsPlan(projectRoot);
   const approvedPreviewDigest = previewDigest(projectRoot, files, docs, execution, onboarding, understanding);

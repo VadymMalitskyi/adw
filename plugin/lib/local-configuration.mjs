@@ -75,14 +75,17 @@ function readProviderRegistry(pluginRoot) {
   return providers;
 }
 
-export function normalizeLocalConfiguration(value, sharedIntegrations, pluginRoot, path = "local") {
-  const normalized = { identity: {}, integrations: {} };
+// `sharedProviders` is the project's `providers:` block: one entry per
+// configured capability, each with a provider name and an optional `required`
+// flag. A capability the project did not configure has no entry at all.
+export function normalizeLocalConfiguration(value, sharedProviders, pluginRoot, path = "local") {
+  const normalized = { identity: {}, providers: {} };
   if (value === undefined) return normalized;
   value = object(value, path);
   rejectSecretLikeKeys(value, path);
-  rejectUnknown(value, new Set(["identity", "integrations"]), path);
-  const integrations = isObject(sharedIntegrations) ? sharedIntegrations : {};
-  const providers = readProviderRegistry(pluginRoot);
+  rejectUnknown(value, new Set(["identity", "providers"]), path);
+  const configured = isObject(sharedProviders) ? sharedProviders : {};
+  const registry = readProviderRegistry(pluginRoot);
 
   if (value.identity !== undefined) {
     const identity = object(value.identity, `${path}.identity`);
@@ -92,16 +95,16 @@ export function normalizeLocalConfiguration(value, sharedIntegrations, pluginRoo
     }
   }
 
-  if (value.integrations !== undefined) {
-    const localIntegrations = object(value.integrations, `${path}.integrations`);
-    for (const [capability, raw] of Object.entries(localIntegrations)) {
-      if (!CAPABILITY_SET.has(capability)) fail(`${path}.integrations.${capability}`, "is not a known capability");
-      const itemPath = `${path}.integrations.${capability}`;
+  if (value.providers !== undefined) {
+    const localProviders = object(value.providers, `${path}.providers`);
+    for (const [capability, raw] of Object.entries(localProviders)) {
+      if (!CAPABILITY_SET.has(capability)) fail(`${path}.providers.${capability}`, "is not a known capability");
+      const itemPath = `${path}.providers.${capability}`;
       const local = object(raw, itemPath);
       rejectUnknown(local, new Set(["transport", "account"]), itemPath);
-      const shared = integrations[capability];
-      if (!shared || shared.requirement === "disabled") fail(itemPath, `requires an enabled ${capability} integration`);
-      const provider = providers.get(shared.provider);
+      const shared = configured[capability];
+      if (!shared) fail(itemPath, `requires a configured ${capability} provider`);
+      const provider = registry.get(shared.provider);
       if (!provider || !provider.capabilities.has(capability)) fail(itemPath, `project provider ${shared.provider ?? "<missing>"} does not support ${capability}`);
       const item = {};
       if (local.transport !== undefined) {
@@ -112,14 +115,14 @@ export function normalizeLocalConfiguration(value, sharedIntegrations, pluginRoo
       }
       if (local.account !== undefined) item.account = singleLine(local.account, `${itemPath}.account`);
       if (Object.keys(item).length === 0) fail(itemPath, "must select a transport or account");
-      normalized.integrations[capability] = item;
+      normalized.providers[capability] = item;
     }
-    normalized.integrations = sortedObject(normalized.integrations);
+    normalized.providers = sortedObject(normalized.providers);
   }
   return normalized;
 }
 
-export function loadLocalAnswers(path, sharedIntegrations, pluginRoot) {
+export function loadLocalAnswers(path, sharedProviders, pluginRoot) {
   if (typeof path !== "string" || path.length === 0) throw new Error("--answers is required");
   let raw;
   try {
@@ -129,9 +132,9 @@ export function loadLocalAnswers(path, sharedIntegrations, pluginRoot) {
   }
   raw = object(raw, "onboarding");
   rejectSecretLikeKeys(raw, "onboarding");
-  rejectUnknown(raw, new Set(["schema", "identity", "integrations"]), "onboarding");
+  rejectUnknown(raw, new Set(["schema", "identity", "providers"]), "onboarding");
   if (raw.schema !== 1) fail("onboarding.schema", "must equal 1");
-  return normalizeLocalConfiguration({ identity: raw.identity, integrations: raw.integrations }, sharedIntegrations, pluginRoot, "onboarding");
+  return normalizeLocalConfiguration({ identity: raw.identity, providers: raw.providers }, sharedProviders, pluginRoot, "onboarding");
 }
 
 function yamlScalar(value) {
@@ -140,7 +143,7 @@ function yamlScalar(value) {
 
 export function renderLocalConfiguration(local) {
   const identity = local?.identity ?? {};
-  const integrations = local?.integrations ?? {};
+  const providers = local?.providers ?? {};
   const lines = [
     "# Machine-local ADW settings. This file is ignored by Git.",
     "# Credentials belong in provider clients or credential stores, never here.",
@@ -151,25 +154,25 @@ export function renderLocalConfiguration(local) {
     lines.push("", "identity:");
     for (const field of identityFields) lines.push(`  ${field}: ${yamlScalar(identity[field])}`);
   }
-  const capabilities = CAPABILITIES.filter((capability) => integrations[capability] !== undefined);
+  const capabilities = CAPABILITIES.filter((capability) => providers[capability] !== undefined);
   if (capabilities.length > 0) {
-    lines.push("", "integrations:");
+    lines.push("", "providers:");
     for (const capability of capabilities) {
       lines.push(`  ${capability}:`);
-      if (integrations[capability].transport !== undefined) lines.push(`    transport: ${yamlScalar(integrations[capability].transport)}`);
-      if (integrations[capability].account !== undefined) lines.push(`    account: ${yamlScalar(integrations[capability].account)}`);
+      if (providers[capability].transport !== undefined) lines.push(`    transport: ${yamlScalar(providers[capability].transport)}`);
+      if (providers[capability].account !== undefined) lines.push(`    account: ${yamlScalar(providers[capability].account)}`);
     }
   }
   return `${lines.join("\n")}\n`;
 }
 
 export function localConfigurationSummary(local) {
-  const integrations = {};
+  const providers = {};
   for (const capability of CAPABILITIES) {
-    if (local?.integrations?.[capability]) integrations[capability] = Object.keys(local.integrations[capability]).sort();
+    if (local?.providers?.[capability]) providers[capability] = Object.keys(local.providers[capability]).sort();
   }
   return {
     identity_fields: Object.keys(local?.identity ?? {}).sort(),
-    integrations,
+    providers,
   };
 }

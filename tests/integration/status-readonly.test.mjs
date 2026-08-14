@@ -1,43 +1,123 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { createApprovalBundle, recordValidation } from "../../plugin/lib/adw-helper.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const initScript = join(repositoryRoot, "plugin/skills/init/scripts/init.mjs");
-const doctorScript = join(repositoryRoot, "plugin/skills/doctor/scripts/snapshot.mjs");
+const helperPath = join(repositoryRoot, "plugin/lib/adw-helper.mjs");
+const orchestratorPath = join(repositoryRoot, "plugin/execution/orchestrator.mjs");
 const statusScript = join(repositoryRoot, "plugin/skills/status/scripts/snapshot.mjs");
 
-function git(root, ...args) {
-  return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+const PLAN = `# PART 1 — Feature Overview
+
+## Summary
+
+Throttle noisy tenants.
+
+# PART 2 — Implementation Plan
+
+## Phase 1 — foundations
+
+### Group: api
+`;
+
+function git(cwd, ...args) {
+  return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
 
-function run(script, root, expectedStatus = 0) {
-  const result = spawnSync(process.execPath, [script, "--project-root", root], { encoding: "utf8", env: { ...process.env, ADW_MANAGED_DEVCONTAINER: "1" } });
+function runNode(script, argv, input) {
+  const result = spawnSync(process.execPath, [script, ...argv], { input: JSON.stringify(input), encoding: "utf8" });
+  return { status: result.status, body: JSON.parse(result.stdout) };
+}
+
+const helper = (command, input) => runNode(helperPath, [command], input);
+
+function status(root, expectedStatus = 0) {
+  const result = spawnSync(process.execPath, [statusScript, "--project-root", root], {
+    encoding: "utf8",
+    env: { ...process.env, ADW_MANAGED_DEVCONTAINER: "1" },
+  });
   assert.equal(result.status, expectedStatus, result.stderr || result.stdout);
   return JSON.parse(result.stdout);
 }
 
-function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "adw-status-"));
+// A hand-built initialized project: `adw: 1` config on the code branch and an
+// orphan docs branch attached at the configured worktree.
+function fixture(label) {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), `adw-status-${label}-`)));
   git(root, "init", "-q", "-b", "main");
   git(root, "config", "user.name", "ADW Test");
   git(root, "config", "user.email", "adw@example.invalid");
-  writeFileSync(join(root, "README.md"), "# Fixture\n");
-  writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { test: "node --test" } }));
+  git(root, "config", "commit.gpgsign", "false");
+  mkdirSync(join(root, "src/api"), { recursive: true });
+  mkdirSync(join(root, "apps/web"), { recursive: true });
+  writeFileSync(join(root, "src/api/index.js"), "export const api = 1;\n");
+  writeFileSync(join(root, "apps/web/index.js"), "export const web = 1;\n");
+  writeFileSync(join(root, ".gitignore"), "/worktrees/\n/.adw/\n");
+  writeFileSync(join(root, "adw.yaml"), [
+    "adw: 1",
+    "",
+    "git:",
+    "  base_branch: main",
+    "",
+    "docs:",
+    "  branch: docs",
+    "  worktree: worktrees/docs",
+    "",
+    "execution:",
+    "  mode: orchestrated",
+    "  max_parallel: 3",
+    "  isolation: managed-devcontainer",
+    "",
+    "components:",
+    "  api:",
+    "    path: src/api",
+    "    validate:",
+    "      - node --version",
+    "  web:",
+    "    path: apps/web",
+    "    validate:",
+    "      - node --version",
+    "",
+  ].join("\n"));
   git(root, "add", ".");
   git(root, "commit", "-q", "-m", "fixture");
-  const previewResult = spawnSync(process.execPath, [initScript, "preview", "--project-root", root], { encoding: "utf8" });
-  assert.equal(previewResult.status, 0, previewResult.stderr || previewResult.stdout);
-  const preview = JSON.parse(previewResult.stdout);
-  const initialized = spawnSync(process.execPath, [initScript, "apply", "--project-root", root, "--confirmed", "--preview-digest", preview.preview_digest], { encoding: "utf8" });
-  assert.equal(initialized.status, 0, initialized.stderr || initialized.stdout);
-  return root;
+
+  const docs = join(root, "worktrees/docs");
+  git(root, "worktree", "add", "-q", "--detach", docs, "HEAD");
+  git(docs, "checkout", "-q", "--orphan", "docs");
+  git(docs, "rm", "-rqf", ".");
+  writeFileSync(join(docs, "architecture.md"), "# Architecture\n");
+  git(docs, "add", ".");
+  git(docs, "commit", "-q", "-m", "Initialize docs");
+  return { root, docs };
+}
+
+function planned({ root, docs }, changeId = "tenant-throttling", planBytes = PLAN) {
+  const change = join(docs, "changes", changeId);
+  mkdirSync(change, { recursive: true });
+  writeFileSync(join(change, "plan.md"), planBytes);
+  git(docs, "add", ".");
+  git(docs, "commit", "-q", "-m", `Plan ${changeId}`);
+  const planCommit = git(docs, "rev-parse", "HEAD");
+  const planDigest = helper("digest", { content: planBytes }).body.digest;
+  const approval = helper("create-approval", {
+    change_id: changeId,
+    plan_path: `changes/${changeId}/plan.md`,
+    plan_digest: planDigest,
+    plan_commit: planCommit,
+    approved_by: "Ada Lovelace",
+    approved_at: "2026-08-13T12:00:00Z",
+  });
+  assert.equal(approval.status, 0, JSON.stringify(approval.body));
+  writeFileSync(join(change, "approval.json"), `${JSON.stringify(approval.body.approval, null, 2)}\n`);
+  git(docs, "add", ".");
+  git(docs, "commit", "-q", "-m", `Approve ${changeId}`);
+  return { change, changeId, planCommit, planDigest };
 }
 
 function fingerprint(root) {
@@ -46,9 +126,9 @@ function fingerprint(root) {
     for (const name of readdirSync(directory).sort()) {
       if (name === ".git") continue;
       const path = join(directory, name);
-      const rel = relative(root, path);
-      const stat = statSync(path);
-      hash.update(`${stat.isDirectory() ? "d" : "f"}:${rel}\0`);
+      const stat = lstatSync(path);
+      hash.update(`${stat.isDirectory() ? "d" : stat.isSymbolicLink() ? "l" : "f"}:${relative(root, path)}\0`);
+      if (stat.isSymbolicLink()) continue;
       if (stat.isDirectory()) visit(path);
       else hash.update(readFileSync(path));
     }
@@ -57,164 +137,191 @@ function fingerprint(root) {
   return hash.digest("hex");
 }
 
-test("doctor and status reconstruct initialized state without writes", async () => {
-  const root = fixture();
-  const docs = join(root, "worktrees/docs");
-  const change = join(docs, "changes/sample-change");
-  mkdirSync(change, { recursive: true });
-  const spec = "# Change: sample-change\n\nApproved behavior.\n";
-  const plan = "schema: 2\nchange_id: sample-change\nsummary: Test\neffective_policy:\n  components: []\n  unowned_paths: []\n  project_policy_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n  required_validation: []\ntasks: []\ndocumentation:\n  impact: none\n  files: []\n";
-  writeFileSync(join(change, "spec.md"), spec);
-  writeFileSync(join(change, "plan.yaml"), plan);
-  git(docs, "add", "changes/sample-change/spec.md", "changes/sample-change/plan.yaml");
-  git(docs, "commit", "-q", "-m", "Plan sample change");
-  const planCommit = git(docs, "rev-parse", "HEAD");
-  const approval = createApprovalBundle({
-    approver: "test-user",
-    approved_at: "2026-08-05T12:00:00Z",
-    plugin_version: "0.5.0",
-    docs_commit: planCommit,
-    inputs: [
-      { path: "spec.md", content: spec },
-      { path: "plan.yaml", content: plan },
-    ],
+test("status reconstructs plan, approval, and run-record state from durable artifacts without writing", () => {
+  const project = fixture("full");
+  const { root, docs } = project;
+  const { change, changeId, planCommit, planDigest } = planned(project);
+
+  const groups = [
+    { group_id: "api", tasks: ["IMPLEMENT the throttle contract"], affected_paths: ["src/api"], validation: ["node --version"] },
+    { group_id: "web", tasks: ["IMPLEMENT the throttle banner"], affected_paths: ["apps/web"], validation: ["node --version"] },
+  ];
+  const baseCommit = git(root, "rev-parse", "main");
+  const prepared = runNode(orchestratorPath, ["prepare"], {
+    project_root: root,
+    change_id: changeId,
+    phase_id: "foundations",
+    plan_digest: planDigest,
+    base_branch: "main",
+    base_commit: baseCommit,
+    groups,
   });
+  assert.equal(prepared.status, 0, JSON.stringify(prepared.body));
+
+  let record = helper("create-run-record", {
+    change_id: changeId,
+    phase_id: "foundations",
+    plan_digest: planDigest,
+    base_branch: "main",
+    base_commit: baseCommit,
+    started_at: "2026-08-13T12:01:00Z",
+    groups: groups.map(({ group_id, tasks, affected_paths }) => ({ group_id, tasks, affected_paths })),
+  }).body.record;
+  for (const step of ["implementing", "reviewing", "validating"]) {
+    record = helper("update-run-record", { record, update: { groups: { api: { status: step }, web: { status: step } } } }).body.record;
+  }
+  const evidence = helper("run-validation", {
+    project_root: join(root, "worktrees", changeId, "api"),
+    recorded_at: "2026-08-13T12:04:00Z",
+    commands: [{ command: "node --version", cwd: ".", timeout_ms: 20000, required: true }],
+  });
+  assert.equal(evidence.status, 0, JSON.stringify(evidence.body));
+  record = helper("update-run-record", {
+    record,
+    update: {
+      groups: {
+        api: {
+          review: { status: "passed", high_findings: [] },
+          validation: { status: "passed", commands: evidence.body.evidence.commands, deferred: [], recorded_at: evidence.body.evidence.recorded_at },
+          implementation_commit: git(join(root, "worktrees", changeId, "api"), "rev-parse", "HEAD"),
+          status: "passed",
+        },
+      },
+    },
+  }).body.record;
+  mkdirSync(join(change, "runs"), { recursive: true });
+  writeFileSync(join(change, "runs/foundations.json"), `${JSON.stringify(record, null, 2)}\n`);
+  git(docs, "add", ".");
+  git(docs, "commit", "-q", "-m", "Record foundations run");
+
+  const before = fingerprint(root);
+  const codeDirtyBefore = git(root, "status", "--porcelain=v1", "--untracked-files=all");
+  const docsDirtyBefore = git(docs, "status", "--porcelain=v1", "--untracked-files=all");
+
+  const snapshot = status(root);
+  assert.equal(snapshot.ok, true);
+  assert.equal(snapshot.read_only, true);
+  assert.equal(snapshot.config.valid, true);
+  assert.equal(snapshot.code.base_branch, "main");
+  assert.equal(snapshot.docs.attached, true);
+  assert.equal(snapshot.docs.branch, "docs");
+  assert.equal(snapshot.execution.mode, "orchestrated");
+  assert.equal(snapshot.execution.max_parallel, 3);
+  assert.equal(snapshot.execution.isolation, "managed-devcontainer");
+  assert.equal(snapshot.execution.permissions.profile, "managed-development");
+  assert.equal(snapshot.execution.active, true);
+
+  assert.equal(snapshot.changes.length, 1);
+  const [entry] = snapshot.changes;
+  assert.equal(entry.change_id, changeId);
+  assert.equal(entry.plan.present, true);
+  assert.equal(entry.plan.digest, planDigest);
+  assert.equal(entry.approval.state, "active");
+  assert.equal(entry.approval.plan_commit, planCommit);
+  assert.equal(entry.approval.approved_by, "Ada Lovelace");
+  assert.equal(entry.runs.length, 1);
+
+  const [run] = entry.runs;
+  assert.equal(run.valid, true);
+  assert.equal(run.phase_id, "foundations");
+  assert.equal(run.status, "running");
+  assert.equal(run.plan_digest_matches, true);
+  const api = run.groups.find(({ group_id }) => group_id === "api");
+  const web = run.groups.find(({ group_id }) => group_id === "web");
+  assert.equal(api.status, "passed");
+  assert.equal(api.branch, `adw/${changeId}/api`);
+  assert.equal(api.branch_exists, true);
+  assert.equal(api.worktree, `worktrees/${changeId}/api`);
+  assert.equal(api.worktree_attached, true);
+  assert.equal(api.validation.status, "passed");
+  assert.equal(api.validation.commands[0].exit_code, 0);
+  assert.equal(api.review.status, "passed");
+  assert.equal(api.pull_request, null);
+  assert.equal(web.status, "validating");
+  assert.equal(entry.state, "executing");
+  assert.equal(entry.next_skill, "adw:execute");
+  assert.deepEqual(entry.blocked, []);
+  assert.equal(snapshot.pull_requests.state, "not-queried");
+
+  assert.equal(fingerprint(root), before, "status must not modify the working tree");
+  assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), codeDirtyBefore);
+  assert.equal(git(docs, "status", "--porcelain=v1", "--untracked-files=all"), docsDirtyBefore);
+});
+
+test("status reports an approval stale as soon as one approved plan byte changes", () => {
+  const project = fixture("stale");
+  const { change } = planned(project);
+  writeFileSync(join(change, "plan.md"), `${PLAN}\nOne extra sentence.\n`);
+
+  const snapshot = status(project.root);
+  const [entry] = snapshot.changes;
+  assert.equal(entry.plan.present, true);
+  assert.equal(entry.approval.state, "stale");
+  assert.match(entry.approval.reason, /plan bytes changed after approval/);
+  assert.equal(entry.state, "planned");
+  assert.equal(entry.next_skill, "adw:amend");
+  assert.equal(entry.blocked.length, 1);
+});
+
+test("status refuses an approval whose bound docs commit no longer holds those plan bytes", () => {
+  const project = fixture("commit");
+  const { change, changeId, planDigest } = planned(project);
+  const approval = JSON.parse(readFileSync(join(change, "approval.json"), "utf8"));
+  approval.plan_commit = "b".repeat(40);
   writeFileSync(join(change, "approval.json"), `${JSON.stringify(approval, null, 2)}\n`);
-  const historical = createApprovalBundle({
-    approver: "older-reviewer",
-    approved_at: "2026-08-05T11:00:00Z",
-    plugin_version: "0.4.0",
-    docs_commit: planCommit,
-    inputs: [
-      { path: "spec.md", content: "older spec\n" },
-      { path: "plan.yaml", content: "older plan\n" },
-    ],
-  });
-  historical.status = "superseded";
-  historical.invalidated_at = "2026-08-05T11:30:00Z";
-  historical.invalidation_reason = "Acceptance behavior changed.";
-  mkdirSync(join(change, "approval-history"));
-  writeFileSync(join(change, `approval-history/${historical.digest}.json`), `${JSON.stringify(historical, null, 2)}\n`);
-  writeFileSync(join(change, "approval-history/wrong-name.json"), `${JSON.stringify(historical, null, 2)}\n`);
-  git(docs, "add", "changes/sample-change/approval.json");
-  git(docs, "commit", "-q", "-m", "Approve sample change");
-  const approvalCommit = git(docs, "rev-parse", "HEAD");
-  const validation = recordValidation({
-    change_id: "sample-change",
-    plugin_version: "0.1.0",
-    code_commit: git(root, "rev-parse", "HEAD"),
-    docs_commit: approvalCommit,
-    recorded_at: "2026-08-05T12:05:00Z",
-    commands: [{ command: "npm test", cwd: ".", exit_code: 0, duration_ms: 10, summary: "passed", required: true }],
-  });
-  writeFileSync(join(change, "validation.json"), `${JSON.stringify(validation, null, 2)}\n`);
-  git(docs, "add", "changes/sample-change/validation.json");
-  git(docs, "commit", "-q", "-m", "Validate sample change");
 
-  const beforeFingerprint = fingerprint(root);
-  const codeStatusBefore = git(root, "status", "--porcelain=v1", "--untracked-files=all");
-  const docsStatusBefore = git(docs, "status", "--porcelain=v1", "--untracked-files=all");
-  const doctor = run(doctorScript, root);
-  const status = run(statusScript, root);
-  assert.equal(doctor.read_only, true);
-  assert.equal(doctor.checks.find(({ id }) => id === "plugin").status, "pass");
-  assert.equal(doctor.checks.find(({ id }) => id === "docs-worktree").status, "pass");
-  assert.equal(status.read_only, true);
-  assert.equal(status.execution.isolation, "managed-devcontainer");
-  assert.equal(status.execution.permissions.profile, "managed-development");
-  assert.deepEqual(status.execution.permissions.provider_artifacts, { codex: true, claude: true });
-  assert.equal(status.execution.active, true);
-  assert.equal(status.docs.attached, true);
-  assert.equal(status.changes.length, 1);
-  assert.equal(status.changes[0].workflow, "planned");
-  assert.equal(status.changes[0].approval.state, "active");
-  assert.equal(status.changes[0].artifacts.approval_history, 2);
-  assert.deepEqual(status.changes[0].approval_history, {
-    total: 2,
-    valid: 1,
-    invalid: [{ path: "wrong-name.json", reason: "approval history filename does not match its digest" }],
-  });
-  assert.equal(status.changes[0].validation.state, "passed");
-  assert.equal(status.changes[0].state, "validated");
-  assert.equal(status.draft_prs, undefined);
-  assert.equal(status.pull_requests.state, "not-queried");
-  assert.equal(fingerprint(root), beforeFingerprint);
-  assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), codeStatusBefore);
-  assert.equal(git(docs, "status", "--porcelain=v1", "--untracked-files=all"), docsStatusBefore);
+  const entry = status(project.root).changes.find((item) => item.change_id === changeId);
+  assert.equal(entry.plan.digest, planDigest);
+  assert.equal(entry.approval.state, "invalid");
+  assert.match(entry.approval.reason, /plan_commit does not exist/);
+  assert.equal(entry.next_skill, "adw:amend");
 });
 
-test("status recognizes passed standalone quick-change evidence as validated", () => {
-  const root = fixture();
-  const docs = join(root, "worktrees/docs");
-  const change = join(docs, "changes/quick-2026-status-fix");
-  mkdirSync(change, { recursive: true });
-  const validation = recordValidation({
-    change_id: "quick-2026-status-fix",
-    plugin_version: "0.6.0",
-    code_commit: git(root, "rev-parse", "HEAD"),
-    docs_commit: git(docs, "rev-parse", "HEAD"),
-    recorded_at: "2026-08-13T12:05:00Z",
-    commands: [{ command: "npm test", cwd: ".", exit_code: 0, duration_ms: 10, summary: "passed", required: true }],
-  });
-  writeFileSync(join(change, "validation.json"), `${JSON.stringify(validation, null, 2)}\n`);
+test("status ignores symlinked and hostile change entries rather than following them", () => {
+  const project = fixture("hostile");
+  const { docs, root } = project;
+  planned(project);
+  const changes = join(docs, "changes");
+  const outside = realpathSync(mkdtempSync(join(tmpdir(), "adw-outside-")));
+  mkdirSync(join(outside, "changes/escaped"), { recursive: true });
+  writeFileSync(join(outside, "changes/escaped/plan.md"), "# stolen plan\n");
+  symlinkSync(join(outside, "changes/escaped"), join(changes, "escaped"));
+  symlinkSync(join(changes, "tenant-throttling"), join(changes, "aliased"));
+  writeFileSync(join(changes, "not-a-directory"), "");
+  mkdirSync(join(changes, "Bad Name"), { recursive: true });
 
-  const status = run(statusScript, root);
-  assert.equal(status.changes.length, 1);
-  assert.equal(status.changes[0].workflow, "quick");
-  assert.equal(status.changes[0].approval.state, "missing");
-  assert.equal(status.changes[0].validation.state, "passed");
-  assert.equal(status.changes[0].state, "validated");
+  const snapshot = status(root);
+  assert.deepEqual(snapshot.changes.map(({ change_id }) => change_id), ["tenant-throttling"]);
+  const skipped = Object.fromEntries(snapshot.skipped_changes.map(({ name, reason }) => [name, reason]));
+  assert.match(skipped.escaped, /symlinked change entries are ignored/);
+  assert.match(skipped.aliased, /symlinked change entries are ignored/);
+  assert.match(skipped["not-a-directory"], /not a directory/);
+  assert.match(skipped["Bad Name"], /not a safe change id/);
+  rmSync(outside, { recursive: true, force: true });
 });
 
-test("status reports an approval stale when exact plan bytes change", () => {
-  const root = fixture();
-  const change = join(root, "worktrees/docs/changes/stale-change");
-  mkdirSync(change, { recursive: true });
-  const spec = "spec bytes\n";
-  const plan = "plan bytes\n";
-  writeFileSync(join(change, "spec.md"), spec);
-  writeFileSync(join(change, "plan.yaml"), plan);
-  const docsCommit = git(root, "-C", join(root, "worktrees/docs"), "rev-parse", "HEAD");
-  const approval = createApprovalBundle({ approver: "test", approved_at: "2026-08-05T12:00:00Z", plugin_version: "0.5.0", docs_commit: docsCommit, inputs: [{ path: "spec.md", content: spec }, { path: "plan.yaml", content: plan }] });
-  writeFileSync(join(change, "approval.json"), JSON.stringify(approval));
-  writeFileSync(join(change, "plan.yaml"), "changed plan bytes\n");
-  const status = run(statusScript, root);
-  assert.equal(status.changes[0].approval.state, "invalid");
-  assert.equal(status.changes[0].approval.reason, "approval digest is stale");
-  assert.equal(status.changes[0].state, "planned");
+test("status ignores a symlinked plan, approval, and run record inside a real change directory", () => {
+  const project = fixture("artifacts");
+  const { change } = planned(project, "swapped");
+  rmSync(join(change, "approval.json"));
+  symlinkSync(join(change, "plan.md"), join(change, "approval.json"));
+  mkdirSync(join(change, "runs"), { recursive: true });
+  symlinkSync(join(change, "plan.md"), join(change, "runs/foundations.json"));
+
+  const entry = status(project.root).changes.find((item) => item.change_id === "swapped");
+  assert.equal(entry.approval.state, "invalid");
+  assert.match(entry.approval.reason, /regular non-symlink file/);
+  assert.deepEqual(entry.runs, []);
+  assert.deepEqual(entry.skipped, [{ path: "runs/foundations.json", reason: "run record must be a regular non-symlink file" }]);
 });
 
-test("status invalidates an approval when integrations appear unbound and does not preserve validated state", () => {
-  const root = fixture();
-  const change = join(root, "worktrees/docs/changes/unbound-integrations");
-  mkdirSync(change, { recursive: true });
-  const spec = "# Unbound integration\n";
-  const plan = "schema: 2\nchange_id: unbound-integrations\n";
-  writeFileSync(join(change, "spec.md"), spec);
-  writeFileSync(join(change, "plan.yaml"), plan);
-  const docsCommit = git(root, "-C", join(root, "worktrees/docs"), "rev-parse", "HEAD");
-  const approval = createApprovalBundle({
-    approver: "test",
-    approved_at: "2026-08-05T12:00:00Z",
-    plugin_version: "0.5.0",
-    docs_commit: docsCommit,
-    inputs: [{ path: "spec.md", content: spec }, { path: "plan.yaml", content: plan }],
-  });
-  writeFileSync(join(change, "approval.json"), `${JSON.stringify(approval, null, 2)}\n`);
-  writeFileSync(join(change, "integrations.yaml"), "schema: 1\nchange_id: unbound-integrations\nbindings: []\n");
-  const validation = recordValidation({
-    change_id: "unbound-integrations",
-    plugin_version: "0.5.0",
-    code_commit: git(root, "rev-parse", "HEAD"),
-    docs_commit: docsCommit,
-    recorded_at: "2026-08-05T12:05:00Z",
-    commands: [{ command: "npm test", cwd: ".", exit_code: 0, duration_ms: 1, summary: "passed", required: true }],
-  });
-  writeFileSync(join(change, "validation.json"), `${JSON.stringify(validation, null, 2)}\n`);
-
-  const status = run(statusScript, root);
-  assert.equal(status.changes[0].approval.state, "invalid");
-  assert.equal(status.changes[0].approval.reason, "integrations.yaml exists but is not bound by the approval");
-  assert.equal(status.changes[0].validation.state, "passed");
-  assert.equal(status.changes[0].state, "planned");
+test("status exits 2 with a truthful error outside a Git project", () => {
+  const outside = realpathSync(mkdtempSync(join(tmpdir(), "adw-status-nogit-")));
+  const result = spawnSync(process.execPath, [statusScript, "--project-root", outside], { encoding: "utf8" });
+  assert.equal(result.status, 2);
+  const body = JSON.parse(result.stdout);
+  assert.equal(body.ok, false);
+  assert.equal(body.read_only, true);
+  assert.ok(body.error.length > 0);
+  rmSync(outside, { recursive: true, force: true });
 });
