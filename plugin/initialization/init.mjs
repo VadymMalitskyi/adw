@@ -20,17 +20,17 @@ import {
   onboardingDigest,
   onboardingSummary,
 } from "./onboarding.mjs";
-import { renderLocalConfiguration } from "../../../lib/local-configuration.mjs";
-import { applyAtomicWrites, parseYaml, validateProjectConfig } from "../../../lib/adw-helper.mjs";
-import { permissionProjectFiles } from "../../../execution/managed-development.mjs";
+import { renderLocalConfiguration } from "../lib/local-configuration.mjs";
+import { applyAtomicWrites, parseYaml, validateProjectConfig } from "../lib/adw-helper.mjs";
+import { permissionProjectFiles } from "../execution/managed-development.mjs";
 
 const ROUTING_START = "<!-- ADW:START -->";
 const ROUTING_END = "<!-- ADW:END -->";
 const IGNORE_START = "# ADW:START";
 const IGNORE_END = "# ADW:END";
-const skillDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const pluginRoot = resolve(skillDirectory, "../..");
+const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ISOLATION_MODES = new Set(["managed-devcontainer", "project-devcontainer", "provider-sandbox"]);
+const INITIALIZATION_KINDS = new Set(["brownfield", "greenfield"]);
 const CONVENTION_ORDER = ["branches", "pull_requests", "work_items"];
 
 function fail(message) {
@@ -48,9 +48,11 @@ function parseArguments(argv) {
     else if (value === "--execution") args.execution = argv[++index];
     else if (value === "--onboarding") args.onboardingPath = argv[++index];
     else if (value === "--preview-digest") args.previewDigest = argv[++index];
+    else if (value === "--kind") args.kind = argv[++index];
     else fail(`unknown argument: ${value}`);
   }
   if (!args.projectRoot) fail("--project-root is required");
+  if (!INITIALIZATION_KINDS.has(args.kind)) fail("--kind must be brownfield or greenfield");
   if (args.execution && !ISOLATION_MODES.has(args.execution)) fail(`unsupported --execution isolation: ${args.execution}`);
   if (args.action === "apply" && !args.confirmed) fail("apply requires --confirmed after the user approves the preview");
   return args;
@@ -73,6 +75,37 @@ function assertProjectRoot(input) {
   const result = git(root, ["rev-parse", "--show-toplevel"]);
   const top = realpathSync(result.stdout);
   if (root !== top) throw new Error(`project root must be the Git top level: ${top}`);
+  return root;
+}
+
+function assertDirectory(input) {
+  if (!existsSync(input)) throw new Error("project root must be an existing directory");
+  if (lstatSync(input).isSymbolicLink() || !lstatSync(input).isDirectory()) throw new Error("project root must be a real non-symlink directory");
+  return realpathSync(input);
+}
+
+function greenfieldGitPlan(projectRoot) {
+  const identity = git(projectRoot, ["var", "GIT_AUTHOR_IDENT"], { allowFailure: true });
+  if (identity.status !== 0) throw new Error("greenfield initialization needs a configured Git author name and email before preview");
+  const gitPath = join(projectRoot, ".git");
+  const entries = readdirSync(projectRoot).filter((name) => name !== ".git");
+  if (entries.length > 0) throw new Error(`greenfield initialization requires an empty directory; found: ${entries.sort().join(", ")}`);
+  if (!existsSync(gitPath)) return { action: "create", base_branch: "main", author_identity: "configured" };
+  if (lstatSync(gitPath).isSymbolicLink() || !lstatSync(gitPath).isDirectory()) throw new Error("greenfield .git must be a real directory");
+  const root = assertProjectRoot(projectRoot);
+  if (git(root, ["rev-parse", "--verify", "HEAD"], { allowFailure: true }).status === 0) {
+    throw new Error("greenfield initialization requires a repository with no commits; use adw:init-brownfield for an established repository");
+  }
+  if (git(root, ["status", "--porcelain=v1", "--untracked-files=all"]).stdout) throw new Error("greenfield repository must not contain staged or untracked files");
+  if (git(root, ["for-each-ref", "--format=%(refname)", "refs/heads"]).stdout) throw new Error("greenfield repository must not contain local branches");
+  return { action: "reuse-unborn", base_branch: "main", author_identity: "configured" };
+}
+
+function brownfieldRoot(input) {
+  const root = assertProjectRoot(input);
+  if (git(root, ["rev-parse", "--verify", "HEAD"], { allowFailure: true }).status !== 0) {
+    throw new Error("brownfield initialization requires at least one commit; use adw:init-greenfield for an empty project");
+  }
   return root;
 }
 
@@ -254,14 +287,13 @@ function projectComponents(projectRoot) {
   return [{ name, path: ".", commands: rootCommands }, ...discovered];
 }
 
-function projectConfiguration(projectRoot, isolation, onboarding) {
-  const components = projectComponents(projectRoot);
+function projectConfiguration(projectRoot, isolation, onboarding, { baseBranch = defaultBranch(projectRoot), components = projectComponents(projectRoot) } = {}) {
   const lines = [
     "# ADW project configuration. Every generated command cites an observable source.",
     "adw: 1",
     "",
     "git:",
-    `  base_branch: ${yamlScalar(defaultBranch(projectRoot))}`,
+    `  base_branch: ${yamlScalar(baseBranch)}`,
     "",
     "docs:",
     "  branch: docs",
@@ -340,13 +372,14 @@ function resolveExecution(projectRoot, requested) {
   };
 }
 
-function managedDevcontainerFiles(projectRoot, onboarding) {
+function managedDevcontainerFiles(projectRoot, onboarding, kind) {
   const templateRoot = join(pluginRoot, "templates/devcontainer");
   const generated = managedDevelopmentFiles(projectRoot, templateRoot, {
     agentTools: onboarding.agentTools,
     webAccess: onboarding.webAccess,
     integrationDomains: onboarding.networkDomains,
     runtimeVersions: onboarding.development?.runtimeVersions,
+    includeChosenRuntimes: kind === "greenfield",
   });
   return [...generated.files].map(([name, content]) => ({
     path: `.devcontainer/${name}`,
@@ -356,8 +389,39 @@ function managedDevcontainerFiles(projectRoot, onboarding) {
   }));
 }
 
-function plannedFiles(projectRoot, execution, onboarding) {
+function greenfieldProjectDocument(greenfield) {
+  const lines = [
+    `# ${greenfield.name}`,
+    "",
+    "## Problem",
+    "",
+    greenfield.problem,
+    "",
+    "## Intended users",
+    "",
+    greenfield.users,
+    "",
+    "## MVP outcome",
+    "",
+    greenfield.mvp,
+  ];
+  if (greenfield.shape) lines.push("", "## Initial application shape", "", greenfield.shape);
+  lines.push("", "## Non-goals", "", ...(greenfield.nonGoals.length === 0 ? ["None declared."] : greenfield.nonGoals.map((item) => `- ${item}`)));
+  lines.push("", "## Constraints", "", ...(greenfield.constraints.length === 0 ? ["None declared."] : greenfield.constraints.map((item) => `- ${item}`)));
+  lines.push("", "## Validation contract", "", "`make check` is the stable project validation entry point. The first implementation plan must expand it to run the real stack-specific checks.", "");
+  return lines.join("\n");
+}
+
+function greenfieldMakefile() {
+  return ".PHONY: check\n\ncheck:\n\t@test -s PROJECT.md\n";
+}
+
+function plannedFiles(projectRoot, execution, onboarding, { kind, baseBranch }) {
   const files = [];
+  if (kind === "greenfield") {
+    files.push({ path: "PROJECT.md", before: "", after: greenfieldProjectDocument(onboarding.greenfield), action: "create-project-contract" });
+    files.push({ path: "Makefile", before: "", after: greenfieldMakefile(), action: "create-validation-contract" });
+  }
   const routingFiles = ["AGENTS.md", "CLAUDE.md"];
   for (const name of routingFiles) {
     const path = join(projectRoot, name);
@@ -383,13 +447,17 @@ function plannedFiles(projectRoot, execution, onboarding) {
   files.push({ path: ".adw/preferences.md", before: preferencesBefore, after: preferencesAfter, action: existsSync(preferencesPath) ? "preserve-preferences" : "create-preferences" });
   const configPath = join(projectRoot, "adw.yaml");
   if (!existsSync(configPath)) {
-    files.push({ path: "adw.yaml", before: "", after: projectConfiguration(projectRoot, execution.isolation, onboarding), action: "create" });
+    const greenfieldComponents = [{ name: "app", path: ".", commands: [{ command: "make check", source: "Makefile#target:check", required: true }] }];
+    files.push({ path: "adw.yaml", before: "", after: projectConfiguration(projectRoot, execution.isolation, onboarding, {
+      baseBranch,
+      ...(kind === "greenfield" ? { components: greenfieldComponents } : {}),
+    }), action: "create" });
     for (const path of [".codex/config.toml", ".codex/rules/adw.rules", ".claude/settings.json"]) assertWritableProjectPath(projectRoot, path);
     for (const providerFile of permissionProjectFiles("both", (name) => readOrEmpty(join(projectRoot, name)))) {
       const before = readOrEmpty(join(projectRoot, providerFile.path));
       files.push({ path: providerFile.path, before, after: providerFile.content, action: before ? "merge-permission-policy" : "create-permission-policy" });
     }
-    if (execution.isolation === "managed-devcontainer") files.push(...managedDevcontainerFiles(projectRoot, onboarding));
+    if (execution.isolation === "managed-devcontainer") files.push(...managedDevcontainerFiles(projectRoot, onboarding, kind));
   }
   return files;
 }
@@ -409,7 +477,8 @@ function worktreeRecords(projectRoot) {
   return records;
 }
 
-function docsPlan(projectRoot) {
+function docsPlan(projectRoot, kind) {
+  if (kind === "greenfield" && !existsSync(join(projectRoot, ".git"))) return { action: "create", path: "worktrees/docs", branch: "docs" };
   const target = resolve(projectRoot, "worktrees/docs");
   const records = worktreeRecords(projectRoot);
   const atTarget = records.find((record) => resolve(record.worktree) === target);
@@ -471,8 +540,8 @@ function rollbackDocsInitialization(projectRoot, plan) {
   if (plan.action === "create") git(projectRoot, ["branch", "-D", plan.branch], { allowFailure: true });
 }
 
-function previewDigest(projectRoot, files, docs, execution, onboarding, understanding) {
-  const codeHead = git(projectRoot, ["rev-parse", "HEAD"], { allowFailure: true });
+function previewDigest(projectRoot, files, docs, execution, onboarding, understanding, kind, gitPlan) {
+  const codeHead = existsSync(join(projectRoot, ".git")) ? git(projectRoot, ["rev-parse", "HEAD"], { allowFailure: true }) : { status: 1 };
   const payload = {
     project_root: realpathSync(projectRoot),
     code_head: codeHead.status === 0 ? codeHead.stdout : null,
@@ -480,30 +549,48 @@ function previewDigest(projectRoot, files, docs, execution, onboarding, understa
     docs,
     docs_files: [...understanding.files].map(([path, content]) => ({ path, content })),
     execution,
+    kind,
+    git: gitPlan,
     onboarding_digest: onboardingDigest(onboarding),
   };
   return createHash("sha256").update("ADW-INIT-PREVIEW-V1\0").update(JSON.stringify(payload)).digest("hex");
 }
 
-function summarize(projectRoot, files, docs, execution, onboarding, developmentEnvironment, understanding) {
+function summarize(projectRoot, files, docs, execution, onboarding, developmentEnvironment, understanding, kind, gitPlan, mode) {
+  const applied = mode === "apply";
   const nextSteps = execution.reopen_required
     ? [
-      "Review the preview, then commit the generated project files after approval.",
+      kind === "greenfield"
+        ? (applied ? "The first main-branch commit is ready; review it before any external delivery." : "Review the preview; approval creates the Git repository and first main-branch commit.")
+        : (applied ? "The generated main-branch files are ready to review and commit." : "Review the preview, then commit the generated project files after approval."),
       "Rebuild and reopen the repository in its devcontainer so the isolated workspace can be created.",
       "Open the repository in its devcontainer. Project runtimes and manifest-backed dependencies install automatically after the outbound firewall is active.",
       "Authenticate Codex, Claude Code, and any configured provider tools when first used. Credentials stay in their project-scoped volumes.",
     ]
     : [
-      "Review the preview, then commit the generated project files after approval.",
+      kind === "greenfield"
+        ? (applied ? "The first main-branch commit is ready; review it before any external delivery." : "Review the preview; approval creates the Git repository and first main-branch commit.")
+        : (applied ? "The generated main-branch files are ready to review and commit." : "Review the preview, then commit the generated project files after approval."),
       "Run adw:doctor when readiness is uncertain. The selected isolation needs no container rebuild.",
       "Authenticate any configured provider tools when they are first used.",
     ];
   return {
     ok: true,
+    kind,
+    git: gitPlan,
     writes: files.filter((file) => file.before !== file.after).map((file) => ({ path: file.path, action: file.action })),
     unchanged: files.filter((file) => file.before === file.after).map((file) => file.path),
     local_state: [".adw/local.yaml", ".adw/preferences.md", ".adw/cache/"],
-    docs: { ...docs, generated_files: [...understanding.files.keys()], components: understanding.components.map(({ name, path }) => ({ name, path })) },
+    docs: {
+      ...docs,
+      generated_files: [
+        ...understanding.files.keys(),
+        ...([...understanding.files.keys()].some((path) => path.startsWith("components/")) ? [] : ["components/.gitkeep"]),
+        "changes/.gitkeep",
+        "SYNC.yaml",
+      ],
+      components: understanding.components.map(({ name, path }) => ({ name, path })),
+    },
     execution: {
       ...execution,
       mode: onboarding.execution.mode,
@@ -514,7 +601,7 @@ function summarize(projectRoot, files, docs, execution, onboarding, developmentE
     development_environment: developmentEnvironment,
     setup_guidance: {
       what_adw_is: "ADW helps a team plan, review, and safely carry out software changes with Codex and Claude Code.",
-      preview_safety: "This preview has not changed the repository. Files are written only after your explicit approval.",
+      preview_safety: applied ? "The digest-bound initialization was applied locally. No external system was contacted." : "This preview has not changed the repository. Files are written only after your explicit approval.",
       why_information_is_needed: "ADW asks only for choices it cannot safely infer: how work should run, the workspace isolation, optional team services, and project conventions. Do not provide credentials in setup answers.",
       after_initialization: "Initialization creates project documentation, project configuration, and the selected workspace isolation. It does not authenticate tools or contact external services.",
     },
@@ -522,10 +609,76 @@ function summarize(projectRoot, files, docs, execution, onboarding, developmentE
   };
 }
 
+function greenfieldUnderstanding(onboarding) {
+  const component = {
+    name: onboarding.greenfield.name,
+    path: ".",
+    slug: "root",
+  };
+  const architecture = [
+    "# Project context",
+    "",
+    "This greenfield context is grounded in the explicitly reviewed project contract on the main branch.",
+    "",
+    "## Product intent",
+    "",
+    `- Problem and MVP: \`PROJECT.md\``,
+    `- Initial application shape: ${onboarding.greenfield.shape ?? "not yet selected"}`,
+    "",
+    "## Component boundaries",
+    "",
+    `- [${component.name}](components/root.md) — \`.\``,
+    "",
+    "## Validation",
+    "",
+    "- `make check` (source: `Makefile#target:check`)",
+  ].join("\n");
+  const componentDocument = `# ${component.name}\n\nPath: \`.\`\n\n## Role\n\nDeliver the MVP defined in \`PROJECT.md\`.\n\n## Validation\n\n- \`make check\` (source: \`Makefile#target:check\`)\n`;
+  return {
+    schema: 1,
+    components: [component],
+    authoritative_documentation: ["PROJECT.md"],
+    files: new Map([
+      ["README.md", "# ADW project records\n\nThe project contract lives in `PROJECT.md` on the main branch. This docs branch stores reviewed architecture context and ADW change records.\n"],
+      ["architecture.md", `${architecture}\n`],
+      ["components/root.md", componentDocument],
+    ]),
+  };
+}
+
+function initializeGreenfieldRepository(projectRoot, gitPlan) {
+  if (gitPlan.action === "create") git(projectRoot, ["init", "-q", "-b", gitPlan.base_branch]);
+  else git(projectRoot, ["symbolic-ref", "HEAD", `refs/heads/${gitPlan.base_branch}`]);
+  git(projectRoot, ["var", "GIT_AUTHOR_IDENT"]);
+}
+
+function commitGreenfieldSeed(projectRoot) {
+  git(projectRoot, ["-c", "core.hooksPath=/dev/null", "add", "--all"]);
+  git(projectRoot, ["-c", "core.hooksPath=/dev/null", "commit", "-m", "Initialize greenfield ADW project"]);
+  return git(projectRoot, ["rev-parse", "HEAD"]).stdout;
+}
+
+function rollbackGreenfield(projectRoot, gitPlan, files) {
+  for (const file of [...files].reverse()) rmSync(join(projectRoot, file.path), { force: true });
+  for (const directory of [".adw", ".codex", ".claude", ".devcontainer", "worktrees"]) {
+    rmSync(join(projectRoot, directory), { recursive: true, force: true });
+  }
+  if (gitPlan.action === "create") rmSync(join(projectRoot, ".git"), { recursive: true, force: true });
+  else if (existsSync(join(projectRoot, ".git"))) {
+    git(projectRoot, ["update-ref", "-d", `refs/heads/${gitPlan.base_branch}`], { allowFailure: true });
+    git(projectRoot, ["read-tree", "--empty"], { allowFailure: true });
+    git(projectRoot, ["symbolic-ref", "HEAD", `refs/heads/${gitPlan.base_branch}`], { allowFailure: true });
+  }
+}
+
 try {
   const args = parseArguments(process.argv.slice(2));
-  const projectRoot = assertProjectRoot(args.projectRoot);
+  const directory = assertDirectory(args.projectRoot);
+  const gitPlan = args.kind === "greenfield" ? greenfieldGitPlan(directory) : { action: "preserve", base_branch: null };
+  const projectRoot = args.kind === "greenfield" ? directory : brownfieldRoot(directory);
   const onboarding = loadOnboarding(args.onboardingPath, pluginRoot);
+  if (args.kind === "greenfield" && onboarding.greenfield === null) throw new Error("greenfield onboarding requires name, problem, users, and MVP outcome");
+  if (args.kind === "brownfield" && onboarding.greenfield !== null) throw new Error("brownfield onboarding must not contain greenfield project intent");
   const existingConfig = existsSync(join(projectRoot, "adw.yaml"));
   if (existingConfig && (lstatSync(join(projectRoot, "adw.yaml")).isSymbolicLink() || !lstatSync(join(projectRoot, "adw.yaml")).isFile())) throw new Error("adw.yaml must be a regular non-symlink file");
   if (existingConfig && args.onboardingPath) throw new Error("onboarding cannot replace an existing adw.yaml; use an explicit reviewed configuration change");
@@ -534,27 +687,35 @@ try {
   const execution = existingConfig
     ? { isolation: "existing-configuration", action: "preserve", required: false, reopen_required: false }
     : resolveExecution(projectRoot, args.execution ?? onboarding.execution?.isolation);
-  const files = plannedFiles(projectRoot, execution, onboarding);
-  const developmentEnvironment = discoverDevelopmentEnvironment(projectRoot, { runtimeVersions: onboarding.development?.runtimeVersions });
-  const understanding = discoverProjectUnderstanding(projectRoot, developmentEnvironment);
+  const baseBranch = args.kind === "greenfield" ? gitPlan.base_branch : defaultBranch(projectRoot);
+  const files = plannedFiles(projectRoot, execution, onboarding, { kind: args.kind, baseBranch });
+  const developmentEnvironment = discoverDevelopmentEnvironment(projectRoot, {
+    runtimeVersions: onboarding.development?.runtimeVersions,
+    includeChosenRuntimes: args.kind === "greenfield",
+  });
+  const understanding = args.kind === "greenfield" ? greenfieldUnderstanding(onboarding) : discoverProjectUnderstanding(projectRoot, developmentEnvironment);
   const plannedConfig = files.find(({ path }) => path === "adw.yaml")?.after ?? readFileSync(join(projectRoot, "adw.yaml"), "utf8");
   const projectValidation = validateProjectConfig(parseYaml(plannedConfig, "adw.yaml"));
   if (!projectValidation.valid) throw new Error(`adw.yaml is invalid: ${projectValidation.errors.map((item) => `${item.path} ${item.message}`).join("; ")}`);
-  const docs = docsPlan(projectRoot);
-  const approvedPreviewDigest = previewDigest(projectRoot, files, docs, execution, onboarding, understanding);
+  const docs = docsPlan(projectRoot, args.kind);
+  const approvedPreviewDigest = previewDigest(projectRoot, files, docs, execution, onboarding, understanding, args.kind, gitPlan);
   if (args.action === "preview") {
-    process.stdout.write(`${JSON.stringify({ mode: "preview", preview_digest: approvedPreviewDigest, ...summarize(projectRoot, files, docs, execution, onboarding, developmentEnvironment, understanding) }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ mode: "preview", preview_digest: approvedPreviewDigest, ...summarize(projectRoot, files, docs, execution, onboarding, developmentEnvironment, understanding, args.kind, gitPlan, "preview") }, null, 2)}\n`);
   } else {
     if (args.previewDigest !== approvedPreviewDigest) throw new Error("apply requires the exact --preview-digest shown for the reviewed initialization preview");
     try {
-      initializeDocs(projectRoot, docs, understanding);
+      if (args.kind === "greenfield") initializeGreenfieldRepository(projectRoot, gitPlan);
       mkdirSync(join(projectRoot, ".adw/cache"), { recursive: true });
       await writeChangedFiles(projectRoot, files);
+      const seedCommit = args.kind === "greenfield" ? commitGreenfieldSeed(projectRoot) : null;
+      initializeDocs(projectRoot, docs, understanding);
+      if (seedCommit) gitPlan.commit = seedCommit;
     } catch (error) {
-      rollbackDocsInitialization(projectRoot, docs);
+      if (existsSync(join(projectRoot, ".git"))) rollbackDocsInitialization(projectRoot, docs);
+      if (args.kind === "greenfield") rollbackGreenfield(projectRoot, gitPlan, files);
       throw error;
     }
-    process.stdout.write(`${JSON.stringify({ mode: "apply", preview_digest: approvedPreviewDigest, ...summarize(projectRoot, files, { ...docs, action: docs.action === "reuse" ? "reuse" : "ready" }, execution, onboarding, developmentEnvironment, understanding) }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ mode: "apply", preview_digest: approvedPreviewDigest, ...summarize(projectRoot, files, { ...docs, action: docs.action === "reuse" ? "reuse" : "ready" }, execution, onboarding, developmentEnvironment, understanding, args.kind, gitPlan, "apply") }, null, 2)}\n`);
   }
 } catch (error) {
   fail(error.message);

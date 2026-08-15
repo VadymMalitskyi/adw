@@ -21,7 +21,7 @@ Complexity is deliberately spent on execution safety and resumability, not on au
 ## Boundaries
 
 - Provider manifests contain packaging metadata only.
-- `plugin/skills/` is the shared user interface, and both providers resolve the same physical skill tree. `adw:init` owns one-time project policy and infrastructure; `adw:onboard` owns repeatable contributor-local setup and readiness without changing that policy.
+- `plugin/skills/` is the shared user interface, and both providers resolve the same physical skill tree. `adw:init-greenfield` establishes a new project's first reviewed contract and Git state; `adw:init-brownfield` adopts an established repository without redesigning it. Both use the deterministic mechanics under `plugin/initialization/`. `adw:onboard` owns repeatable contributor-local setup and readiness without changing shared policy.
 - `plugin/lib/adw-helper.mjs` performs handwritten contract validation, digests, approval records, run records, validation processes, path confinement, and atomic writes. It is not a public CLI.
 - `plugin/execution/orchestrator.mjs` performs deterministic Git mechanics only: preview, prepare, inspect, and cleanup guidance for group branches and worktrees. It never spawns agents, commits implementation, pushes, opens pull requests, or mutates trackers, and it never deletes a branch or worktree.
 - `src/helpers/runtime-bundle.mjs` is the single canonical helper implementation. `npm run build:helper` uses esbuild to include its one pinned dependency — a YAML 1.2 parser with duplicate-key rejection — in the checked-in, self-contained Node 20 bundle; `npm run check:helper` verifies exact reproducibility. The generated bundle is never hand-edited.

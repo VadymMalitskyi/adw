@@ -50,7 +50,7 @@ function regularFile(path, projectRoot) {
 }
 
 // The permission profile is not a configured field. It is a release-owned
-// constant that `adw:init` writes for every isolation mode, and the managed
+// constant that an ADW initialization workflow writes for every isolation mode, and the managed
 // devcontainer additionally enforces it from root-owned container policy.
 function permissionChecks(projectRoot) {
   const checks = [];
@@ -257,7 +257,7 @@ async function projectChecks(projectRoot) {
 
   const configPath = join(projectRoot, "adw.yaml");
   if (!existsSync(configPath)) {
-    checks.push(check("project-contract", "fail", "adw.yaml is missing; a project maintainer initializes the project with adw:init"));
+    checks.push(check("project-contract", "fail", "adw.yaml is missing; a project maintainer must use adw:init-greenfield or adw:init-brownfield"));
   } else {
     let project;
     let validation;

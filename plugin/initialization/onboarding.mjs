@@ -6,7 +6,7 @@ import {
   localConfigurationSummary,
   normalizeLocalConfiguration,
   renderLocalConfiguration as renderMachineLocalConfiguration,
-} from "../../../lib/local-configuration.mjs";
+} from "../lib/local-configuration.mjs";
 
 const CAPABILITY_SET = new Set(CAPABILITIES);
 const ISOLATION_MODES = new Set(["managed-devcontainer", "project-devcontainer", "provider-sandbox"]);
@@ -67,6 +67,29 @@ function singleLine(value, path, maximum = 1000) {
 
 function sortedObject(value) {
   return Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)));
+}
+
+function stringList(value, path, maximumItems = 20) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) fail(path, "must be an array");
+  if (value.length > maximumItems) fail(path, `must contain at most ${maximumItems} items`);
+  return value.map((item, index) => singleLine(item, `${path}[${index}]`, 1000));
+}
+
+function normalizeGreenfield(value) {
+  if (value === undefined) return null;
+  value = object(value, "onboarding.greenfield");
+  rejectUnknown(value, new Set(["name", "problem", "users", "mvp", "shape", "non_goals", "constraints"]), "onboarding.greenfield");
+  const normalized = {
+    name: singleLine(value.name, "onboarding.greenfield.name", 200),
+    problem: singleLine(value.problem, "onboarding.greenfield.problem", 2000),
+    users: singleLine(value.users, "onboarding.greenfield.users", 1000),
+    mvp: singleLine(value.mvp, "onboarding.greenfield.mvp", 2000),
+    nonGoals: stringList(value.non_goals, "onboarding.greenfield.non_goals"),
+    constraints: stringList(value.constraints, "onboarding.greenfield.constraints"),
+  };
+  if (value.shape !== undefined) normalized.shape = singleLine(value.shape, "onboarding.greenfield.shape", 1000);
+  return normalized;
 }
 
 function readProviderRegistry(pluginRoot) {
@@ -193,7 +216,7 @@ function normalizeDevelopment(value) {
 function normalizeOnboarding(raw, pluginRoot) {
   raw = object(raw, "onboarding");
   rejectSecretLikeKeys(raw);
-  rejectUnknown(raw, new Set(["schema", "web_access", "execution", "development", "providers", "conventions", "local"]), "onboarding");
+  rejectUnknown(raw, new Set(["schema", "web_access", "execution", "development", "greenfield", "providers", "conventions", "local"]), "onboarding");
   if (raw.schema !== 1) fail("onboarding.schema", "must equal 1");
   const registry = readProviderRegistry(pluginRoot);
   const { providers, networkDomains } = normalizeProviders(raw.providers, registry);
@@ -207,6 +230,7 @@ function normalizeOnboarding(raw, pluginRoot) {
     webAccess,
     execution: normalizeExecution(raw.execution),
     development: normalizeDevelopment(raw.development),
+    greenfield: normalizeGreenfield(raw.greenfield),
     providers,
     networkDomains,
     conventions: normalizeConventions(raw.conventions),
@@ -223,6 +247,7 @@ export function defaultOnboarding() {
     webAccess: "public-pages",
     execution: { mode: "orchestrated" },
     development: { runtimeVersions: {} },
+    greenfield: null,
     providers: {},
     networkDomains: [],
     conventions: {},
@@ -265,6 +290,12 @@ export function onboardingSummary(onboarding) {
       isolation: onboarding.execution?.isolation ?? null,
     },
     runtime_versions: onboarding.development?.runtimeVersions ?? {},
+    greenfield: onboarding.greenfield === null ? null : {
+      name: onboarding.greenfield.name,
+      shape: onboarding.greenfield.shape ?? null,
+      non_goals: onboarding.greenfield.nonGoals.length,
+      constraints: onboarding.greenfield.constraints.length,
+    },
     providers,
     network_domains: [...(onboarding.networkDomains ?? [])],
     conventions: onboarding.conventions ?? {},

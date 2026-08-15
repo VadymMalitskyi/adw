@@ -10,4 +10,4 @@ registry.npmjs.org
 pypi.org
 files.pythonhosted.org
 
-# Selected agent, explicitly configured integration, and detected project-tool domains are added by adw:init.
+# Selected agent, explicitly configured integration, and detected project-tool domains are added during ADW initialization.

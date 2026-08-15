@@ -9,7 +9,7 @@ import {
   loadProjectConfig,
 } from "../../../lib/adw-helper.mjs";
 import { permissionProjectFiles } from "../../../execution/managed-development.mjs";
-import { managedDevelopmentFiles } from "../../init/scripts/development-environment.mjs";
+import { managedDevelopmentFiles } from "../../../initialization/development-environment.mjs";
 
 const skillDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pluginRoot = resolve(skillDirectory, "../..");

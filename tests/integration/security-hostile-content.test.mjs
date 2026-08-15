@@ -18,7 +18,7 @@ import test from "node:test";
 import { computeDigest, createPlanApproval } from "../../plugin/lib/adw-helper.mjs";
 
 const repositoryRoot = resolve(new URL("../..", import.meta.url).pathname);
-const initScript = join(repositoryRoot, "plugin/skills/init/scripts/init.mjs");
+const initScript = join(repositoryRoot, "plugin/initialization/init.mjs");
 const doctorScript = join(repositoryRoot, "plugin/skills/doctor/scripts/snapshot.mjs");
 const statusScript = join(repositoryRoot, "plugin/skills/status/scripts/snapshot.mjs");
 const ROUTING_START = "<!-- ADW:START -->";
@@ -51,8 +51,8 @@ function run(script, args, expectedStatus = 0) {
 }
 
 function applyInit(root) {
-  const preview = run(initScript, ["preview", "--project-root", root]);
-  return run(initScript, ["apply", "--confirmed", "--preview-digest", preview.preview_digest, "--project-root", root]);
+  const preview = run(initScript, ["--kind", "brownfield", "preview", "--project-root", root]);
+  return run(initScript, ["--kind", "brownfield", "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--project-root", root]);
 }
 
 function treeFingerprint(root) {
@@ -99,7 +99,7 @@ test("init rejects incomplete, reversed, and duplicate managed blocks without wr
     commitFixture(root);
     const before = treeFingerprint(root);
     const statusBefore = git(root, "status", "--porcelain=v1", "--untracked-files=all");
-    const result = run(initScript, ["preview", "--project-root", root], 2);
+    const result = run(initScript, ["--kind", "brownfield", "preview", "--project-root", root], 2);
     assert.match(result.error, fixtureCase.message);
     assert.equal(treeFingerprint(root), before);
     assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), statusBefore);
@@ -114,9 +114,9 @@ test("init apply rejects symlinked managed project targets", () => {
   writeFileSync(outside, "outside bytes\n");
   symlinkSync(outside, join(root, "AGENTS.md"));
   commitFixture(root);
-  const preview = run(initScript, ["preview", "--project-root", root]);
+  const preview = run(initScript, ["--kind", "brownfield", "preview", "--project-root", root]);
   const before = readFileSync(outside, "utf8");
-  const rejected = run(initScript, ["apply", "--confirmed", "--preview-digest", preview.preview_digest, "--project-root", root], 2);
+  const rejected = run(initScript, ["--kind", "brownfield", "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--project-root", root], 2);
   assert.match(rejected.error, /symbolic link/);
   assert.equal(readFileSync(outside, "utf8"), before);
   assert.equal(existsSync(join(root, "worktrees/docs")), false);
@@ -158,12 +158,12 @@ test("shell syntax stays config data and repository text cannot grant init autho
   commitFixture(root);
   const before = treeFingerprint(root);
 
-  const denied = run(initScript, ["apply", "--project-root", root], 2);
+  const denied = run(initScript, ["--kind", "brownfield", "apply", "--project-root", root], 2);
   assert.match(denied.error, /apply requires --confirmed/);
   assert.equal(treeFingerprint(root), before);
   assert.equal(existsSync(marker), false);
 
-  run(initScript, ["preview", "--project-root", root]);
+  run(initScript, ["--kind", "brownfield", "preview", "--project-root", root]);
   assert.equal(treeFingerprint(root), before);
   applyInit(root);
   assert.equal(existsSync(marker), false);

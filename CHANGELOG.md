@@ -2,6 +2,15 @@
 
 All notable changes to this private plugin are documented here.
 
+## Unreleased
+
+### Initialization
+
+- Replaced the mixed initializer with two explicit workflows: `adw:init-greenfield` for a genuinely empty project and `adw:init-brownfield` for an established Git repository.
+- Greenfield initialization now preview-binds creation of the Git repository, `PROJECT.md`, the stable `make check` validation contract, the first main commit, and the docs branch without generating speculative application code.
+- Brownfield initialization retains repository-derived discovery and byte-preserving adoption, and never commits the established code branch.
+- Moved deterministic initialization mechanics under `plugin/initialization/` so the two skills share one implementation without exposing a third routing command.
+
 ## 1.0.0 - 2026-08-14
 
 First release. ADW gives Codex and Claude Code one opinionated, Git-native development workflow from a single shared skill tree.

@@ -22,7 +22,7 @@ Perform every check read-only. Do not repair files, create caches, refresh provi
    - the attached docs worktree and sync-marker freshness;
    - declared components, their paths, and whether each has a validation command;
    - optional origin and project-owned devcontainer state.
-5. If `adw.yaml` cannot be read against the `adw: 1` contract, report the exact validation errors and stop before every check that assumes a readable configuration. Change nothing, and never translate, rewrite, or reinterpret the file — offer `adw:init` as a separate reviewed follow-up instead.
+5. If `adw.yaml` cannot be read against the `adw: 1` contract, report the exact validation errors and stop before every check that assumes a readable configuration. Change nothing, and never translate, rewrite, or reinterpret the file — offer the appropriate greenfield or brownfield initializer as a separate reviewed follow-up instead.
 6. Follow the execution contract for the configured isolation, and only that one:
    - `provider-sandbox`: report the real active filesystem, network, and approval policy that a script cannot attest, and say plainly that this is the lightweight boundary.
    - `project-devcontainer`: require its runtime marker and report material deviations from the managed baseline without changing the project-owned container.
@@ -31,6 +31,6 @@ Perform every check read-only. Do not repair files, create caches, refresh provi
 7. If `adw.yaml` declares providers, follow the integration contract and inspect `work_tracker`, `code_host`, `observability`, and `knowledge` independently. Report capability, provider, whether it is required, selected or available `native|mcp|cli|api` transports, existing authentication state, and which of `read`, `create`, `update`, and `link` are actually supported. Do not authenticate, refresh tokens, install software, retrieve business content, or mutate anything. Treat an unavailable required capability as a failure, and an unavailable optional capability as a warning that never blocks the lightweight path. Never print credentials or secret environment values.
 8. If no providers are declared, report `lightweight: no providers configured` and do not probe external tools.
 9. Treat a missing resource, a literal unexpanded Claude variable, or a path outside the installed plugin root as a plugin failure.
-10. Offer `adw:init`, `adw:update`, or a manual project edit as a separate follow-up. Make no repair during doctor.
+10. Offer `adw:init-greenfield`, `adw:init-brownfield`, `adw:update`, or a manual project edit as a separate follow-up. Make no repair during doctor.
 
 Resolve any bundled template, helper, or script from the same plugin root. Never write generated state into the installed plugin directory.

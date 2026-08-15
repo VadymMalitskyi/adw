@@ -6,11 +6,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { managedDevelopmentFiles } from "../../plugin/skills/init/scripts/development-environment.mjs";
+import { managedDevelopmentFiles } from "../../plugin/initialization/development-environment.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const templateRoot = join(repositoryRoot, "plugin/templates/devcontainer");
-const initScript = join(repositoryRoot, "plugin/skills/init/scripts/init.mjs");
+const initScript = join(repositoryRoot, "plugin/initialization/init.mjs");
 const doctorScript = join(repositoryRoot, "plugin/skills/doctor/scripts/snapshot.mjs");
 
 function git(root, ...args) {
@@ -231,7 +231,7 @@ test("init derives a reviewable project-specific development environment from re
   git(root, "add", ".");
   git(root, "commit", "-q", "-m", "fixture");
 
-  const previewResult = spawnSync(process.execPath, [initScript, "preview", "--execution", "managed-devcontainer", "--project-root", root], { encoding: "utf8" });
+  const previewResult = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "preview", "--execution", "managed-devcontainer", "--project-root", root], { encoding: "utf8" });
   assert.equal(previewResult.status, 0, previewResult.stderr);
   const preview = JSON.parse(previewResult.stdout);
   assert.deepEqual(preview.development_environment.selected_versions, { dotnet: "8.0.408", go: "1.22.4", node: "20", python: "3.11" });
@@ -245,7 +245,7 @@ test("init derives a reviewable project-specific development environment from re
   assert.ok(preview.development_environment.unresolved.some(({ requirement }) => requirement === "environment variable DATABASE_URL"));
   assert.ok(preview.docs.generated_files.includes("components/services-dotnet.md"));
 
-  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--execution", "managed-devcontainer", "--project-root", root], { encoding: "utf8" });
+  const initialized = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--execution", "managed-devcontainer", "--project-root", root], { encoding: "utf8" });
   assert.equal(initialized.status, 0, initialized.stderr);
   const config = JSON.parse(readFileSync(join(root, ".devcontainer/devcontainer.json"), "utf8"));
   assert.equal(config.build.args.NODE_MAJOR, "20");
@@ -291,10 +291,10 @@ test("doctor blocks a required managed profile outside its runtime and passes it
   writeFileSync(join(root, "README.md"), "# fixture\n");
   git(root, "add", ".");
   git(root, "commit", "-q", "-m", "fixture");
-  const previewResult = spawnSync(process.execPath, [initScript, "preview", "--execution", "managed-devcontainer", "--project-root", root], { encoding: "utf8" });
+  const previewResult = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "preview", "--execution", "managed-devcontainer", "--project-root", root], { encoding: "utf8" });
   assert.equal(previewResult.status, 0, previewResult.stderr);
   const preview = JSON.parse(previewResult.stdout);
-  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--execution", "managed-devcontainer", "--project-root", root], { encoding: "utf8" });
+  const initialized = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--execution", "managed-devcontainer", "--project-root", root], { encoding: "utf8" });
   assert.equal(initialized.status, 0, initialized.stderr);
 
   const outside = spawnSync(process.execPath, [doctorScript, "--project-root", root], { encoding: "utf8" });
@@ -334,10 +334,10 @@ test("initialization always creates both provider routes and passes doctor", () 
     schema: 1,
     execution: { isolation: "managed-devcontainer" },
   }, null, 2)}\n`);
-  const previewResult = spawnSync(process.execPath, [initScript, "preview", "--onboarding", onboardingPath, "--project-root", root], { encoding: "utf8" });
+  const previewResult = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "preview", "--onboarding", onboardingPath, "--project-root", root], { encoding: "utf8" });
   assert.equal(previewResult.status, 0, previewResult.stderr || previewResult.stdout);
   const preview = JSON.parse(previewResult.stdout);
-  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--onboarding", onboardingPath, "--project-root", root], { encoding: "utf8" });
+  const initialized = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--onboarding", onboardingPath, "--project-root", root], { encoding: "utf8" });
   assert.equal(initialized.status, 0, initialized.stderr);
 
   const doctor = spawnSync(process.execPath, [doctorScript, "--project-root", root], {

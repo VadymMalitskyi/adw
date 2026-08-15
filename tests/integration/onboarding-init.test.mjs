@@ -7,7 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const initScript = join(repositoryRoot, "plugin/skills/init/scripts/init.mjs");
+const initScript = join(repositoryRoot, "plugin/initialization/init.mjs");
 
 function git(root, ...args) {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
@@ -25,7 +25,7 @@ function project() {
 }
 
 function run(root, ...args) {
-  return spawnSync(process.execPath, [initScript, ...args, "--project-root", root], { encoding: "utf8" });
+  return spawnSync(process.execPath, [initScript, "--kind", "brownfield", ...args, "--project-root", root], { encoding: "utf8" });
 }
 
 test("onboarding choices are preview-bound and split shared from personal configuration", () => {

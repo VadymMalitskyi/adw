@@ -10,7 +10,7 @@ import {
   onboardingDigest,
   onboardingSummary,
   renderLocalConfiguration,
-} from "../../plugin/skills/init/scripts/onboarding.mjs";
+} from "../../plugin/initialization/onboarding.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const pluginRoot = join(repositoryRoot, "plugin");
@@ -39,6 +39,7 @@ test("missing answers use the lightweight dual-agent default", () => {
     webAccess: "public-pages",
     execution: { mode: "orchestrated" },
     development: { runtimeVersions: {} },
+    greenfield: null,
     providers: {},
     networkDomains: [],
     conventions: {},
@@ -129,6 +130,36 @@ test("execution answers carry only the workflow shape", () => {
   // A parallelism limit is not an onboarding answer; the plan decides it.
   assert.throws(() => load(base({ execution: { max_parallel: 3 } })), /max_parallel.*not supported/);
   assert.throws(() => load(base({ execution: { isolation: "nowhere" } })), /managed-devcontainer|provider-sandbox/);
+});
+
+test("normalizes a bounded greenfield project contract", () => {
+  const onboarding = load(base({
+    greenfield: {
+      name: "New Project",
+      problem: "A real problem",
+      users: "A defined user group",
+      mvp: "One observable outcome",
+      shape: "One service",
+      non_goals: ["Multi-region operation"],
+      constraints: ["No credentials in Git"],
+    },
+  }));
+  assert.deepEqual(onboarding.greenfield, {
+    name: "New Project",
+    problem: "A real problem",
+    users: "A defined user group",
+    mvp: "One observable outcome",
+    shape: "One service",
+    nonGoals: ["Multi-region operation"],
+    constraints: ["No credentials in Git"],
+  });
+  assert.deepEqual(onboardingSummary(onboarding).greenfield, {
+    name: "New Project",
+    shape: "One service",
+    non_goals: 1,
+    constraints: 1,
+  });
+  assert.throws(() => load(base({ greenfield: { name: "Missing fields" } })), /greenfield\.problem/);
 });
 
 test("summary exposes local field names without personal values", () => {

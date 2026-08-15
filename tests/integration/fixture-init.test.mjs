@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const fixturesRoot = join(repositoryRoot, "tests/fixtures");
-const initScript = join(repositoryRoot, "plugin/skills/init/scripts/init.mjs");
+const initScript = join(repositoryRoot, "plugin/initialization/init.mjs");
 
 function git(root, ...args) {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
@@ -39,11 +39,11 @@ function copyFixture(name) {
 }
 
 function runInit(root, action, confirmed = false, expectedStatus = 0, execution = null) {
-  const args = [initScript, action, "--project-root", root];
+  const args = [initScript, "--kind", "brownfield", action, "--project-root", root];
   if (confirmed) args.push("--confirmed");
   if (execution) args.push("--execution", execution);
   if (action === "apply" && confirmed && expectedStatus === 0) {
-    const previewArgs = [initScript, "preview", "--project-root", root];
+    const previewArgs = [initScript, "--kind", "brownfield", "preview", "--project-root", root];
     if (execution) previewArgs.push("--execution", execution);
     const preview = spawnSync(process.execPath, previewArgs, { encoding: "utf8" });
     assert.equal(preview.status, 0, preview.stderr || preview.stdout);

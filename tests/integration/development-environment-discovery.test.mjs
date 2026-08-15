@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { discoverDevelopmentEnvironment } from "../../plugin/skills/init/scripts/development-environment.mjs";
+import { discoverDevelopmentEnvironment } from "../../plugin/initialization/development-environment.mjs";
 
 test("runtime discovery preserves unresolved repository evidence without invented versions", () => {
   const root = mkdtempSync(join(tmpdir(), "adw-runtime-evidence-"));

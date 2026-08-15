@@ -21,7 +21,7 @@ There is no `enforcement` field and no configured permission profile. The `manag
 
 When the project configures `project-devcontainer` or `managed-devcontainer`, stop before reads that execute project code and before every mutation until that runtime marker is present in the active process. Read-only inspection of configuration needed to diagnose or enter the environment is allowed.
 
-`adw:init` is the only workflow allowed to create a managed container from outside it. It must derive project documentation and the development environment from one reviewed project model, and must resolve setup-blocking requirements before apply. After applying initialization, require only that the user commit the reviewed files, rebuild/reopen the repository, and authenticate inside project-scoped volumes when first used. `adw:doctor` remains an optional readiness diagnostic for the initializing person.
+`adw:init-greenfield` and `adw:init-brownfield` are the only workflows allowed to create a managed container from outside it. Each must derive project documentation and the development environment from one reviewed project model and resolve setup-blocking requirements before apply. Greenfield may create the first main commit because its exact bytes and commit intent are preview-bound; brownfield never commits the established code branch. After initialization, require only the remaining reviewed commit or container steps and authentication inside project-scoped volumes when first used. `adw:doctor` remains an optional readiness diagnostic for the initializing person.
 
 ## Managed-container invariants
 

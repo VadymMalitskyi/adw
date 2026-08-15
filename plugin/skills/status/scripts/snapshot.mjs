@@ -316,7 +316,7 @@ try {
 
   const configPath = join(projectRoot, "adw.yaml");
   let project = null;
-  let config = { present: false, valid: false, digest: null, errors: [{ path: "/", message: "adw.yaml is missing; run adw:init" }] };
+  let config = { present: false, valid: false, digest: null, errors: [{ path: "/", message: "adw.yaml is missing; run adw:init-greenfield for an empty project or adw:init-brownfield for an established repository" }] };
   if (existsSync(configPath)) {
     try {
       const loaded = await loadProjectConfig({ project_root: projectRoot, path: "adw.yaml" });

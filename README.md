@@ -3,9 +3,10 @@
 ADW is a private, dual-provider plugin that gives Codex and Claude Code the same Git-native development workflow:
 
 ```text
-install -> onboard -> status
-                    -> plan -> approve -> execute -> draft PRs
-                    -> quick for a genuinely small change
+install -> init-greenfield | init-brownfield
+        -> onboard -> status
+                   -> plan -> approve -> execute -> draft PRs
+                   -> quick for a genuinely small change
 ```
 
 One opinionated workflow, portable across repositories, languages, build systems, code hosts, and work trackers. Portability comes from a small project configuration and provider adapters — not from a family of author-facing schemas.
@@ -102,7 +103,7 @@ Provider sandboxing is the lightweight default. An existing project devcontainer
 ## Requirements
 
 - Node.js 20 or newer for the bundled internal helper.
-- Git 2.42 or newer (`adw:init` uses orphan worktree creation introduced in Git 2.42).
+- Git 2.42 or newer (both initialization workflows use orphan worktree creation introduced in Git 2.42).
 - A current Codex or Claude Code plugin manager.
 - Docker plus a Dev Containers client **only** if you opt into the managed devcontainer.
 - Provider tooling only when an integration or external delivery is requested. Credentials stay in the provider, MCP client, CLI, or external credential store.
@@ -119,11 +120,11 @@ claude plugin marketplace add /absolute/path/to/adw
 claude plugin install adw@adw-local --scope user
 ```
 
-Then start a new provider session in a target Git project and invoke `adw:init`. Review the preview and approve explicitly before ADW writes anything. Commit the generated files and make the docs branch available through the project's approved delivery path. Later contributors clone the initialized project, install ADW, and run `adw:onboard`; they never rerun `adw:init`. See [private installation](docs/private-installation.md) for tagged repositories, organization distribution, update, and rollback.
+Then start a new provider session in the target directory. Invoke `adw:init-greenfield` for a genuinely empty project or `adw:init-brownfield` for an established Git repository. Review the preview and approve explicitly before ADW writes anything. Greenfield initialization creates the first main commit; brownfield initialization leaves the generated main-branch files for the maintainer to commit. Make the docs branch available through the project's approved delivery path. Later contributors clone the initialized project, install ADW, and run `adw:onboard`; they never rerun either initializer. See [private installation](docs/private-installation.md) for tagged repositories, organization distribution, update, and rollback.
 
 ## Skills
 
-- Foundation: `adw:init`, `adw:onboard`, `adw:doctor`, `adw:status`, `adw:discover`
+- Foundation: `adw:init-greenfield`, `adw:init-brownfield`, `adw:onboard`, `adw:doctor`, `adw:status`, `adw:discover`
 - Change loop: `adw:plan`, `adw:review-plan`, `adw:approve`, `adw:amend`, `adw:execute`
 - Delivery: `adw:quick`, `adw:address-review`
 - Operations and maintenance: `adw:investigate`, `adw:sync-docs`, `adw:update`

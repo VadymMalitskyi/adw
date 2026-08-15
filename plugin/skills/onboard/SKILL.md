@@ -9,7 +9,7 @@ Prepare local contributor state from the project's committed ADW decisions. Neve
 
 ## Resolve the project and plugin
 
-1. Resolve the Git top level and require a committed `adw.yaml` declaring the `adw: 1` contract. If it is absent, stop: only a project maintainer should run `adw:init`. If it cannot be read against that contract, stop and point at `adw:doctor`, which reports the exact errors without changing anything.
+1. Resolve the Git top level and require a committed `adw.yaml` declaring the `adw: 1` contract. If it is absent, stop: only a project maintainer should run `adw:init-greenfield` for an empty project or `adw:init-brownfield` for an established repository. If it cannot be read against that contract, stop and point at `adw:doctor`, which reports the exact errors without changing anything.
 2. Read the bounded ADW routing block for the active provider and the project's `execution.isolation`. For `project-devcontainer` or `managed-devcontainer`, require that environment to be active before applying local state and report the exact container or reopen prerequisite when it is not. For `provider-sandbox`, apply local state directly: onboarding a lightweight project must never require Docker or a container runtime.
 3. Resolve the installed plugin root from this loaded skill:
    - In Claude Code, expand `${CLAUDE_PLUGIN_ROOT}` and use `${CLAUDE_PLUGIN_ROOT}/skills/onboard/SKILL.md` as this skill's absolute locator.

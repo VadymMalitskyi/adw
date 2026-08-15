@@ -3,7 +3,7 @@ import { mkdirSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyAtomicWrites } from "../plugin/lib/adw-helper.mjs";
-import { managedDevelopmentFiles } from "../plugin/skills/init/scripts/development-environment.mjs";
+import { managedDevelopmentFiles } from "../plugin/initialization/development-environment.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const stageRootArgument = process.argv[2];

@@ -16,7 +16,8 @@ const REQUIRED_SKILLS = [
   "discover",
   "doctor",
   "execute",
-  "init",
+  "init-brownfield",
+  "init-greenfield",
   "investigate",
   "onboard",
   "plan",
@@ -145,16 +146,25 @@ test("deferred skills are absent from the executable MVP", () => {
 
 test("skills preserve the required behavior and safety boundaries", () => {
   const contracts = {
-    init: [
+    "init-brownfield": [
       ["a preview before writes", /\bpreview\b/i],
       ["explicit write confirmation", /explicit (?:approval|confirmation)|--confirmed/i],
       ["project configuration", /adw\.yaml/],
       ["ignored local state", /\.adw\//],
       ["the root docs worktree", /\/worktrees\//],
-      ["both provider routing files", /AGENTS\.md[\s\S]*CLAUDE\.md|CLAUDE\.md[\s\S]*AGENTS\.md/],
       ["provider sandbox default", /default[^\n]{0,80}`?provider-sandbox`?|`?provider-sandbox`?[^\n]{0,80}default/i],
       ["managed devcontainer opt-in", /managed-devcontainer[^\n]{0,120}(?:opt.in|explicit)|(?:opt.in|explicit)[^\n]{0,120}managed-devcontainer/i],
       ["project devcontainer preservation", /project-devcontainer[\s\S]*preserve|preserve every byte of an existing project devcontainer/i],
+    ],
+    "init-greenfield": [
+      ["a preview before writes", /\bpreview\b/i],
+      ["explicit write confirmation", /explicit (?:approval|confirmation)|--confirmed/i],
+      ["empty-directory boundary", /empty directory|unborn Git repository/i],
+      ["project contract", /PROJECT\.md/],
+      ["stable validation foundation", /make check/],
+      ["first main commit", /first main commit/i],
+      ["docs branch", /docs branch/i],
+      ["no speculative application generation", /not generate speculative application code|never creates application framework code/i],
     ],
     onboard: [
       ["initialized-project boundary", /already initialized|adw\.yaml is absent/i],

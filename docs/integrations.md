@@ -40,7 +40,7 @@ providers:
 
 Omitting `providers:` entirely keeps the lightweight local workflow. Configuration contains non-secret project facts only; unknown provider-specific keys are permitted solely inside `settings`, and credential-like keys are rejected anywhere. Machine-local transport preferences live in ignored `.adw/local.yaml`.
 
-`adw:init` can populate these entries and, for a managed container, their exact network domains. Initialization validates provider/capability compatibility but installs no transport, authenticates nothing, contacts no business system, and performs no external write. Each contributor uses `adw:onboard` to select compatible local hints and run the `adw:doctor` availability checks.
+Both initialization workflows can populate these entries and, for a managed container, their exact network domains. Initialization validates provider/capability compatibility but installs no transport, authenticates nothing, contacts no business system, and performs no external write. Each contributor uses `adw:onboard` to select compatible local hints and run the `adw:doctor` availability checks.
 
 ## Transport resolution
 

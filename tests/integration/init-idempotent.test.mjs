@@ -7,7 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const initScript = join(repositoryRoot, "plugin/skills/init/scripts/init.mjs");
+const initScript = join(repositoryRoot, "plugin/initialization/init.mjs");
 
 function git(root, ...args) {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
@@ -30,10 +30,10 @@ function fixture() {
 }
 
 function run(root, action, confirmed = false) {
-  const args = [initScript, action, "--project-root", root];
+  const args = [initScript, "--kind", "brownfield", action, "--project-root", root];
   if (confirmed) args.push("--confirmed");
   if (action === "apply" && confirmed) {
-    const preview = spawnSync(process.execPath, [initScript, "preview", "--project-root", root], { encoding: "utf8" });
+    const preview = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "preview", "--project-root", root], { encoding: "utf8" });
     assert.equal(preview.status, 0, preview.stderr || preview.stdout);
     args.push("--preview-digest", JSON.parse(preview.stdout).preview_digest);
   }
@@ -62,13 +62,14 @@ test("init previews without writes and applies idempotent bounded changes", () =
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), statusBefore);
   assert.deepEqual(readFileSync(join(root, "AGENTS.md")), agentBefore);
 
-  const unboundApply = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--project-root", root], { encoding: "utf8" });
+  const unboundApply = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "apply", "--confirmed", "--project-root", root], { encoding: "utf8" });
   assert.equal(unboundApply.status, 2);
   assert.match(unboundApply.stderr, /exact --preview-digest/);
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all"), statusBefore);
 
   const applied = run(root, "apply", true);
   assert.equal(applied.docs.action, "ready");
+  assert.match(applied.next_steps[0], /ready to review and commit/i);
   assert.equal(git(root, "rev-parse", "HEAD"), initialHead, "code checkout HEAD must not move");
   assert.equal(git(root, "-C", join(root, "worktrees/docs"), "branch", "--show-current"), "docs");
   assert.match(git(root, "worktree", "list", "--porcelain"), new RegExp(`worktree ${root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/worktrees/docs[\\s\\S]*branch refs/heads/docs`));

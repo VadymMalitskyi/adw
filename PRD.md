@@ -21,7 +21,7 @@ ADW is a private, dual-provider plugin that gives Codex and Claude Code one opin
 
 ```text
 1. Install ADW through the provider plugin manager.
-2. Run adw:init.
+2. Run `adw:init-greenfield` in an empty directory or `adw:init-brownfield` in an established repository.
 3. Review a small adw.yaml and generated project/component context.
 4. Commit the project configuration and publish the docs branch.
 5. Optionally enable the hardened managed devcontainer.
@@ -85,7 +85,7 @@ Workflows depend on `work_tracker`, `code_host`, `observability`, and `knowledge
 
 ### Initialization, onboarding, and security
 
-`adw:init` produces a small `adw.yaml`, bounded routing blocks, ignore entries, the docs branch and worktree with `architecture.md`, `components/`, and `changes/`, optional ignored local state, managed permission files required by the active providers, and an optional generated `.devcontainer/` only when explicitly selected. Isolation defaults to preserving an existing project devcontainer, otherwise `provider-sandbox`, with `managed-devcontainer` offered as an opt-in. `adw:onboard` attaches the docs branch, writes optional personal non-secret preferences, checks configured provider availability, and reports readiness without rerunning shared initialization or requiring Docker for a provider-sandbox project.
+`adw:init-greenfield` starts from an empty directory, records explicit product intent in `PROJECT.md`, establishes `make check` as the first validation contract, creates the first main commit, and initializes the docs branch. `adw:init-brownfield` starts from an established Git repository, discovers its existing project model, preserves repository-owned content, and leaves generated main-branch files uncommitted for maintainer review. Both produce a small `adw.yaml`, bounded routing blocks, ignore entries, docs context, optional ignored local state, managed permission files, and an optional generated `.devcontainer/` only when explicitly selected. `adw:onboard` attaches the docs branch, writes optional personal non-secret preferences, checks configured provider availability, and reports readiness without rerunning shared initialization or requiring Docker for a provider-sandbox project.
 
 ## Explicit exclusions
 

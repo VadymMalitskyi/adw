@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const updateScript = join(repositoryRoot, "plugin/skills/update/scripts/update.mjs");
-const initScript = join(repositoryRoot, "plugin/skills/init/scripts/init.mjs");
+const initScript = join(repositoryRoot, "plugin/initialization/init.mjs");
 
 function git(root, ...args) {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
@@ -85,10 +85,10 @@ test("managed projects preview and atomically repair release-owned files", () =>
   writeFileSync(onboardingPath, `${JSON.stringify({ schema: 1, development: { runtime_versions: { dotnet: "8" } } }, null, 2)}\n`);
   git(root, "add", "App.csproj", "onboarding.json");
   git(root, "commit", "-q", "-m", "fixture");
-  const initPreview = spawnSync(process.execPath, [initScript, "preview", "--execution", "managed-devcontainer", "--project-root", root, "--onboarding", onboardingPath], { encoding: "utf8" });
+  const initPreview = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "preview", "--execution", "managed-devcontainer", "--project-root", root, "--onboarding", onboardingPath], { encoding: "utf8" });
   assert.equal(initPreview.status, 0, initPreview.stderr);
   const initDigest = JSON.parse(initPreview.stdout).preview_digest;
-  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", initDigest, "--execution", "managed-devcontainer", "--project-root", root, "--onboarding", onboardingPath], { encoding: "utf8" });
+  const initialized = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "apply", "--confirmed", "--preview-digest", initDigest, "--execution", "managed-devcontainer", "--project-root", root, "--onboarding", onboardingPath], { encoding: "utf8" });
   assert.equal(initialized.status, 0, initialized.stderr);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /development:\n  runtime_versions:\n    dotnet: "8"/);
   const initializedContainer = JSON.parse(readFileSync(join(root, ".devcontainer/devcontainer.json"), "utf8"));
@@ -132,8 +132,8 @@ test("managed repair rejects inconsistent recovered runtime evidence", () => {
   writeFileSync(onboardingPath, `${JSON.stringify({ schema: 1, development: { runtime_versions: { dotnet: "8" } } }, null, 2)}\n`);
   git(root, "add", ".");
   git(root, "commit", "-q", "-m", "fixture");
-  const preview = JSON.parse(spawnSync(process.execPath, [initScript, "preview", "--execution", "managed-devcontainer", "--project-root", root, "--onboarding", onboardingPath], { encoding: "utf8" }).stdout);
-  const initialized = spawnSync(process.execPath, [initScript, "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--execution", "managed-devcontainer", "--project-root", root, "--onboarding", onboardingPath], { encoding: "utf8" });
+  const preview = JSON.parse(spawnSync(process.execPath, [initScript, "--kind", "brownfield", "preview", "--execution", "managed-devcontainer", "--project-root", root, "--onboarding", onboardingPath], { encoding: "utf8" }).stdout);
+  const initialized = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--execution", "managed-devcontainer", "--project-root", root, "--onboarding", onboardingPath], { encoding: "utf8" });
   assert.equal(initialized.status, 0, initialized.stderr);
   const projectConfigPath = join(root, "adw.yaml");
   writeFileSync(projectConfigPath, readFileSync(projectConfigPath, "utf8").replace(/\ndevelopment:\n  runtime_versions:\n    dotnet: "8"\n/, "\n"));

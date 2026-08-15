@@ -65,7 +65,7 @@ function projectRoot(input) {
 
 async function parseProjectConfiguration(root) {
   const path = join(root, "adw.yaml");
-  if (!existsSync(path)) fail("adw.yaml is missing; only a project maintainer should initialize the project with adw:init");
+  if (!existsSync(path)) fail("adw.yaml is missing; a project maintainer must use adw:init-greenfield for an empty project or adw:init-brownfield for an established repository");
   const entry = lstatSync(path);
   if (entry.isSymbolicLink() || !entry.isFile()) fail("adw.yaml must be a non-symlink file");
   const source = readFileSync(path, "utf8");

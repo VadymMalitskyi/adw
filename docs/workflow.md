@@ -1,14 +1,18 @@
 # Workflow
 
-## Initialize
+## Initialize a greenfield project
 
-`adw:init` begins with a read-only repository preview, then asks a short set of questions about the choices ADW cannot safely infer: execution mode, isolation, which optional provider capabilities the team actually uses, any validation command it could not derive from an observable source, and concise branch and pull-request conventions. There are no work-tracker workflow or payload-profile questions. Optional display name, email, account hints, and transport preferences belong to the initializing maintainer alone and are written to ignored `.adw/local.yaml`; credentials are never accepted.
+`adw:init-greenfield` accepts a genuinely empty directory or unborn Git repository. It asks for the project name, problem, users, observable MVP outcome, optional application shape, constraints, non-goals, and the normal execution and integration choices. Its preview includes Git creation when needed, `PROJECT.md`, a stable `make check` validation contract, ADW configuration, the selected isolation files, the first main commit, and the docs branch. It creates no speculative framework or application code; the first real milestone still uses `plan -> approve -> execute`.
 
-The reviewed preview covers root `adw.yaml`, ignore rules, both provider routing blocks, the selected execution profile, the discovered component and validation model, and the docs-branch worktree. Apply is bound to the exact digest of the reviewed preview, so changed answers, repository evidence, templates, or target bytes stop before writing.
+## Initialize a brownfield project
+
+`adw:init-brownfield` requires an established Git repository with at least one commit. It derives components, runtimes, dependencies, validation commands, and architecture context from observable repository evidence while preserving existing instructions, tooling, documentation, and project-owned containers. It asks only about execution, integrations, conventions, and requirements the repository cannot settle. Apply creates and commits the docs branch but never commits the existing code branch.
+
+Both initializers bind apply to the exact reviewed preview, so changed answers, repository evidence, templates, directory state, or target bytes stop before writing. There are no work-tracker workflow or payload-profile questions. Optional display name, email, account hints, and transport preferences belong to the initializing maintainer alone and are written to ignored `.adw/local.yaml`; credentials are never accepted.
 
 Isolation defaults are proportional. An existing `.devcontainer/devcontainer.json` is preserved byte for byte and recorded as `project-devcontainer`. Otherwise the default is `provider-sandbox`, the lightweight portable profile. `managed-devcontainer` is an explicit opt-in for teams that want the stronger reproducible boundary; only then does init render the managed `.devcontainer/`, pin both agent CLIs, derive runtimes and dependency setup from supported repository evidence, and generate provider-native permission files. Every managed decision retains its repository source in `.devcontainer/project-requirements.json`, and unresolved requirements are raised before approval rather than after.
 
-Docs initialization creates `architecture.md`, `components/`, and `changes/` on the configured docs branch. It creates no specification, plan, or schema templates.
+Docs initialization creates `architecture.md`, `components/`, and `changes/` on the configured docs branch. Greenfield also creates the reviewed main-branch product contract and validation façade; neither initializer creates a change plan.
 
 ## Onboard a contributor
 
