@@ -12,8 +12,8 @@ import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ContractError, InputError, applyAtomicWrites, isObject, isSafeRelativePath } from "./safe-files.mjs";
 import { ISOLATION_MODES, RUNTIMES, WEB_ACCESS_MODES, isValidBranchName, isValidDomain, loadProjectConfig, parseYaml, providerDomains, validateProjectConfig } from "./config.mjs";
-import { PERMISSION_FILES, permissionProjectFiles } from "./permissions.mjs";
-import { MANAGED_FILES, managedDevelopmentFiles } from "./managed-environment.mjs";
+import { permissionProjectFiles } from "./permissions.mjs";
+import { managedDevelopmentFiles } from "./managed-environment.mjs";
 
 const IGNORE_START = "# ADW:START";
 const IGNORE_END = "# ADW:END";
@@ -476,5 +476,3 @@ export async function refreshApply(directory, expectedFingerprint) {
   const { files, ...summary } = plan;
   return { ...summary, applied: true };
 }
-
-export { MANAGED_FILES, PERMISSION_FILES };
