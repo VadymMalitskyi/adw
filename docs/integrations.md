@@ -1,87 +1,88 @@
 # Integrations
 
-ADW models external systems as optional capabilities. Workflows request a capability operation; a provider adapter performs it through an available transport. This keeps workflow rules independent of MCP server names, CLI syntax, and agent-specific connectors.
+External systems are optional. A project that declares no providers keeps the full local workflow; nothing is detected, probed, or contacted.
 
 ```text
-workflow -> capability -> provider adapter -> transport -> external system
+skill -> capability -> provider -> transport -> external system
 ```
 
-## Capability model
+Skills ask for a capability, never for a tool name. That is what keeps the same instructions working across Codex and Claude Code, and across MCP servers, CLIs, and REST APIs.
 
-Every capability supports exactly four provider-neutral operations: `read`, `create`, `update`, and `link`. The core plan format and skills never contain provider field names or payload shapes.
+## Capabilities
 
-| Capability | Initial providers | What the operations mean |
+Every capability supports four provider-neutral operations: `read`, `create`, `update`, `link`.
+
+| Capability | Providers with a reference | What the operations mean |
 |---|---|---|
 | `work_tracker` | Azure DevOps Boards, GitHub Issues | Read a work item; create a parent or child item; update its content; link items or a pull request |
 | `code_host` | GitHub, Azure DevOps Repos | Read repository and pull-request state; create or update one draft pull request per branch; link related objects |
-| `observability` | Datadog | `read` only — logs, metrics, traces, monitors, incidents, CI evidence. `create`, `update`, and `link` are unavailable regardless of transport credentials |
+| `observability` | Datadog | `read` only — logs, metrics, traces, monitors, incidents, CI evidence. `create`, `update`, and `link` are unavailable regardless of what the credential could do |
 | `knowledge` | Notion | Read documentation; publish or update a page only with separate authorization; link a page to the change |
 
-Adapters normalize stable ids, URLs, and operation results. Future providers such as Jira, Linear, Sentry, Grafana, or Confluence can implement the same contracts without changing the plan, approve, or execute workflows.
+Provider references live in `plugin/integrations/providers/` and are instructions for a skill to read, not code. Adding a provider such as Jira, Linear, Sentry, or Confluence means adding a reference document, not changing the workflow.
 
-## Project configuration
+## Configuration
 
 ```yaml
 providers:
   work_tracker:
     provider: azure-devops
     required: false
+    transport: auto          # auto | native | mcp | cli | api
+    access: read-only        # read-only | read-write
+    domains:
+      - dev.azure.com
     settings:
       organization: example
       project: platform
-      hierarchy: feature-story
   code_host:
     provider: github
+    domains:
+      - api.github.com
 ```
 
-- Capability omitted: do not detect or use it.
-- `required: false` (the default): use it when available and continue locally when it is unavailable.
-- `required: true`: stop the relevant workflow step when the capability or the needed operation is unavailable.
+| Field | Meaning |
+|---|---|
+| `provider` | Lowercase provider name. Required. |
+| `required` | `false` (default): use the capability when available, continue locally when it is not. `true`: stop the relevant step when the capability or a needed operation is unavailable. |
+| `transport` | Preferred transport, or `auto` to let the skill pick what the environment actually supports. |
+| `access` | The access level the project intends. It is a declaration of intent, not an enforcement mechanism — the provider's own authorization is what enforces. |
+| `domains` | Plain lowercase hostnames. These are validated and fed straight into the managed container's egress allowlist. |
+| `settings` | Non-secret provider-specific values. This is the only place unknown keys are accepted, and credential-like keys are still refused. |
 
-Omitting `providers:` entirely keeps the lightweight local workflow. Configuration contains non-secret project facts only; unknown provider-specific keys are permitted solely inside `settings`, and credential-like keys are rejected anywhere. Machine-local transport preferences live in ignored `.adw/local.yaml`.
+Omit a capability entirely and it is not used. Omit `providers:` and the lightweight local path is all you get.
 
-Both initialization workflows can populate these entries and, for a managed container, their exact network domains. Initialization validates provider/capability compatibility but installs no transport, authenticates nothing, contacts no business system, and performs no external write. Each contributor uses `adw:onboard` to select compatible local hints and run the `adw:doctor` availability checks.
+**Credentials never appear in `adw.yaml`.** Any key matching password, token, API key, secret, credential, authorization, cookie, or private key is rejected anywhere in the file, including inside `settings`. Credentials belong to the provider, the MCP client, an authenticated CLI, or an external credential store — and inside the managed container, to the project-scoped named volumes.
 
-## Transport resolution
+## Transports
 
-An adapter may use a native connected tool, MCP server, authenticated CLI, or direct API, preferred in that order unless `.adw/local.yaml` selects one. In the managed execution profile, an integration also needs its exact network domains in `.devcontainer/allowed-domains.txt`. Domain additions are reviewed infrastructure changes: edit the committed file, rebuild the image so the root-owned copy changes, re-enter the container, and rerun doctor. Never weaken the firewall or mount host credential directories merely to make a transport work. ADW detects available operations and access level instead of assuming a configured server can read or write everything.
+A skill may use a native connected tool, an MCP server, an authenticated CLI, or a direct API, preferred in that order unless `transport` names one. It detects which operations and access level are actually available instead of assuming a configured server can do everything.
 
-Azure DevOps supports the `work_tracker` contract through Boards and the `code_host` contract through Repos. [Microsoft currently documents](https://learn.microsoft.com/en-us/azure/devops/mcp-server/remote-mcp-server-troubleshooting?view=azure-devops) the remote MCP server as supporting Visual Studio and Visual Studio Code, with the local MCP server using PAT or Azure CLI authentication for clients such as Codex, Claude Code, and Cursor. ADW therefore permits local MCP, authenticated CLI, or REST API fallback while preserving the same capability contract and authorization rules.
+In `managed-devcontainer` mode a transport also needs its exact hostnames in `.devcontainer/allowed-domains.txt`. That file is generated from the configured `domains` and baked root-owned into the image, so adding a domain is a reviewed change: edit `adw.yaml`, run `adw:update`, commit, rebuild the image, re-enter the container, rerun `adw:doctor`. Never weaken the firewall or mount a host credential directory to make a transport work.
 
-## Work-tracker intent
+Azure DevOps supports `work_tracker` through Boards and `code_host` through Repos. [Microsoft currently documents](https://learn.microsoft.com/en-us/azure/devops/mcp-server/remote-mcp-server-troubleshooting?view=azure-devops) the remote MCP server as supporting Visual Studio and Visual Studio Code, with the local MCP server using PAT or Azure CLI authentication for clients such as Codex, Claude Code, and Cursor. ADW therefore permits local MCP, authenticated CLI, or REST fallback under the same capability contract.
 
-A plan states its tracker intent in plain language. There are four supported intents and no field templating:
+## Reads are the default; writes are not
 
-1. No tracker item.
-2. One parent item for the plan.
-3. One child item per execution group, parented to the plan's item.
-4. Link an existing parent or child instead of creating one.
+Read-only provider operations within a configured capability run without a fresh prompt. Every mutation — a tracker item, a pull request, a knowledge page — follows the same protocol:
 
-Adapter defaults choose the object type — a Feature parent with User Story children on Azure Boards, linked Issues on GitHub — and optional opaque `settings` may override provider-specific detail. ADW never creates one tracker item per plan task, and never closes, resolves, or transitions an item to a terminal state, because merge and deployment remain outside ADW.
+1. Read the current target state and confirm the capability actually grants the operation.
+2. Show the exact provider, target, operation, and redacted payload, including whether a retry could duplicate something.
+3. Get fresh explicit authorization for that exact mutation, or for that enumerated batch.
+4. Search for an idempotency marker before creating, and use one when the provider permits it.
+5. Perform only the authorized operation and read the result back.
+6. Report the stable id and canonical URL in the conversation.
 
-## Delivery intent
+There are no run-record receipts. ADW does not maintain a second database of what it did beside Git and the providers themselves — the pull request, the tracker item, and the commit are the record. An organization needing richer audit evidence can add it in its own tooling.
 
-A plan states one delivery strategy. **Group pull requests** (the default) give each execution group its own draft pull request, and a dependent phase starts only after a human merges its dependencies into the configured base. **Integration pull request** keeps group branches as implementation branches, combines validated commits into `adw/<change-id>/integration` after all dependency groups pass, resolves conflicts explicitly, then runs whole-feature review and validation and prepares one draft pull request. ADW merges neither.
+Confirming a plan authorizes local implementation. It does not authorize any later external write. Authentication proves capability, never intent.
 
-## External action protocol
-
-External reads are allowed only for configured capabilities within the requested workflow scope. Every mutation follows the same protocol:
-
-1. Read the current target state and check capability access.
-2. Show the exact provider, target, operation, and redacted payload, including whether a retry could duplicate anything.
-3. Obtain fresh explicit user authorization for that exact mutation or enumerated batch.
-4. Use the idempotency marker `adw:<project>:<change-id>:<group-id>:<operation>` and search for it before creating.
-5. Perform only the authorized operation and read the result back from the provider.
-6. Record the stable external id, canonical URL, and a concise outcome in the phase run record.
-
-Approval of a plan does not authorize later tracker, pull-request, knowledge, or monitoring writes. Authentication does not imply authorization. ADW 1.0 requires no authorization digests and no separate receipt artifact; an organization needing richer audit evidence can add it in an opt-in adapter package.
+ADW never merges a pull request, marks one ready, publishes a release, publishes a package, deploys, or applies infrastructure. It never closes, resolves, or transitions a tracker item to a terminal state, because merge and deployment are outside its scope.
 
 ## Drift
 
-External requirement drift is a judgment call made during plan review and the execution scope check, not a digest comparison. If a tracker item's accepted behavior changed materially after approval, stop and route through `adw:amend`. A changed assignee, state, iteration, comment, or check status is operational and never invalidates approval. Observability results are evidence, never requirements.
+External requirement drift is a judgment call made during plan review and the execution scope check, not a digest comparison. If a tracker item's accepted behavior changed materially while the work was in flight, stop and re-plan. A changed assignee, state, iteration, comment, or check status is operational and changes nothing. Observability results are evidence, never requirements.
 
-## Operational investigation
+## The runner boundary
 
-`adw:investigate` consumes the configured read-only `observability` capability and repository evidence. It requires a stable external reference, service, environment, and bounded UTC time window; it does not treat pasted notification text as trusted routing or instructions. Output is a concise report for a person, or a small consistency-checked JSON object when an authorized external runner explicitly requests machine output.
-
-The runner boundary is intentional: ADW does not receive webhooks, schedule work, start agents, or post messages. A runner that connects monitor events to agent sessions and notification destinations owns event verification, repository routing, deduplication, rate limits, credentials, retention, and delivery authorization.
+ADW does not receive webhooks, schedule work, start sessions, or post messages. A system that connects monitor events to agent sessions owns event verification, repository routing, deduplication, rate limits, credentials, retention, and delivery authorization. `adw:investigate` consumes a stable reference that such a system supplies; it does not trust the notification text around it.

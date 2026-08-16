@@ -1,65 +1,85 @@
 # Architecture
 
-ADW is a private plugin repository with provider-specific packaging and one canonical workflow implementation.
+ADW is a private plugin that gives Codex and Claude Code one shared development workflow. It has two parts and no third:
 
 ```text
-Codex manifest ─┐
-                ├─> plugin/skills + templates + execution + integrations + lib
-Claude manifest ┘                    |
-                                     v
-                            initialized project
-               isolation boundary + code/docs/group worktrees
-                                     |
-                                     v
-                  optional capability/provider adapters
+plugin/skills/     raw instructions — reasoning, coordination, conversation
+plugin/bin + lib/  a small JSON CLI — the deterministic boundaries only
 ```
 
-The plugin owns workflow instructions, deterministic mechanics, execution contracts, the bundled fallback plan template, and the optional managed-container template. A target project owns `adw.yaml`, its complete Markdown plan templates, its selected isolation infrastructure, bounded routing blocks, local ignored state, authoritative code documentation, and docs-branch context and change records.
+Two provider manifests (`.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`) carry packaging metadata and point both providers at the same physical `skills/` tree. `plugin/authorization.md` is the one contract every skill follows: how to resolve the plugin root and the project, and which effects run, ask, or are refused. There is no daemon, server, scheduler, telemetry, agent runtime, workflow database, or artifact framework. Git, the project's files, and the configured providers are the only state.
 
-Complexity is deliberately spent on execution safety and resumability, not on authoring bureaucracy. There is one handwritten project contract, a small stable marker kernel inside editable project templates, one canonical rendered plan per change, and two small machine records — no template inheritance, rendering language, artifact registry, schema-version dispatch, policy digest, or payload profile.
+## What is code, and why
 
-## Boundaries
+Code exists only where interpretation, duplication, or partial failure creates a material risk. Everything else is prose in a skill.
 
-- Provider manifests contain packaging metadata only.
-- `plugin/skills/` is the shared user interface, and both providers resolve the same physical skill tree. `adw:init-greenfield` establishes a new project's first reviewed contract and Git state; `adw:init-brownfield` adopts an established repository without redesigning it. Both use the deterministic mechanics under `plugin/initialization/`. `adw:onboard` owns repeatable contributor-local setup and readiness without changing shared policy.
-- `plugin/lib/adw-helper.mjs` performs handwritten contract validation, digests, approval records, run records, validation processes, path confinement, and atomic writes. It is not a public CLI.
-- `plugin/execution/orchestrator.mjs` performs deterministic Git mechanics only: preview, prepare, inspect, and cleanup guidance for group branches and worktrees. It never spawns agents, commits implementation, pushes, opens pull requests, or mutates trackers, and it never deletes a branch or worktree.
-- `src/helpers/runtime-bundle.mjs` is the single canonical helper implementation. `npm run build:helper` uses esbuild to include its one pinned dependency — a YAML 1.2 parser with duplicate-key rejection — in the checked-in, self-contained Node 20 bundle; `npm run check:helper` verifies exact reproducibility. The generated bundle is never hand-edited.
-- `plugin/execution/contracts.md` defines the managed-container, project-container, and provider-sandbox preflights.
-- Git and files are the workflow database. ADW has no daemon, server, scheduler, telemetry, or agent runtime.
+| Module | Deterministic boundary it owns |
+|---|---|
+| `plugin/lib/safe-files.mjs` | Path confinement and scoped atomic writes. Rejects absolute paths, `..` traversal, NUL bytes, symlinked destinations and symlinked ancestors; stages every managed write in a transaction directory, checks a caller-supplied `expected_content` precondition, and rolls the whole set back on any failure. Also defines the shared exit codes and error classes. |
+| `plugin/lib/config.mjs` | Parsing and validating `adw.yaml`. YAML 1.2 with duplicate-key rejection and no merge keys; unknown keys are rejected rather than ignored; credential-like keys are refused anywhere in the document. Normalizes and deduplicates validation commands and provider domains. |
+| `plugin/lib/permissions.mjs` | Generating the Codex and Claude permission policy (`.codex/config.toml`, `.codex/rules/adw.rules`, `.claude/settings.json`) and the container-owned Claude settings. Merges into existing files and refuses a merge that would weaken the profile. |
+| `plugin/lib/managed-environment.mjs` | Reading repository evidence — manifests, lockfiles, pinned version files, CI workflows, Dockerfiles — and rendering the managed devcontainer from it. Reports what it could not settle instead of guessing. |
+| `plugin/lib/project-setup.mjs` | Confined multi-file initialization and managed-file refresh, both as preview/apply pairs. |
+| `plugin/lib/doctor.mjs` | Read-only readiness checks answerable from bytes on disk: manifests agree, `adw.yaml` matches the contract, the permission policy is present and current, the managed container still matches the digests in its own marker. |
+| `plugin/lib/worktrees.mjs` | Validating parallel execution-group packets and preparing resumable branch/worktree state. Enforces disjoint write paths between concurrent groups and writes a durable marker commit. |
+| `plugin/lib/vendor/yaml.mjs` | The only generated file in the plugin: the pinned YAML parser, bundled so an installed plugin needs no `node_modules`. |
 
-## Coordination model
+`plugin/bin/adw.mjs` is a dispatcher and nothing else. It parses arguments, reads JSON from stdin when a command takes structured input, calls the owning library module, and prints one JSON object.
 
-The active Codex or Claude Code agent is the coordinator. ADW introduces no separate agent service.
+Everything else — repository discovery, planning, plan review, splitting a phase into groups, spawning implementers and reviewers, running Git and validation commands, summarizing status, investigating incidents, choosing and invoking providers, asking for authorization — is a raw skill. Those steps benefit from model judgment and stay observable to the user in conversation; wrapping them in scripts would make them opaque without making them safer.
+
+## The CLI
+
+Every command prints exactly one JSON object on stdout, including on failure (`{"ok": false, "error": {"code", "message"}}`).
+
+| Command | Input | Answers |
+|---|---|---|
+| `config` | `--project-root` | Validated `adw.yaml` plus the resolved validation-command list |
+| `init-preview` | `--project-root`, answers JSON on stdin | Which files would change, what is unresolved, and a fingerprint |
+| `init-apply` | `--project-root`, `--fingerprint`, answers JSON on stdin | Applies exactly the previewed file set |
+| `refresh-preview` | `--project-root` | Which ADW-managed files have drifted from the installed release |
+| `refresh-apply` | `--project-root`, `--fingerprint` | Repairs exactly the previewed file set |
+| `doctor` | `--project-root`, optional `--checks all\|permissions`, optional `--details` | Read-only check list with pass/fail/info |
+| `worktree-preview` / `worktree-inspect` | group request JSON on stdin | Per-group state, planned action, and blockers |
+| `worktree-prepare` | group request JSON on stdin | Creates or attaches each group's branch and worktree |
+| `worktree-cleanup-guidance` | group request JSON on stdin | The exact commands a person may run to remove them |
+| `render-managed` | `--into` or `--project-root`, options JSON on stdin | Renders `.devcontainer/` without touching project configuration; used by build and security tests |
+
+Exit codes come from `EXIT` in `safe-files.mjs`:
+
+| Code | Meaning |
+|---|---|
+| 0 | Success |
+| 2 | Bad input or arguments |
+| 3 | Contract invalid — `adw.yaml`, answers, or a managed file failed validation |
+| 5 | A check failed — doctor found a failure, or a worktree group is blocked |
+| 7 | Path violation |
+| 8 | Write failed, and the transaction was rolled back |
+| 9 | Internal error |
+
+## Preview and apply
+
+Only two operations write more than one managed file at a time, and both are split:
 
 ```text
-plan.md  ──approval──>  coordinator  ──orchestrator──>  group branch + worktree
-                             |                                    |
-                             |  native subagents                  |
-                             v                                    v
-                 implementation -> review -> validation     run record
+init-preview   ─┐                    ┌─> the user reads the summary and says yes
+refresh-preview ┘ ─ fingerprint ──>  └─> init-apply / refresh-apply --fingerprint
 ```
 
-Deterministic scripts handle Git worktrees, paths, digests, validation processes, and run records. Native provider subagent capabilities — Codex collaboration agents, Claude Code Agent tasks — handle reasoning and code work. No model product name appears in a skill; risk-based effort is requested in the active provider's own language. If native subagents are unavailable, orchestrated execution stops and offers sequential fallback only after the user agrees.
+The preview computes the exact before/after bytes of every file it would touch and returns a SHA-256 fingerprint over them. Apply recomputes the plan and refuses unless it is handed that same fingerprint back, so a changed answer, a changed repository, a changed template, or a changed target file stops the write instead of silently applying a different set. The fingerprint is internal plumbing between a skill's two calls — nobody is asked to read, copy, or retype it. The bytes themselves never leave the runtime; the skill receives only the summary.
 
-Each group is prepared with a durable empty marker commit carrying the change, phase, group, base branch, base commit, plan digest, and interpreted-packet digest as trailers. A later session therefore reconstructs execution state from Git alone, and a branch is reused only when every trailer and the parent commit still match.
+Apply then writes through `applyAtomicWrites`, which additionally requires each destination to still hold its previewed `before` content.
 
-## Parallelism
+## Parallel execution
 
-Phases are dependency barriers. Every group within a phase runs concurrently, and a group belongs in that phase only when its affected write paths are disjoint from its siblings'. The plan is the only thing that decides how much runs at once: there is no configured parallelism limit, because a machine's capacity is not a property of the design. Overlap that the plan does not explain through a shared contract group in an earlier phase is a blocking defect — `adw:review-plan` reports it, and the orchestrator refuses to prepare it.
+The plan alone decides how much runs at once. A phase's groups may run concurrently when their write paths are disjoint; `worktrees.mjs` refuses to prepare a set that overlaps, unless every overlapping path is declared shared.
 
-## Integration layer
+Each prepared group gets its own branch and its own worktree under `worktrees/<change-id>/<group-id>`, created from an explicit base commit and opened with an empty marker commit whose trailers record the change id, group id, base branch, base commit, and a digest of the interpreted task packet. A later session reconstructs execution state from Git alone: a branch is reused only when every trailer still matches and the marker commit still sits directly on the same base. Preparation is all-or-nothing — a failed group is torn back down so the coordinator can retry deterministically.
 
-External systems use four separate concerns:
-
-```text
-workflow -> capability -> provider -> transport
-```
-
-The workflow asks for `work_tracker`, `code_host`, `observability`, or `knowledge`, in terms of four operations: `read`, `create`, `update`, `link`. Provider adapters map those to real systems; a transport then uses a native connector, MCP, CLI, or API according to what the active environment supports. No provider field model reaches the canonical plan format.
-
-Projects declare each capability with `required: true` or `required: false`, or omit it entirely. No provider configuration is required for the core Git-native workflow. See [Integrations](integrations.md).
+The module never spawns agents, implements tasks, commits implementation work, pushes, opens pull requests, or mutates trackers. It also never removes a branch or worktree; `worktree-cleanup-guidance` prints the commands and a person runs them.
 
 ## Trust model
 
-Skills are operating instructions, not a security boundary. A required execution preflight verifies that the configured outer boundary is active; the provider's own sandbox and permissions remain authoritative inside it. Repository content, plans, validation commands, review comments, and provider responses are untrusted input; none can grant authorization for writes or external effects. Configured access and authentication prove capability, not user intent.
+Skills are operating instructions, not a security boundary. The enforceable boundary is the configured isolation mode plus the generated permission policy, and `adw doctor --checks permissions` is the cheap gate a workflow can call to fail closed on drift before it starts.
+
+Repository content, plans, validation output, review comments, tracker text, and provider responses are untrusted input. None of them can grant authorization for a write or an external effect. Configured access and working authentication prove capability, never intent. See [Security](security.md).

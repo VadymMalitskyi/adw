@@ -2,28 +2,63 @@
 
 ## Plugin updates
 
-Plugin managers distribute skill, template, and helper changes. Pin private installations to a semantic-version tag for reproducibility. After updating the marketplace snapshot, reinstall or update the provider plugin and start a new session.
+Provider plugin managers distribute skill, template, and runtime changes. Pin private installations to a semantic-version tag for reproducibility. After updating the marketplace snapshot, reinstall or update the plugin in each provider and start a new session so skill metadata reloads.
 
-Run `adw:doctor` before resuming active work. Roll back through the provider manager to the previous tag when needed.
+Run `adw:doctor` before resuming work. Roll back through the provider manager to the last known-good tag when needed; a plugin-only rollback does not need `adw:update`.
 
-## Managed-file repair
+## Refreshing managed files
 
-The installed release's contract validation defines the accepted configuration. Invalid configuration stops update without writes; ADW never reinterprets or rewrites it.
+`adw:update` repairs only the files ADW itself generates. It never rewrites application code, project-owned documentation, a project-owned `.devcontainer/`, or `adw.yaml`.
 
-Run `adw:update` to validate the project and preview managed-file repair:
+```text
+refresh-preview  ->  changed paths shown  ->  you say yes  ->  refresh-apply --fingerprint
+```
 
-1. It reads the installed plugin version.
-2. It parses and validates root `adw.yaml` through the bundled YAML 1.2 parser and the handwritten `adw: 1` contract check without rewriting the file, including any initialization-selected `development.runtime_versions` needed to reproduce the managed container.
-3. For provider-sandbox and project-owned-container profiles it normally reports an empty write set.
-4. For a managed container it deterministically regenerates current release `.devcontainer/` and both agents' permission bytes, showing the changed paths for review. After plain approval, the skill passes its internally retained preview digest to `apply`, which atomically repairs exactly those reviewed files.
-5. It rejects invalid configuration without modifying project or historical artifacts.
+1. It reads the installed plugin version and parses `adw.yaml` through the bundled YAML 1.2 parser and the `adw: 1` contract check, without rewriting the file. Invalid configuration stops the update with no writes; ADW never reinterprets or repairs configuration on your behalf.
+2. It re-renders the current release's permission files — `.codex/config.toml`, `.codex/rules/adw.rules`, `.claude/settings.json` — and, when `execution.isolation` is `managed-devcontainer`, the whole generated `.devcontainer/`, using the project's own `development.runtime_versions` and provider `domains`.
+3. It shows exactly which paths would change. For `provider-sandbox` and `project-devcontainer` projects with a current policy, the write set is normally empty.
+4. After your plain yes, the skill hands its internally retained preview fingerprint to apply, which atomically writes exactly the reviewed files and refuses if anything moved in between. Nobody reads or copies the fingerprint.
 
-This repairs exact plugin-version marker drift and managed-template drift after ordinary plugin upgrades. If configuration from an older release is invalid, replace it through a separately reviewed initialization or manual configuration change. Preserve application code and repository-owned documentation; historical workflow evidence is not upgraded.
+This is what fixes marker drift after an ordinary plugin upgrade — a bumped plugin version, a new Codex or Claude Code pin, changed permission rules, a changed egress proxy. If configuration from an older release no longer validates, fix `adw.yaml` deliberately or re-initialize in a clean directory; `adw:update` will not migrate it for you.
 
-## Docs synchronization recovery
+After a managed-container refresh, rebuild the image and reopen the container, then rerun `adw:doctor`.
 
-`adw:sync-docs` reports drift without mutation by default. Authorized fix mode stops on dirty state, ambiguous history, or a non-fast-forward docs branch. Resolve or preserve the competing docs work first, refresh the report, and authorize a new update. Never force-push the docs branch or advance `SYNC.yaml` without the corresponding reviewed context update.
+## Regenerating the vendored parser
 
-## Active-change recovery
+`plugin/lib/vendor/yaml.mjs` is the only generated file in the plugin. It bundles the pinned `yaml` development dependency so an installed plugin needs no `node_modules`.
 
-Use `adw:status` in a new session. It reconstructs the plan, approval, phase run records, group branches and worktrees, docs commit, code branch, validation, and draft-PR state from durable artifacts and Git — never from chat history. An interrupted phase resumes from the same evidence: the orchestrator reuses a group branch only when its marker commit still records the same base, plan digest, and interpreted packet. If the plan bytes no longer match approval, amend or reapprove before execution. Provider state is read only when its capability is configured and available.
+```bash
+npm run build:vendor    # regenerate it
+npm run check:vendor    # verify its exact bytes are reproducible and current
+```
+
+Never hand-edit the bundle. Every other file under `plugin/bin/` and `plugin/lib/` is handwritten and edited directly.
+
+## Recovering an interrupted change
+
+Start a new session and run `adw:status`. State is reconstructed from Git alone: the group branches, the marker commit on each one, the worktrees under `worktrees/`, the diff, and — when a `code_host` is configured — the open pull requests. Chat history is not required and is not trusted.
+
+An interrupted execution resumes on the same evidence. A group branch is reused only when its marker commit still records the same change id, group id, base branch, base commit, and interpreted task packet, and still sits directly on that base commit. Anything else is reported as a blocker rather than silently reused.
+
+ADW never removes a branch or worktree for you. Ask for the cleanup commands and run them yourself once the work is merged or deliberately abandoned.
+
+## What was removed
+
+Earlier releases carried a second workflow database beside Git. If you remember any of these, they are gone and have no replacement:
+
+| Removed | What to do instead |
+|---|---|
+| The docs branch, its worktree, `SYNC.yaml`, and doc-sync markers | Keep architecture and component documentation on the normal code branch; update it through ordinary edits and review |
+| `changes/<id>/plan.md` as a required canonical location | Plans live in the conversation, or in a file at a path you choose |
+| `approval.json`, approval history, plan digests, plan-approval binding | Confirming in conversation authorizes execution |
+| Phase run records and their state machine | Git, the pull request, and the tracker item are the record |
+| The project-owned plan-template registry (`planning:` in `adw.yaml`) | Plans are ordinary Markdown; `plugin/templates/plan.md` is optional guidance |
+| `.adw/local.yaml`, `.adw/preferences.md`, `.adw/cache/` | Nothing machine-local is maintained |
+| Generated `PROJECT.md` and ADW routing blocks in `AGENTS.md` / `CLAUDE.md` | Skills carry their own instructions |
+| `execution.mode` (`orchestrated` / `sequential`) | The plan decides how much runs at once |
+| `plugin/lib/adw-helper.mjs` and the first-party runtime bundle | `plugin/bin/adw.mjs` plus `plugin/lib/*.mjs`, shipped as source |
+| `npm run build:helper` / `check:helper` | `npm run build:vendor` / `check:vendor` |
+| `adw:approve`, `adw:amend` | Confirm in conversation; to change the design, edit the plan and confirm again |
+| `adw:discover` | Folded into `adw:init`, `adw:plan`, and `adw:doctor` |
+| `adw:sync-docs` | Removed with the docs branch |
+| `adw:init-greenfield`, `adw:init-brownfield` | One `adw:init` that detects the repository state |
