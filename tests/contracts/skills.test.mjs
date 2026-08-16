@@ -13,6 +13,7 @@ const skillsRoot = resolve(pluginRoot, "skills");
 // this list is a deliberate product decision, not an accident.
 const SKILLS = [
   "address-review",
+  "generate-docs",
   "doctor",
   "execute",
   "init",
@@ -22,6 +23,7 @@ const SKILLS = [
   "quick",
   "review-plan",
   "status",
+  "sync-docs",
 ];
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;

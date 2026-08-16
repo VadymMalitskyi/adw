@@ -355,6 +355,8 @@ record,” approval artifact, docs branch, or hidden ADW database to recover.
 | `adw:init` | Establish ADW in a project | Commit generated setup or overwrite an initialized project |
 | `adw:onboard` | Join an initialized project | Change shared configuration |
 | `adw:doctor` | Check readiness or repair generated ADW files | Rewrite `adw.yaml`, app code, credentials, or project-owned containers |
+| `adw:generate-docs` | Generate an architecture-first documentation baseline from the live repository | Invent architecture claims or overwrite project-authored docs without review |
+| `adw:sync-docs` | Audit and reconcile documentation after meaningful repository changes | Treat commit count as documentation drift or rewrite unrelated docs |
 | `adw:plan` | Shape substantial work | Create worktrees or implementation branches |
 | `adw:review-plan` | Get an independent plan verdict | Make code changes |
 | `adw:execute` | Carry out one confirmed phase | Merge, deploy, force-push, or make external changes without separate approval |

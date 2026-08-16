@@ -1,0 +1,4 @@
+interface:
+  display_name: "Generate Docs"
+  short_description: "Generate evidence-based project documentation"
+  default_prompt: "Use $generate-docs to create or refresh this project's technical documentation."

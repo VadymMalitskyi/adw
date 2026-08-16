@@ -32,6 +32,24 @@ the private `.adw/user.md`. It writes `adw.yaml` only when you approve a shared
 policy or override; it creates `.devcontainer/` only for
 `managed-devcontainer`.
 
+Init intentionally does not generate project documentation. Use
+`adw:generate-docs` after setup when the project needs an evidence-based
+documentation baseline.
+
+## Documentation
+
+`adw:generate-docs` inspects the live repository and proposes the smallest
+useful documentation baseline. Its default entry point is
+`docs/architecture.md`, which explains the project, its major flows, and
+verified setup/validation commands; independently understandable components
+receive focused `docs/components/<component>.md` references. It creates or
+updates files only after the person approves the exact scope.
+
+`adw:sync-docs` audits documentation against a supplied change range or recent
+repository work. It classifies documents as current, stale, incomplete, or
+unaffected, then proposes only necessary edits. It does not treat a commit
+count as proof of drift, and audit-only is its default.
+
 ## Onboard
 
 `adw:onboard` is for a person joining an already initialized project. It reads

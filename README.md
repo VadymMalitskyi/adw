@@ -5,6 +5,7 @@ ADW is a private plugin that gives Codex and Claude Code the same Git-native dev
 ```text
 install -> adw:init -> adw:plan -> [adw:review-plan] -> adw:execute -> adw:status
                     -> adw:quick for a genuinely small change
+                    -> adw:generate-docs -> adw:sync-docs as documentation needs arise
 ```
 
 One workflow, portable across repositories, languages, build systems, code hosts, and work trackers. Portability comes from a small project configuration and provider references, not from a family of author-facing schemas.
@@ -79,6 +80,7 @@ A project with no providers and no devcontainer keeps the lightweight path: `pro
 | Group | Skills |
 |---|---|
 | Setup | `adw:init`, `adw:onboard`, `adw:doctor` |
+| Documentation | `adw:generate-docs`, `adw:sync-docs` |
 | Change loop | `adw:plan`, `adw:review-plan`, `adw:execute` |
 | Delivery | `adw:quick`, `adw:address-review` |
 | Operations | `adw:status`, `adw:investigate` |
