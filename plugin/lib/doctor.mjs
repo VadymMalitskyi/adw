@@ -157,7 +157,7 @@ function managedDevcontainerChecks(projectRoot, execution, policy, check) {
   checks.push(check("execution:hardening", hardening ? "pass" : "fail", hardening ? "managed devcontainer hardening is configured" : "managed devcontainer user, startup ordering, capabilities, proxy, or Dockerfile hardening is invalid"));
 
   const configuredDomains = new Set(allowedDomains.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith("#")));
-  const requiredAgentDomains = ["api.openai.com", "auth.openai.com", "chatgpt.com", "api.anthropic.com", "claude.ai", "console.anthropic.com"];
+  const requiredAgentDomains = ["api.openai.com", "auth.openai.com", "chatgpt.com", "api.anthropic.com", "claude.ai", "claude.com", "console.anthropic.com", "platform.claude.com"];
   const domainsValid = requiredAgentDomains.every((domain) => configuredDomains.has(domain)) && marker?.allowed_domains_sha256 === sha256(allowedDomains);
   checks.push(check("execution:domains", domainsValid ? "pass" : "fail", domainsValid ? "required agent domains are present and the allowlist matches its managed digest" : "required agent domains are missing or the allowlist differs from its managed digest"));
 

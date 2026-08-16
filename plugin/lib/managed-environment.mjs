@@ -50,7 +50,7 @@ const CONDA_DOMAINS = ["repo.anaconda.com", "conda.anaconda.org"];
 // Both agents share one skill tree, so a managed container always carries both.
 const AGENT_DOMAINS = [
   "api.openai.com", "auth.openai.com", "chatgpt.com",
-  "api.anthropic.com", "claude.ai", "console.anthropic.com",
+  "api.anthropic.com", "claude.ai", "claude.com", "console.anthropic.com", "platform.claude.com",
 ];
 
 export const MANAGED_FILES = Object.freeze([

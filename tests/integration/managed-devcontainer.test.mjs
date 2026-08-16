@@ -147,7 +147,7 @@ test("a managed container always provisions both agents", () => {
   for (const extension of ["openai.chatgpt", "anthropic.claude-code"]) {
     assert.equal(config.customizations.vscode.extensions.includes(extension), true, `${extension} must be installed`);
   }
-  for (const domain of ["api.openai.com", "auth.openai.com", "chatgpt.com", "api.anthropic.com", "claude.ai", "console.anthropic.com"]) {
+  for (const domain of ["api.openai.com", "auth.openai.com", "chatgpt.com", "api.anthropic.com", "claude.ai", "claude.com", "console.anthropic.com", "platform.claude.com"]) {
     assert.equal(allowedDomains.has(domain), true, `${domain} must be reachable`);
   }
   assert.equal(config.containerEnv.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, "1");
