@@ -40,7 +40,9 @@ you rejected and why.
 
 ## 4. Validate
 
-Run the project's configured validation commands and report the real output.
+Run explicit validation overrides when present; otherwise derive focused
+validation from repository manifests and CI, show it before running, and report
+the real output.
 Never call a check passed unless you ran it and saw it pass. Say plainly if
 something was skipped.
 

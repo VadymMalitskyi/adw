@@ -26,8 +26,8 @@ Exit code 0 means every check passed; 5 means at least one failed. The report
 covers:
 
 - both provider manifests, their shared version, and the shared skill tree;
-- the `adw: 1` project contract;
-- component paths and unambiguous ownership;
+- an optional `adw: 1` shared policy when one exists;
+- explicit component overrides and their unambiguous ownership;
 - the configured isolation, and only that one;
 - Codex and Claude permission policy presence and byte-currency;
 - for a managed container: the marker, pinned agent versions, project-scoped
@@ -37,10 +37,10 @@ covers:
   container is the active runtime;
 - `worktrees/` being ignored, and the optional `origin` remote.
 
-If `adw.yaml` is missing or invalid, the report stops before every check that
-assumes a readable configuration. Report the exact errors. Never translate,
-rewrite, or reinterpret the file — offer `adw:init` or a deliberate edit as a
-separate follow-up.
+An absent `adw.yaml` is a valid default-policy project. An invalid present file
+stops checks that depend on its policy. Report exact errors; never translate,
+rewrite, or reinterpret the file — offer a deliberate edit as a separate
+follow-up.
 
 ## 2. Classify every finding
 
@@ -52,9 +52,9 @@ Put each finding in exactly one category:
 - **User action** — rebuild or reopen a container, authenticate an already
   configured tool, or start a new agent session. Explain the exact action; do
   not claim to have performed it.
-- **Maintainer decision** — missing or invalid `adw.yaml`, a configuration
-  choice ADW cannot infer, or an unsafe project-owned container. Never guess or
-  rewrite these as a repair.
+- **Maintainer decision** — an invalid `adw.yaml`, a configuration choice ADW
+  cannot infer, or an unsafe project-owned container. Never guess or rewrite
+  these as a repair.
 
 ## 3. Repair what ADW owns
 
@@ -120,7 +120,7 @@ repaired, what remains broken, and the single most useful next action. A
 configured container that is not the active runtime is a failure for any
 workflow that executes project code.
 
-Offer `adw:init` for a missing project contract or a specific deliberate edit
-for an invalid one. A project-owned container is never rewritten, credentials
-are never changed, and security controls are never weakened merely to make the
-report pass.
+Offer `adw:init` when generated setup is missing, or a specific deliberate edit
+for an invalid policy. A project-owned container is never rewritten,
+credentials are never changed, and security controls are never weakened merely
+to make the report pass.

@@ -16,11 +16,11 @@ Code exists only where interpretation, duplication, or partial failure creates a
 | Module | Deterministic boundary it owns |
 |---|---|
 | `plugin/lib/safe-files.mjs` | Path confinement and scoped atomic writes. Rejects absolute paths, `..` traversal, NUL bytes, symlinked destinations and symlinked ancestors; stages every managed write in a transaction directory, checks a caller-supplied `expected_content` precondition, and rolls the whole set back on any failure. Also defines the shared exit codes and error classes. |
-| `plugin/lib/config.mjs` | Parsing and validating `adw.yaml`. YAML 1.2 with duplicate-key rejection and no merge keys; unknown keys are rejected rather than ignored; credential-like keys are refused anywhere in the document. Normalizes and deduplicates validation commands and provider domains. |
+| `plugin/lib/config.mjs` | Parsing and validating optional `adw.yaml` policy. YAML 1.2 with duplicate-key rejection and no merge keys; unknown keys are rejected rather than ignored; credential-like keys are refused anywhere in the document. When absent, it returns safe defaults plus Git base-branch discovery. |
 | `plugin/lib/permissions.mjs` | Generating the Codex and Claude permission policy (`.codex/config.toml`, `.codex/rules/adw.rules`, `.claude/settings.json`) and the container-owned Claude settings. Merges into existing files and refuses a merge that would weaken the profile. |
 | `plugin/lib/managed-environment.mjs` | Reading repository evidence — manifests, lockfiles, pinned version files, CI workflows, Dockerfiles — and rendering the managed devcontainer from it. Reports what it could not settle instead of guessing. |
 | `plugin/lib/project-setup.mjs` | Confined multi-file initialization and managed-file refresh, both as preview/apply pairs. |
-| `plugin/lib/doctor.mjs` | Read-only readiness checks answerable from bytes on disk: manifests agree, `adw.yaml` matches the contract, the permission policy is present and current, the managed container still matches the digests in its own marker. |
+| `plugin/lib/doctor.mjs` | Read-only readiness checks answerable from bytes on disk: manifests agree, an explicit policy matches the contract, the permission policy is present and current, the managed container still matches the digests in its own marker. |
 | `plugin/lib/worktrees.mjs` | Validating parallel execution-group packets and preparing resumable branch/worktree state. Enforces disjoint write paths between concurrent groups and writes a durable marker commit. |
 | `plugin/lib/vendor/yaml.mjs` | The only generated file in the plugin: the pinned YAML parser, bundled so an installed plugin needs no `node_modules`. |
 
@@ -34,7 +34,7 @@ Every command prints exactly one JSON object on stdout, including on failure (`{
 
 | Command | Input | Answers |
 |---|---|---|
-| `config` | `--project-root` | Validated `adw.yaml` plus the resolved validation-command list |
+| `config` | `--project-root` | Explicit policy or discovered defaults, plus explicit validation overrides |
 | `init-preview` | `--project-root`, answers JSON on stdin | Which files would change, what is unresolved, and a fingerprint |
 | `init-apply` | `--project-root`, `--fingerprint`, answers JSON on stdin | Applies exactly the previewed file set |
 | `refresh-preview` | `--project-root` | Which ADW-managed files doctor can repair from the installed release |

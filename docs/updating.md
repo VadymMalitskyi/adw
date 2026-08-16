@@ -14,7 +14,7 @@ Run `adw:doctor` before resuming work. It diagnoses the installed release and of
 refresh-preview  ->  changed paths shown  ->  you say yes  ->  refresh-apply --fingerprint
 ```
 
-1. Doctor runs its deterministic checks read-only, reads the installed plugin version, and parses `adw.yaml` through the bundled YAML 1.2 parser and the `adw: 1` contract check. Invalid configuration stops repair with no writes; ADW never reinterprets or repairs configuration on your behalf.
+1. Doctor runs its deterministic checks read-only, reads the installed plugin version, and parses any present `adw.yaml` through the bundled YAML 1.2 parser and the `adw: 1` policy contract check. An absent policy uses defaults; invalid configuration stops repair with no writes.
 2. For repairable drift it re-renders the current release's permission files — `.codex/config.toml`, `.codex/rules/adw.rules`, `.claude/settings.json` — restores the managed `.gitignore` block, and, when `execution.isolation` is `managed-devcontainer`, re-renders the whole generated `.devcontainer/` using the project's own `development.runtime_versions` and provider `domains`.
 3. It shows exactly which paths would change. For `provider-sandbox` and `project-devcontainer` projects with a current policy, the write set is normally empty.
 4. After your plain yes, doctor hands its internally retained preview fingerprint to apply, which atomically writes exactly the reviewed files and refuses if anything moved in between. Nobody reads or copies the fingerprint.
@@ -53,7 +53,7 @@ Earlier releases carried a second workflow database beside Git. If you remember 
 | `approval.json`, approval history, plan digests, plan-approval binding | Confirming in conversation authorizes execution |
 | Phase run records and their state machine | Git, the pull request, and the tracker item are the record |
 | The project-owned plan-template registry (`planning:` in `adw.yaml`) | Plans are ordinary Markdown; `plugin/templates/plan.md` is optional guidance |
-| `.adw/local.yaml`, `.adw/preferences.md`, `.adw/cache/` | Nothing machine-local is maintained |
+| `.adw/local.yaml`, `.adw/preferences.md`, `.adw/cache/` | Use optional Markdown profiles: global `~/.config/adw/profile.md` and Git-ignored `.adw/user.md`; ADW maintains no machine-readable local state |
 | Generated `PROJECT.md` and ADW routing blocks in `AGENTS.md` / `CLAUDE.md` | Skills carry their own instructions |
 | `execution.mode` (`orchestrated` / `sequential`) | The plan decides how much runs at once |
 | `plugin/lib/adw-helper.mjs` and the first-party runtime bundle | `plugin/bin/adw.mjs` plus `plugin/lib/*.mjs`, shipped as source |

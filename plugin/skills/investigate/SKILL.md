@@ -14,8 +14,9 @@ there. Follow `<plugin-root>/integrations/contracts.md` for provider reads.
 
 ## 1. Establish the signal
 
-Run `adw config` to learn the components and the configured observability
-provider. Identify precisely what fired: the monitor or alert, when it started,
+Run `adw config` to learn explicit component overrides and the configured
+observability provider; use repository evidence for any other boundaries.
+Identify precisely what fired: the monitor or alert, when it started,
 what it measures, and its threshold. If any of that is unclear, ask rather than
 assume — an investigation built on a misread alert is worse than none.
 

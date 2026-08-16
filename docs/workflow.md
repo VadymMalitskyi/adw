@@ -20,15 +20,26 @@ adw:init  ->  adw:plan  ->  [adw:review-plan]  ->  adw:execute  ->  adw:status
 | Unborn repository (no commits yet) | The generated files, on the existing repository |
 | Established repository | Components, runtimes, and validation commands derived from real manifests; existing tooling, documentation, and project-owned containers preserved |
 
-It refuses to initialize a non-empty unversioned directory, and refuses to run at all if `adw.yaml` already exists — use `adw:doctor` to diagnose and repair managed files, or edit `adw.yaml` deliberately.
+It refuses to initialize a non-empty unversioned directory. If `adw.yaml`
+already exists, it stops rather than overwriting the explicit shared policy—use
+`adw:doctor` to diagnose generated files, or edit that policy deliberately.
 
 The preview lists every file that would change and every requirement it could not resolve. After you say yes, apply writes exactly that set. Init never commits: the generated files are left for you to review and commit like any other change.
 
-What it writes: `adw.yaml`, `.codex/config.toml`, `.codex/rules/adw.rules`, `.claude/settings.json`, a managed block in `.gitignore` for `worktrees/`, and — only when you choose `managed-devcontainer` — the generated `.devcontainer/`.
+What it writes: `.codex/config.toml`, `.codex/rules/adw.rules`,
+`.claude/settings.json`, and a managed `.gitignore` block for `worktrees/` and
+the private `.adw/user.md`. It writes `adw.yaml` only when you approve a shared
+policy or override; it creates `.devcontainer/` only for
+`managed-devcontainer`.
 
 ## Onboard
 
-`adw:onboard` is for a person joining an already initialized project. It reads the committed `adw.yaml` and never asks them to reselect execution or providers. It covers entering the configured container, authenticating provider tooling, and invoking `adw:doctor`, then reports ready or concrete blockers. Onboarding defines no independent readiness rules.
+`adw:onboard` is for a person joining an already initialized project. It reads
+explicit project policy when present, otherwise reports discovery/defaults; it
+never asks them to alter shared policy. It also reads their optional global and
+project-local Markdown preferences. It covers entering the configured container,
+authenticating provider tooling, and invoking `adw:doctor`, then reports ready
+or concrete blockers. Onboarding defines no independent readiness rules.
 
 ## Plan
 
@@ -79,6 +90,14 @@ Group worktrees live under ignored `worktrees/<change-id>/<group-id>`. ADW never
 
 `adw:status` reconstructs the current picture from Git, the worktrees, and configured read-only provider queries: which branches exist, which group markers they carry, what is dirty, which pull requests are open, and what the next action is. It reads no ADW-maintained record file, because there is none.
 
-`adw:doctor` first runs the deterministic checks read-only — plugin manifests agree, `adw.yaml` matches the `adw: 1` contract, component paths are unambiguous, the permission policy is present and current, the configured isolation is actually active, `worktrees/` is ignored. It classifies failures, previews exact repairs for ADW-managed files, applies only the paths the user approves through the fingerprint-bound refresh commands, and reruns the checks. It never repairs `adw.yaml`, application code, credentials, or a project-owned container. Live provider availability and authentication remain guided user actions.
+`adw:doctor` first runs deterministic checks read-only — plugin manifests agree,
+an explicit `adw.yaml` matches the optional `adw: 1` policy contract, component
+overrides are unambiguous, the permission policy is present and current, the
+configured or detected isolation is active, and `worktrees/` is ignored. It
+classifies failures, previews exact repairs for ADW-managed files, applies only
+the paths the user approves through the fingerprint-bound refresh commands, and
+reruns the checks. It never repairs `adw.yaml`, application code, credentials,
+or a project-owned container. Live provider availability and authentication
+remain guided user actions.
 
 Both are safe to invoke at any time: status stays read-only, while doctor asks before every repair write.

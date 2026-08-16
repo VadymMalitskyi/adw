@@ -32,7 +32,10 @@ Interrupt anything and start a new session. State is reconstructed from Git bran
 
 ## Project configuration
 
-`adw.yaml` is the whole contract. Unknown keys are rejected, not ignored, so a stale field is a loud error instead of a silent no-op.
+`adw.yaml` is an optional shared project-policy file. Omit it when safe defaults
+and repository discovery are enough; add it only for shared isolation, provider,
+network, runtime, or component-validation overrides. Unknown keys are rejected,
+not ignored, so a stale field is a loud error instead of a silent no-op.
 
 ```yaml
 adw: 1
@@ -61,7 +64,9 @@ providers: {}                   # work_tracker | code_host | observability | kno
                                 # each: provider, required, transport, access, domains[], settings{}
 ```
 
-- `git` and `components` are required; `components` must declare at least one component with a project-relative path.
+- `git` and `components` are optional overrides. Without them, ADW infers the
+  Git base branch and reads repository evidence for component and validation
+  context.
 - A validation entry may be a plain command string, which inherits the component's `cwd`, a 120 s timeout, and `required: true`.
 - Provider `domains` are validated hostnames and feed the managed container's egress allowlist directly.
 - **Credentials are never allowed anywhere in this file.** Any credential-like key is refused, including inside provider `settings`.
@@ -85,7 +90,7 @@ Skills depend on capabilities — `work_tracker`, `code_host`, `observability`, 
 Skills call `plugin/bin/adw.mjs` for the deterministic steps only:
 
 ```text
-config                       validated adw.yaml and its resolved validation commands
+config                       explicit shared policy or discovered defaults, plus validation overrides
 init-preview / init-apply    confined first-time setup, bound to the reviewed file set
 refresh-preview / refresh-apply   exact repair primitives used by adw:doctor
 doctor                       read-only deterministic checks (--checks all|permissions)
@@ -126,6 +131,7 @@ Start a new provider session in the target directory and invoke `adw:init`. Revi
 ## Documentation
 
 - [Architecture](docs/architecture.md) — what is code, what is prose, and why
+- [New developer guide](docs/new-developer-guide.md) — a detailed, practical introduction to ADW's workflow and internals
 - [Workflow](docs/workflow.md) — the skill-native loop
 - [Security](docs/security.md) — permission matrix and container protections
 - [Integrations](docs/integrations.md) — capabilities, providers, transports

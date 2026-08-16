@@ -65,7 +65,7 @@ async function dispatch(command, options) {
       const config = await loadProjectConfig(projectRoot);
       return {
         exitCode: config.valid ? EXIT.OK : EXIT.CONTRACT_INVALID,
-        body: { ok: config.valid, project_root: projectRoot, config: config.data, validation_commands: config.valid ? validationCommands(config.data) : [], errors: config.errors },
+        body: { ok: config.valid, project_root: projectRoot, config_source: config.source, config: config.data, validation_commands: config.valid ? validationCommands(config.data) : [], errors: config.errors },
       };
     }
     case "init-preview":

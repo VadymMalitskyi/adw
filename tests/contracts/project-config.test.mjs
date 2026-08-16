@@ -249,9 +249,11 @@ test("the loader reads and validates the project file itself", async () => {
   assert.equal(loaded.data.git.base_branch, "main");
 
   writeFileSync(join(directory, "adw.yaml"), "adw: 1\n");
-  const invalid = await loadProjectConfig(directory);
-  assert.equal(invalid.valid, false);
-  assert.ok(errorPaths(invalid).includes("/git"));
+  const sparse = await loadProjectConfig(directory);
+  assert.equal(sparse.valid, true);
+  assert.equal(sparse.source, "adw.yaml");
 
-  await assert.rejects(loadProjectConfig(directory, "missing.yaml"), /does not exist/);
+  const defaults = await loadProjectConfig(directory, "missing.yaml");
+  assert.equal(defaults.valid, true);
+  assert.equal(defaults.source, "defaults");
 });

@@ -77,7 +77,7 @@ test("an empty directory becomes a Git repository with the ADW file set and noth
 
   const { applied } = initialize(root, { isolation: "provider-sandbox" });
   assert.equal(applied.applied, true);
-  assert.deepEqual(applied.writes.map(({ path }) => path).sort(), ["adw.yaml", ".gitignore", ...PERMISSION_FILES].sort());
+  assert.deepEqual(applied.writes.map(({ path }) => path).sort(), [".gitignore", ...PERMISSION_FILES].sort());
   assert.equal(git(root, ["symbolic-ref", "--short", "HEAD"]).stdout, "main");
   // Initialization writes files; it never commits them.
   assert.notEqual(git(root, ["status", "--porcelain"]).stdout, "");
@@ -94,7 +94,7 @@ test("an unborn repository is initialized without inventing a commit", () => {
   assert.equal(preview.repository.state, "unborn-repository");
   assert.equal(preview.repository.git_init, false);
   assert.equal(applied.repository.base_branch, "trunk");
-  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /base_branch: "trunk"/);
+  assert.equal(existsSync(join(root, "adw.yaml")), false);
 });
 
 test("initializing a directory that has unversioned content is refused", () => {
@@ -159,19 +159,13 @@ test("provider sandbox is the lightweight choice and creates no container", () =
   for (const path of PERMISSION_FILES) assert.ok(existsSync(join(root, path)), `${path} is missing`);
 });
 
-test("a monorepo keeps component commands separate with observable provenance", () => {
+test("a monorepo reports discovered component evidence without persisting it as policy", () => {
   const root = fromFixture("monorepo");
   const { preview } = initialize(root, { isolation: "provider-sandbox" });
-  const config = readFileSync(join(root, "adw.yaml"), "utf8");
   assert.ok(preview.components.length > 1, JSON.stringify(preview.components));
-  assert.match(config, /path: "apps\/web"/);
-  assert.match(config, /path: "services\/api"/);
-  // Every generated command cites the manifest that declares it.
-  for (const line of config.split("\n").filter((item) => item.trim().startsWith("- command:"))) {
-    assert.ok(line.length > 0);
-  }
-  assert.match(config, /source: "apps\/web\/package\.json#scripts\./);
-  assert.match(config, /source: "services\/api\/Makefile#target:/);
+  assert.equal(existsSync(join(root, "adw.yaml")), false);
+  assert.ok(preview.components.some(({ path }) => path === "apps/web"));
+  assert.ok(preview.components.some(({ path }) => path === "services/api"));
 });
 
 test("apply refuses a fingerprint that does not match the reviewed preview", () => {
@@ -191,12 +185,12 @@ test("apply refuses a fingerprint that does not match the reviewed preview", () 
   assert.equal(existsSync(join(root, ".devcontainer")), false);
 });
 
-test("initialization is not repeatable once the project is configured", () => {
+test("initialization is idempotent for a default-policy project", () => {
   const root = commitRepository(scratch("repeat"));
   initialize(root, { isolation: "provider-sandbox" });
   const again = run("init-preview", root, { isolation: "provider-sandbox" });
-  assert.equal(again.status, 3);
-  assert.match(again.body.error.message, /adw\.yaml already exists/);
+  assert.equal(again.status, 0, JSON.stringify(again.body));
+  assert.equal(again.body.writes.length, 0);
 });
 
 test("a symlinked managed target is refused rather than written through", () => {
@@ -254,8 +248,7 @@ test("the ADW ignore block adds only generated local state and preserves existin
   const ignore = readFileSync(join(root, ".gitignore"), "utf8");
   assert.ok(ignore.startsWith("node_modules/\ndist/\n"), ignore);
   assert.ok(ignore.includes("/worktrees/"), ignore);
-  // No cache, local configuration, or preference file exists to ignore.
-  assert.equal(ignore.includes(".adw/"), false, ignore);
+  assert.ok(ignore.includes("/.adw/user.md"), ignore);
 });
 
 test("an existing worktrees ignore rule is not duplicated", () => {

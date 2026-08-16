@@ -6,8 +6,11 @@
 // paths with their project-owned validation commands, optional provider
 // declarations. Anything else is rejected rather
 // than ignored, so a stale field is a loud error instead of a silent no-op.
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { parseDocument } from "./vendor/yaml.mjs";
-import { InputError, PathError, isObject, isSafeRelativePath, normalizeRelativePath, readProjectFile } from "./safe-files.mjs";
+import { InputError, isObject, isSafeRelativePath, normalizeRelativePath, readProjectFile } from "./safe-files.mjs";
 
 export const CONTRACT_VERSION = 1;
 export const CAPABILITIES = Object.freeze(["work_tracker", "code_host", "observability", "knowledge"]);
@@ -22,6 +25,46 @@ const SECRET_LIKE_KEY = /(?:password|passwd|token|api[_-]?key|secret|credential|
 const IDENTIFIER = /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/;
 const PLACEHOLDER = /^\s*<[^>]+>\s*$/;
 const PROJECT_KEYS = new Set(["adw", "git", "execution", "development", "components", "providers"]);
+
+export function defaultProjectConfig(baseBranch = "main") {
+  return {
+    adw: CONTRACT_VERSION,
+    git: { base_branch: baseBranch },
+    execution: { isolation: "provider-sandbox", web_access: "public-pages" },
+    development: { runtime_versions: {} },
+    components: {},
+    providers: {},
+  };
+}
+
+// A missing project policy is intentional. Git remains the source of truth for
+// its default branch, so ADW derives it instead of requiring every repository
+// to repeat it in YAML.
+function inferredBaseBranch(projectRoot) {
+  const git = (args) => spawnSync("git", args, { cwd: projectRoot, encoding: "utf8", env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } });
+  const remote = git(["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]);
+  if (remote.status === 0) {
+    const branch = remote.stdout.trim().replace(/^origin\//, "");
+    if (isValidBranchName(branch)) return branch;
+  }
+  for (const candidate of ["main", "master"]) {
+    if (git(["show-ref", "--verify", "--quiet", `refs/heads/${candidate}`]).status === 0) return candidate;
+  }
+  const current = git(["branch", "--show-current"]);
+  return current.status === 0 && isValidBranchName(current.stdout.trim()) ? current.stdout.trim() : "main";
+}
+
+function inferredExecution(projectRoot) {
+  const markerPath = join(projectRoot, ".devcontainer", "adw-managed.json");
+  if (!existsSync(markerPath)) return { isolation: "provider-sandbox", web_access: "public-pages" };
+  try {
+    const marker = JSON.parse(readFileSync(markerPath, "utf8"));
+    if (marker?.profile === "managed-devcontainer" && WEB_ACCESS_MODES.includes(marker.web_access)) {
+      return { isolation: "managed-devcontainer", web_access: marker.web_access };
+    }
+  } catch { /* A malformed marker is handled by doctor when it validates the container. */ }
+  return { isolation: "managed-devcontainer", web_access: "public-pages" };
+}
 
 export function parseYaml(source, label = "YAML document") {
   if (typeof source !== "string" && !Buffer.isBuffer(source)) throw new InputError(`${label} must be UTF-8 text`);
@@ -223,23 +266,14 @@ export function validateProjectConfig(data) {
   checkNoSecretLikeKeys(errors, data, "");
   if (data.adw !== CONTRACT_VERSION) errors.add("/adw", `must equal ${CONTRACT_VERSION}`);
 
-  const normalized = {
-    adw: CONTRACT_VERSION,
-    git: { base_branch: "main" },
-    execution: { isolation: "provider-sandbox", web_access: "public-pages" },
-    development: { runtime_versions: {} },
-    components: {},
-    providers: {},
-  };
+  const normalized = defaultProjectConfig();
 
-  if (data.git === undefined) errors.add("/git", "is required");
-  else if (checkObject(errors, data.git, "/git")) {
+  if (data.git !== undefined && checkObject(errors, data.git, "/git")) {
     checkKnownKeys(errors, data.git, new Set(["base_branch"]), "/git");
     if (checkBranchName(errors, data.git.base_branch, "/git/base_branch")) normalized.git.base_branch = data.git.base_branch;
   }
 
-  if (data.execution === undefined) errors.add("/execution", "is required");
-  else if (checkObject(errors, data.execution, "/execution")) {
+  if (data.execution !== undefined && checkObject(errors, data.execution, "/execution")) {
     checkKnownKeys(errors, data.execution, new Set(["isolation", "web_access"]), "/execution");
     if (!ISOLATION_MODES.includes(data.execution.isolation)) errors.add("/execution/isolation", `must be one of: ${ISOLATION_MODES.join(", ")}`);
     else normalized.execution.isolation = data.execution.isolation;
@@ -261,8 +295,7 @@ export function validateProjectConfig(data) {
     }
   }
 
-  if (data.components === undefined) errors.add("/components", "is required");
-  else validateComponents(errors, data.components, normalized);
+  if (data.components !== undefined) validateComponents(errors, data.components, normalized);
 
   if (data.providers !== undefined) validateProviders(errors, data.providers, normalized);
 
@@ -271,10 +304,19 @@ export function validateProjectConfig(data) {
 
 export async function loadProjectConfig(projectRoot, path = "adw.yaml") {
   const bytes = await readProjectFile(projectRoot, path);
-  if (bytes === null) throw new PathError(`project configuration does not exist: ${path}`);
+  if (bytes === null) {
+    const data = defaultProjectConfig(inferredBaseBranch(projectRoot));
+    data.execution = inferredExecution(projectRoot);
+    return {
+      data,
+      valid: true,
+      errors: [],
+      source: "defaults",
+    };
+  }
   const raw = parseYaml(bytes, path);
   const validation = validateProjectConfig(raw);
-  return { data: validation.data ?? raw, valid: validation.valid, errors: validation.errors };
+  return { data: validation.data ?? raw, valid: validation.valid, errors: validation.errors, source: "adw.yaml" };
 }
 
 // Every configured validation command, deduplicated conservatively: the

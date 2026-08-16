@@ -152,38 +152,38 @@ function yamlScalar(value) {
   return JSON.stringify(String(value));
 }
 
-function renderProjectConfig({ baseBranch, isolation, webAccess, runtimeVersions, components, providers }) {
+function renderProjectConfig({ baseBranch, isolation, webAccess, runtimeVersions, components, providers, includeGit, includeComponents }) {
   const lines = [
-    "# ADW project configuration. Every generated command cites an observable source.",
+    "# ADW project policy. Omit a setting to use repository discovery or ADW's safe default.",
     "adw: 1",
-    "",
-    "git:",
-    `  base_branch: ${yamlScalar(baseBranch)}`,
-    "",
-    "execution:",
-    `  isolation: ${isolation}`,
   ];
+  if (includeGit) lines.push("", "git:", `  base_branch: ${yamlScalar(baseBranch)}`);
   // `web_access` bounds the generated container's egress; it means nothing
   // outside the managed devcontainer, so it is recorded only there.
-  if (isolation === "managed-devcontainer") lines.push(`  web_access: ${webAccess}`);
+  if (isolation !== "provider-sandbox" || webAccess !== "public-pages") {
+    lines.push("", "execution:", `  isolation: ${isolation}`);
+    if (isolation === "managed-devcontainer") lines.push(`  web_access: ${webAccess}`);
+  }
   const runtimes = Object.entries(runtimeVersions);
   if (runtimes.length > 0) {
     lines.push("", "development:", "  runtime_versions:");
     for (const [runtime, version] of runtimes) lines.push(`    ${runtime}: ${yamlScalar(version)}`);
   }
-  lines.push("", "components:");
-  for (const component of components) {
-    lines.push(`  ${component.name}:`);
-    lines.push(`    path: ${yamlScalar(component.path)}`);
-    if (component.validate.length === 0) {
-      lines.push("    validate: []");
-      continue;
-    }
-    lines.push("    validate:");
-    for (const item of component.validate) {
-      lines.push(`      - command: ${yamlScalar(item.command)}`);
-      lines.push(`        cwd: ${yamlScalar(component.path)}`);
-      if (item.source) lines.push(`        source: ${yamlScalar(item.source)}`);
+  if (includeComponents) {
+    lines.push("", "components:");
+    for (const component of components) {
+      lines.push(`  ${component.name}:`);
+      lines.push(`    path: ${yamlScalar(component.path)}`);
+      if (component.validate.length === 0) {
+        lines.push("    validate: []");
+        continue;
+      }
+      lines.push("    validate:");
+      for (const item of component.validate) {
+        lines.push(`      - command: ${yamlScalar(item.command)}`);
+        lines.push(`        cwd: ${yamlScalar(component.path)}`);
+        if (item.source) lines.push(`        source: ${yamlScalar(item.source)}`);
+      }
     }
   }
   const providerEntries = Object.entries(providers);
@@ -210,8 +210,9 @@ function renderProjectConfig({ baseBranch, isolation, webAccess, runtimeVersions
   return `${lines.join("\n")}\n`;
 }
 
-// Only generated local state earns an ignore entry. ADW keeps no cache, no
-// local configuration file, and no personal preference file.
+// The project-local profile is private context, not shared configuration. It
+// remains in the workspace so a managed devcontainer can read it without
+// mounting the host home directory.
 function ignoreBlock(original) {
   let outside = original;
   const startIndex = original.indexOf(IGNORE_START);
@@ -222,7 +223,9 @@ function ignoreBlock(original) {
     outside = `${original.slice(0, startIndex)}${original.slice(endIndex + IGNORE_END.length)}`;
   }
   const rules = new Set(outside.split(/\r?\n/).map((line) => line.trim()));
-  const managed = ["/worktrees/", "worktrees/"].some((rule) => rules.has(rule)) ? [] : ["/worktrees/"];
+  const managed = [];
+  if (!["/worktrees/", "worktrees/"].some((rule) => rules.has(rule))) managed.push("/worktrees/");
+  if (!["/.adw/user.md", ".adw/user.md"].some((rule) => rules.has(rule))) managed.push("/.adw/user.md");
   return [IGNORE_START, ...managed, IGNORE_END].join("\n");
 }
 
@@ -248,7 +251,7 @@ function checkAnswers(answers) {
       throw new InputError(`unsupported answer field: ${key}`);
     }
   }
-  const isolation = answers.isolation ?? "managed-devcontainer";
+  const isolation = answers.isolation ?? "provider-sandbox";
   if (!ISOLATION_MODES.includes(isolation)) throw new ContractError(`isolation must be one of: ${ISOLATION_MODES.join(", ")}`);
   const webAccess = answers.web_access ?? "public-pages";
   if (!WEB_ACCESS_MODES.includes(webAccess)) throw new ContractError(`web_access must be one of: ${WEB_ACCESS_MODES.join(", ")}`);
@@ -329,9 +332,6 @@ export function planInitialization(directory, rawAnswers = {}) {
   if (repository.state === "empty-directory" && !repository.clean) {
     throw new ContractError(`initializing an unversioned directory requires it to be empty; found: ${repository.entries.join(", ")}`);
   }
-  if (existsSync(join(projectRoot, "adw.yaml"))) {
-    throw new ContractError("adw.yaml already exists; run adw:doctor to diagnose and repair managed files, or edit adw.yaml deliberately");
-  }
   const execution = checkIsolation(projectRoot, answers.isolation);
   const baseBranch = answers.baseBranch ?? detectedBaseBranch(projectRoot, repository.state);
   const components = answers.components ?? detectComponents(projectRoot);
@@ -342,14 +342,27 @@ export function planInitialization(directory, rawAnswers = {}) {
     files.push({ path, before, after, action });
   };
 
-  add("adw.yaml", renderProjectConfig({
-    baseBranch,
-    isolation: execution.isolation,
-    webAccess: answers.webAccess,
-    runtimeVersions: answers.runtimeVersions,
-    components,
-    providers: answers.providers,
-  }), "create");
+  const explicitPolicy = answers.baseBranch !== undefined
+    || answers.components !== undefined
+    || answers.isolation !== undefined && answers.isolation !== "provider-sandbox"
+    || answers.web_access !== undefined && answers.web_access !== "public-pages"
+    || Object.keys(answers.runtime_versions ?? {}).length > 0
+    || Object.keys(answers.providers ?? {}).length > 0;
+  if (existsSync(join(projectRoot, "adw.yaml"))) {
+    throw new ContractError("adw.yaml already exists; edit the shared project policy deliberately, then run adw:doctor for generated-file repair");
+  }
+  if (explicitPolicy) {
+    add("adw.yaml", renderProjectConfig({
+      baseBranch,
+      isolation: execution.isolation,
+      webAccess: answers.webAccess,
+      runtimeVersions: answers.runtimeVersions,
+      components: answers.components ?? components,
+      providers: answers.providers,
+      includeGit: answers.baseBranch !== undefined,
+      includeComponents: answers.components !== undefined,
+    }), "create-project-policy");
+  }
 
   for (const file of permissionProjectFiles((path) => readOrEmpty(projectRoot, path))) {
     const before = readOrEmpty(projectRoot, file.path);
@@ -368,8 +381,11 @@ export function planInitialization(directory, rawAnswers = {}) {
   const ignoreAfter = replaceManagedBlock(ignoreBefore, IGNORE_START, IGNORE_END, ignoreBlock(ignoreBefore));
   files.push({ path: ".gitignore", before: ignoreBefore, after: ignoreAfter, action: ignoreBefore ? "update-managed-block" : "create" });
 
-  const config = validateProjectConfig(parseYaml(files.find(({ path }) => path === "adw.yaml").after, "adw.yaml"));
-  if (!config.valid) throw new ContractError(`generated adw.yaml is invalid: ${config.errors.map((item) => `${item.path} ${item.message}`).join("; ")}`);
+  const policy = files.find(({ path }) => path === "adw.yaml");
+  if (policy) {
+    const config = validateProjectConfig(parseYaml(policy.after, "adw.yaml"));
+    if (!config.valid) throw new ContractError(`generated adw.yaml is invalid: ${config.errors.map((item) => `${item.path} ${item.message}`).join("; ")}`);
+  }
 
   const writes = files.filter((file) => file.before !== file.after);
   return {

@@ -216,24 +216,19 @@ export async function runDoctor(directory, { details = false, checks: selection 
   }
   checks.push(check("repository", "pass", "project root is a Git repository"));
 
-  if (!existsSync(join(projectRoot, "adw.yaml"))) {
-    checks.push(check("project-contract", "fail", "adw.yaml is missing; run adw:init"));
-    return { ok: false, read_only: true, project_root: projectRoot, isolation: null, checks };
-  }
-
   let config;
   try { config = await loadProjectConfig(projectRoot); }
   catch (error) {
     checks.push(check("project-contract", "fail", error.message));
     return { ok: false, read_only: true, project_root: projectRoot, isolation: null, checks };
   }
-  checks.push(check("project-contract", config.valid ? "pass" : "fail", config.valid ? "adw.yaml matches the adw: 1 project contract" : "adw.yaml does not match the adw: 1 project contract", config.valid ? {} : { errors: config.errors }));
+  checks.push(check("project-contract", config.valid ? "pass" : "fail", config.valid ? (config.source === "defaults" ? "no adw.yaml; using repository discovery and ADW defaults" : "adw.yaml matches the adw: 1 project policy contract") : "adw.yaml does not match the adw: 1 project policy contract", config.valid ? { source: config.source } : { errors: config.errors }));
   if (!config.valid) return { ok: false, read_only: true, project_root: projectRoot, isolation: null, checks };
 
   const project = config.data;
   const componentPaths = Object.values(project.components).map(({ path }) => path);
   const uniqueComponents = new Set(componentPaths).size === componentPaths.length;
-  checks.push(check("components", uniqueComponents ? "pass" : "fail", uniqueComponents ? `${componentPaths.length} component path(s) have unambiguous ownership` : "duplicate component paths create ambiguous ownership"));
+  checks.push(check("components", uniqueComponents ? "info" : "fail", componentPaths.length === 0 ? "component boundaries are discovered from repository evidence" : `${componentPaths.length} component override(s) have unambiguous ownership`, uniqueComponents ? {} : { paths: componentPaths }));
 
   checks.push(...executionChecks(projectRoot, project.execution, check));
 

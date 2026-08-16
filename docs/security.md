@@ -45,7 +45,10 @@ The permission files are themselves protected: because `acceptEdits` would other
 
 ## Isolation modes
 
-`adw.yaml` records one mode under `execution.isolation`. Security is proportional; the hardened container is an opt-in, not a prerequisite.
+When present, `adw.yaml` records an isolation mode. Without it, ADW uses the
+provider sandbox by default, except that a managed-container marker continues
+to require the managed runtime. Security is proportional; the hardened
+container is an opt-in, not a prerequisite.
 
 | Mode | What it means |
 |---|---|
@@ -89,7 +92,8 @@ Run `npm run test:security` to build both pinned agents and exercise firewall se
 
 - Every managed write goes through one confined atomic-write path. It rejects absolute paths, `..` traversal, backslashes, NUL bytes, symlinked destinations, and symlinked ancestors; it re-resolves each path immediately before mutation; and it rolls the whole set back if any single write fails.
 - Group worktrees are prepared only through the ADW CLI, which refuses symlinked or already-occupied targets, refuses a branch already checked out elsewhere, refuses a branch whose marker commit does not match this run, and refuses overlapping write paths between concurrent groups. It never deletes a branch or worktree.
-- Validation commands come only from the project's own manifests and `adw.yaml`, each citing its source, and are shown before they run.
+- Validation commands come from repository manifests/CI or explicit `adw.yaml`
+  overrides, each citing its source, and are shown before they run.
 - Exit codes, timeouts, and signals are preserved. A failure is never translated into success.
 - Read-only skills do not fetch, pull, write refs, change files, or alter worktrees.
 

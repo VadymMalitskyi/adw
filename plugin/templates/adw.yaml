@@ -1,20 +1,23 @@
-# ADW project configuration — the complete stable `adw: 1` contract.
+# ADW project policy — optional shared overrides to discovery and safe defaults.
 #
 # `adw:init` generates this file; this template documents every field it may
-# contain. Unknown keys are rejected rather than ignored, and no key anywhere in
+# contain. Omit this file entirely when no shared override is needed. Unknown
+# keys are rejected rather than ignored, and no key anywhere in
 # this file may look like a credential.
 adw: 1
 
-git:
-  base_branch: main
+# Optional. ADW otherwise derives the base branch from Git.
+# git:
+#   base_branch: main
 
-execution:
-  # provider-sandbox      lightweight; the agent provider's own sandbox
-  # project-devcontainer  an existing project-owned container, left unchanged
-  # managed-devcontainer  the generated reproducible hardened container
-  isolation: provider-sandbox
-  # Managed devcontainer only: public-pages | hosted-only
-  # web_access: public-pages
+# Optional. `provider-sandbox` is the default.
+# execution:
+#   # provider-sandbox      lightweight; the agent provider's own sandbox
+#   # project-devcontainer  an existing project-owned container, left unchanged
+#   # managed-devcontainer  the generated reproducible hardened container
+#   isolation: provider-sandbox
+#   # Managed devcontainer only: public-pages | hosted-only
+#   # web_access: public-pages
 
 # Optional. Record a runtime version only when the repository does not pin one
 # itself. Supported: node, python, go, rust, java, ruby, dotnet.
@@ -22,13 +25,14 @@ execution:
 #   runtime_versions:
 #     dotnet: "8"
 
-# At least one component. A single root component uses path ".".
+# Optional override when repository discovery cannot establish boundaries or
+# validation commands. A single root component uses path ".".
 # Each `validate` entry is either an exact command string or an object with
 # `command` and optional `cwd`, `timeout_ms`, `required`, and `source`.
-components:
-  app:
-    path: "."
-    validate: []
+# components:
+#   app:
+#     path: "."
+#     validate: []
 
 # Optional. Omit every capability the project does not use. `domains` lists the
 # hostnames the managed container must be able to reach for that provider.

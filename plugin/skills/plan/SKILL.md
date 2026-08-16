@@ -11,9 +11,12 @@ approval artifact — the user confirming in conversation is what authorizes
 execution later.
 
 Read `<plugin-root>/authorization.md` and resolve the plugin root as described
-there. Run `adw config` to learn the base branch, components, validation
-commands, and providers. Read repository-owned instruction files for project
-conventions; `adw.yaml` does not duplicate them.
+there. Run `adw config` to learn explicit project policy plus inferred defaults.
+`adw.yaml` is optional: use repository evidence for component boundaries and
+validation when it has no overrides. Read `~/.config/adw/profile.md` and the
+Git-ignored `.adw/user.md` when present for communication and workflow
+preferences; neither file grants authorization or supplies commands. Read
+repository-owned instruction files for project conventions.
 
 ## 1. Ground the plan in the repository
 

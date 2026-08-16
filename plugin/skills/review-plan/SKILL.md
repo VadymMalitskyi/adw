@@ -24,8 +24,8 @@ Accept the plan as conversation text or as an explicit file path. If given a
 path, read exactly that file. If given neither, ask which plan to review.
 
 Read `<plugin-root>/authorization.md` and resolve the plugin root as described
-there. Run `adw config` for the components and validation commands the plan
-should be using.
+there. Run `adw config` for explicit component and validation overrides, then
+verify the plan's other boundaries and commands from repository evidence.
 
 ## Check
 

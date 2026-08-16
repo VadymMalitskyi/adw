@@ -109,7 +109,7 @@ test("every runtime command works from a copy of plugin/ outside the repository"
   const preview = run("init-preview", ["--project-root", project], answers);
   assert.equal(preview.status, 0, JSON.stringify(preview.body));
   assert.equal(preview.body.ok, true);
-  assert.ok(preview.body.writes.some(({ path }) => path === "adw.yaml"));
+  assert.equal(preview.body.writes.some(({ path }) => path === "adw.yaml"), false);
 
   const applied = run("init-apply", ["--project-root", project, "--fingerprint", preview.body.fingerprint], answers);
   assert.equal(applied.status, 0, JSON.stringify(applied.body));
@@ -117,8 +117,9 @@ test("every runtime command works from a copy of plugin/ outside the repository"
   const config = run("config", ["--project-root", project]);
   assert.equal(config.status, 0, JSON.stringify(config.body));
   assert.equal(config.body.ok, true);
+  assert.equal(config.body.config_source, "defaults");
   assert.equal(config.body.config.adw, 1);
-  assert.ok(config.body.validation_commands.length > 0, "the fixture declares validation commands");
+  assert.equal(config.body.validation_commands.length, 0, "validation remains repository evidence until explicitly overridden");
 
   const doctorReport = run("doctor", ["--project-root", project]);
   assert.equal(doctorReport.body.read_only, true);

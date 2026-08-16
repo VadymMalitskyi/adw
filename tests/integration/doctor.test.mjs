@@ -88,9 +88,10 @@ test("a freshly initialized managed project passes every check except its runtim
   assert.equal(inside.report.ok, true);
   assert.deepEqual(inside.failures, []);
   assert.equal(inside.statusOf("execution:runtime"), "pass");
-  for (const id of ["plugin", "repository", "project-contract", "components", "execution:managed-files", "execution:managed-marker", "execution:agent-versions", "execution:mounts", "execution:unsafe-mounts", "execution:hardening", "execution:domains", "execution:generated-files", "execution:permission-files", "permissions:configuration", "permissions:codex", "permissions:claude", "ignore:worktrees"]) {
+  for (const id of ["plugin", "repository", "project-contract", "execution:managed-files", "execution:managed-marker", "execution:agent-versions", "execution:mounts", "execution:unsafe-mounts", "execution:hardening", "execution:domains", "execution:generated-files", "execution:permission-files", "permissions:configuration", "permissions:codex", "permissions:claude", "ignore:worktrees"]) {
     assert.equal(inside.statusOf(id), "pass", `${id} must pass on a fresh managed project`);
   }
+  assert.equal(inside.statusOf("components"), "info");
 });
 
 test("each kind of drift fails its own check and exits 5", async (t) => {
@@ -168,17 +169,15 @@ test("each kind of drift fails its own check and exits 5", async (t) => {
   }
 });
 
-test("doctor stops before the checks that assume a readable configuration", async (t) => {
+test("doctor accepts an absent policy but stops for an invalid present policy", async (t) => {
   await t.test("a missing adw.yaml", () => {
     const root = managedProject("adw-doctor-missing-config-");
     rmSync(join(root, "adw.yaml"));
 
     const result = doctor(root, { env: { ADW_MANAGED_DEVCONTAINER: "1" } });
-    assert.equal(result.status, EXIT_CHECK_FAILED);
-    assert.deepEqual(result.ids, ["plugin", "repository", "project-contract"]);
-    assert.equal(result.statusOf("project-contract"), "fail");
-    assert.match(result.report.checks.at(-1).summary, /adw\.yaml is missing; run adw:init/);
-    assert.equal(result.report.isolation, null);
+    assert.equal(result.status, 0);
+    assert.equal(result.statusOf("project-contract"), "pass");
+    assert.equal(result.report.isolation, "managed-devcontainer");
   });
 
   await t.test("an adw.yaml that does not match the contract", () => {
@@ -190,7 +189,7 @@ test("doctor stops before the checks that assume a readable configuration", asyn
     assert.deepEqual(result.ids, ["plugin", "repository", "project-contract"]);
     const contract = result.report.checks.at(-1);
     assert.equal(contract.status, "fail");
-    assert.deepEqual(contract.errors.map(({ path }) => path).sort(), ["/bogus", "/components", "/execution", "/git"]);
+    assert.deepEqual(contract.errors.map(({ path }) => path).sort(), ["/bogus"]);
     assert.match(contract.errors.find(({ path }) => path === "/bogus").message, /is not a supported key/);
   });
 

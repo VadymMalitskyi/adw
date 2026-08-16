@@ -13,10 +13,10 @@ there.
 
 ## 1. Project
 
-Run `adw config`. Report the base branch, the configured isolation, the
-components with their validation commands, and any declared providers. If
-`adw.yaml` is missing or invalid, report that and stop — point at `adw:init` or
-`adw:doctor` rather than guessing.
+Run `adw config`. Report whether values come from an explicit project policy or
+defaults, then the base branch, configured isolation, component overrides with
+validation commands, and declared providers. A missing `adw.yaml` is valid; an
+invalid present file is a blocker.
 
 ## 2. Git
 

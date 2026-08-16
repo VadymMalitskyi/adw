@@ -79,8 +79,10 @@ test("every command answers with one JSON object on stdout", () => {
 test("exit codes are stable and distinguish input, contract, and check failures", () => {
   const root = project();
 
-  // No configuration yet: the contract cannot be satisfied.
-  assert.equal(invoke(["config", "--project-root", root]).status, EXIT.PATH_VIOLATION);
+  // No shared policy is a valid default-policy project.
+  const defaults = invoke(["config", "--project-root", root]);
+  assert.equal(defaults.status, EXIT.OK);
+  assert.equal(JSON.parse(defaults.stdout).config_source, "defaults");
 
   // Missing required argument.
   assert.equal(invoke(["config"]).status, EXIT.INPUT);

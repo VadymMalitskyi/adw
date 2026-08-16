@@ -21,9 +21,10 @@ of:
 - `unborn-repository` — a Git repository with no commits.
 - `established` — at least one commit.
 
-If the target already has `adw.yaml`, stop: this project is initialized. Point
-at `adw:doctor` for diagnosis and managed-file repair, or a deliberate
-`adw.yaml` edit.
+If the target already has `adw.yaml`, stop: it has an explicit shared policy.
+Point at `adw:doctor` for diagnosis and managed-file repair, or a deliberate
+policy edit. A project without that file can still be initialized; generated
+permission files and the managed-container marker establish the local setup.
 
 Read enough of the repository to answer the questions below honestly: the
 manifests, lockfiles, `README`, and existing `.devcontainer/`. Do not write
@@ -33,12 +34,11 @@ anything yet and do not run project commands.
 
 Ask these, and nothing else. Each has a default you should state.
 
-1. **Isolation** — recommend `managed-devcontainer`: a generated, hardened,
-   reproducible container with fail-closed egress. Offer `project-devcontainer`
-   when the repository already owns `.devcontainer/devcontainer.json`, and
-   `provider-sandbox` as the lightweight option that relies on the agent
-   provider's own sandbox. Say plainly that `provider-sandbox` is the weaker
-   boundary.
+1. **Isolation** — `provider-sandbox` is the default lightweight option.
+   Offer `managed-devcontainer` when the project needs a generated, hardened,
+   reproducible container with fail-closed egress, and `project-devcontainer`
+   when the repository already owns `.devcontainer/devcontainer.json`. Say
+   plainly that `provider-sandbox` is the weaker boundary.
 2. **Web access** — managed container only. `public-pages` (default) allows a
    bounded public page-read channel; `hosted-only` restricts egress to exactly
    the allowlisted domains.
@@ -47,9 +47,10 @@ Ask these, and nothing else. Each has a default you should state.
 4. **Providers** — optional work tracker, code host, observability, and
    knowledge integrations, with the exact hostnames each needs so the managed
    container can reach them. Never ask for or accept a credential.
-Do not ask about execution mode, plan templates, documentation branches, or
-personal preferences or project conventions. Repository instruction files own
-project conventions; ADW does not duplicate them in `adw.yaml`.
+Do not ask about execution mode, plan templates, or documentation branches.
+Repository instruction files own project conventions. Personal preferences
+belong in `~/.config/adw/profile.md` or the Git-ignored `.adw/user.md`, never
+in the shared project policy.
 
 `<plugin-root>/templates/adw.yaml` documents every field the generated
 configuration may contain, if you need to explain one.
@@ -75,8 +76,9 @@ with the answers as JSON on stdin:
 ```
 
 Every field is optional. Omit `base_branch` to use the detected default branch,
-and omit `components` to use the detected components and their manifest-backed
-validation commands.
+and omit `components` to use detected components as planning evidence. Init
+writes `adw.yaml` only when the approved answers introduce a shared policy or
+override; it does not persist discovery as configuration.
 
 Present to the user:
 

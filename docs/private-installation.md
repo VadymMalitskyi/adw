@@ -18,7 +18,12 @@ In the target directory, invoke `adw:init`. It works in an empty directory, an u
 
 If you selected `managed-devcontainer`, commit the generated `.devcontainer/`, then rebuild and reopen with a Dev Containers client. Codex CLI and Claude Code CLI are pinned in the image, and project runtimes plus manifest-backed dependencies install automatically at create time. Authenticate each tool inside its project-scoped named volume when first used. An existing project-owned container is preserved untouched and must provide `ADW_PROJECT_DEVCONTAINER=1` in its active runtime for `adw:doctor` to confirm it.
 
-For another person joining the project: clone the already initialized repository, rebuild and reopen its configured container, install ADW from the same approved source, authenticate the selected tools, and invoke `adw:onboard`. Onboarding writes nothing. Do not rerun `adw:init` for each contributor — it refuses to run once `adw.yaml` exists.
+For another person joining the project: clone the already initialized repository,
+rebuild and reopen its configured container, install ADW from the same approved
+source, authenticate the selected tools, and invoke `adw:onboard`. Onboarding
+can offer to create their Git-ignored `.adw/user.md` preference profile; it does
+not alter shared policy. Do not rerun `adw:init` merely because `adw.yaml` is
+absent—policy is optional.
 
 External provider tooling is installed and authenticated separately. ADW does not install MCP servers, CLIs, or credentials as part of plugin installation. Projects without integrations need none of them.
 
@@ -39,8 +44,8 @@ Organization policy and marketplace allowlists override these instructions. ADW 
 After install, invoke `adw:doctor`. Its diagnostic pass writes nothing and starts no authentication. It reports:
 
 - that both provider manifests agree on the namespace `adw` and the plugin version;
-- that the project root is a Git repository and `adw.yaml` matches the `adw: 1` contract;
-- that component paths are unambiguous;
+- that the project root is a Git repository and any present `adw.yaml` matches the `adw: 1` policy contract;
+- that explicit component overrides are unambiguous;
 - that the `managed-development` permission files are present and byte-current for both providers;
 - that the configured isolation mode is actually the active runtime, and — for `managed-devcontainer` — that every generated file still matches the digests in `.devcontainer/adw-managed.json`;
 - that `worktrees/` is ignored;
