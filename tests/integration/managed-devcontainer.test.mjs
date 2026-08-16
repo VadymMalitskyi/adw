@@ -1,66 +1,65 @@
+// The managed devcontainer is the strongest isolation ADW offers, so its
+// rendering is asserted directly against `managedDevelopmentFiles`: what a
+// project actually receives on disk, not what the template happens to contain.
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { managedDevelopmentFiles } from "../../plugin/initialization/development-environment.mjs";
+import { MANAGED_FILES, managedDevelopmentFiles } from "../../plugin/lib/managed-environment.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const templateRoot = join(repositoryRoot, "plugin/templates/devcontainer");
-const initScript = join(repositoryRoot, "plugin/initialization/init.mjs");
-const doctorScript = join(repositoryRoot, "plugin/skills/doctor/scripts/snapshot.mjs");
 
-function git(root, ...args) {
-  return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+// Every recorded digest names exactly one generated file; the marker must not
+// grow a digest that nothing proves.
+const DIGESTED_FILES = {
+  allowed_domains_sha256: "allowed-domains.txt",
+  codex_rules_sha256: "codex.rules",
+  git_wrapper_sha256: "git-wrapper.sh",
+  claude_settings_sha256: "claude-settings.json",
+  claude_hook_sha256: "claude-permission-hook.mjs",
+  egress_proxy_sha256: "egress-proxy.mjs",
+  project_requirements_sha256: "project-requirements.json",
+  project_setup_sha256: "project-setup.sh",
+};
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
 }
 
-test("managed template pins agents, runs non-root, scopes credentials, and denies broad host access", () => {
-  const configText = readFileSync(join(templateRoot, "devcontainer.json"), "utf8");
-  const config = JSON.parse(configText);
-  const dockerfile = readFileSync(join(templateRoot, "Dockerfile"), "utf8");
-  const marker = JSON.parse(readFileSync(join(templateRoot, "adw-managed.json"), "utf8"));
+function render(options = {}) {
+  const root = mkdtempSync(join(tmpdir(), "adw-managed-"));
+  const generated = managedDevelopmentFiles(root, templateRoot, options);
+  const files = generated.files;
+  return {
+    root,
+    files,
+    config: JSON.parse(files.get("devcontainer.json")),
+    configText: files.get("devcontainer.json"),
+    dockerfile: files.get("Dockerfile"),
+    marker: JSON.parse(files.get("adw-managed.json")),
+    claudeSettings: JSON.parse(files.get("claude-settings.json")),
+    allowedDomains: new Set(files.get("allowed-domains.txt").split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith("#"))),
+  };
+}
+
+test("the generated managed container pins agents, runs non-root, and drops every capability it does not need", () => {
+  const { config, configText, dockerfile, marker } = render();
 
   assert.equal(config.remoteUser, "vscode");
-  assert.equal(config.containerEnv.ADW_MANAGED_DEVCONTAINER, "1");
-  assert.equal(config.build.args.ADW_AGENT_TOOLS, "both");
-  assert.equal(marker.agent_tools, "both");
-  assert.equal(marker.schema, 2);
-  assert.equal(marker.permission_profile, "managed-development");
+  assert.match(dockerfile, /USER vscode/);
+  assert.match(dockerfile, /gpasswd -d vscode sudo/);
+
   assert.match(config.build.args.CODEX_VERSION, /^\d+\.\d+\.\d+$/);
   assert.match(config.build.args.CLAUDE_CODE_VERSION, /^\d+\.\d+\.\d+$/);
   assert.equal(marker.codex_version, config.build.args.CODEX_VERSION);
   assert.equal(marker.claude_code_version, config.build.args.CLAUDE_CODE_VERSION);
-  for (const key of ["allowed_domains_sha256", "codex_rules_sha256", "git_wrapper_sha256", "claude_settings_sha256", "claude_hook_sha256", "egress_proxy_sha256", "project_requirements_sha256", "project_setup_sha256"]) {
-    assert.equal(marker[key], undefined, `template must not carry stale generated digest ${key}`);
-  }
-  assert.match(dockerfile, /@openai\/codex@\$\{CODEX_VERSION\}/);
-  assert.match(dockerfile, /@anthropic-ai\/claude-code@\$\{CLAUDE_CODE_VERSION\}/);
   assert.match(dockerfile, /npm install -g "@openai\/codex@\$\{CODEX_VERSION\}" "@anthropic-ai\/claude-code@\$\{CLAUDE_CODE_VERSION\}"/);
-  assert.match(dockerfile, /> \/etc\/adw\/agent-tools/);
-  assert.match(dockerfile, /chmod 0444 \/etc\/adw\/agent-tools/);
-  assert.match(dockerfile, /chmod 0751 \/home\/vscode/);
-  assert.match(dockerfile, /install -d -m 0755 -o root -g root \/home\/vscode\/\.codex \/home\/vscode\/\.claude \/home\/vscode\/\.config \/home\/vscode\/\.config\/gh/);
-  assert.match(dockerfile, /chmod 0555 \/usr\/local\/bin\/adw-claude-permission-hook/);
-  assert.match(dockerfile, /COPY \.devcontainer\/git-wrapper\.sh \/usr\/local\/bin\/git/);
-  assert.match(dockerfile, /chmod 0555 \/usr\/local\/bin\/git/);
-  assert.doesNotMatch(dockerfile, /chmod 0500 [^\n]*adw-claude-permission-hook/);
-  const postCreate = readFileSync(join(templateRoot, "post-create.sh"), "utf8");
-  assert.match(postCreate, /agent_commands=\(codex claude\)/);
-  assert.match(postCreate, /command -v "\$command"/);
-  assert.ok(postCreate.indexOf("adw-managed-development.rules") < postCreate.indexOf('for path in "${credential_paths[@]}"'));
-  assert.doesNotMatch(postCreate, /\/usr\/local\/bin\/(codex|claude)/);
-  assert.match(dockerfile, /USER vscode/);
-  assert.match(dockerfile, /gpasswd -d vscode sudo/);
-  assert.ok(config.mounts.every((mount) => /type=volume/.test(mount)));
-  assert.doesNotMatch(configText, /docker\.sock|\.ssh|\.aws|\.azure|\.config\/gcloud|localEnv:HOME/i);
-  assert.match(config.postStartCommand, /adw-init-firewall/);
-  assert.ok(config.postCreateCommand.indexOf("adw-init-firewall") < config.postCreateCommand.indexOf("adw-project-setup"));
-  assert.equal(config.runArgs.includes("--privileged"), false);
-  assert.equal(config.runArgs.includes("--network=host"), false);
-  assert.equal(config.runArgs.includes("--pid=host"), false);
+
   assert.equal(config.runArgs.includes("--cap-drop=ALL"), true);
   assert.deepEqual(config.runArgs.filter((argument) => argument.startsWith("--cap-add=")).sort(), [
     "--cap-add=CHOWN",
@@ -69,12 +68,175 @@ test("managed template pins agents, runs non-root, scopes credentials, and denie
     "--cap-add=SETGID",
     "--cap-add=SETUID",
   ]);
-  assert.equal(config.containerEnv.HTTPS_PROXY, "http://127.0.0.1:18080");
+  for (const argument of ["--privileged", "--network=host", "--pid=host"]) {
+    assert.equal(config.runArgs.includes(argument), false, `${argument} must never be requested`);
+  }
   assert.doesNotMatch(configText, /SYS_ADMIN|SYS_PTRACE|NET_RAW|seccomp=unconfined|apparmor=unconfined/);
   assert.doesNotMatch(dockerfile, /chmod u\+s \/usr\/bin\/bwrap/);
+  assert.match(dockerfile, /bubblewrap/);
+  assert.match(dockerfile, /chmod 0555 \/usr\/local\/bin\/adw-project-setup/);
+  assert.match(dockerfile, /chmod 0555 \/usr\/local\/bin\/adw-claude-permission-hook/);
+  assert.match(dockerfile, /COPY \.devcontainer\/git-wrapper\.sh \/usr\/local\/bin\/git/);
+  assert.match(dockerfile, /COPY \.devcontainer\/codex\.rules/);
+  assert.match(dockerfile, /managed-settings\.d\/20-adw\.json/);
 });
 
-test("managed git wrapper permits ordinary Git and blocks unsafe auto-approved pushes", () => {
+test("agent credentials live in project-scoped named volumes and no host path is mounted", () => {
+  const { config, configText } = render();
+
+  assert.ok(config.mounts.length > 0);
+  assert.ok(config.mounts.every((mount) => /type=volume/.test(mount)), "every credential mount must be a named volume");
+  assert.ok(config.mounts.every((mount) => /\$\{devcontainerId\}/.test(mount)), "credential volumes must be scoped to this container");
+  assert.doesNotMatch(configText, /docker\.sock/i);
+  assert.doesNotMatch(configText, /localEnv:HOME/i);
+  assert.doesNotMatch(configText, /\.ssh|\.aws|\.azure|\.config\/gcloud/i);
+  assert.match(config.workspaceMount, /target=\/workspace,type=bind/);
+});
+
+test("the proxy environment is set and the firewall runs before any project setup", () => {
+  const { config } = render();
+
+  assert.equal(config.containerEnv.ADW_MANAGED_DEVCONTAINER, "1");
+  assert.equal(config.containerEnv.HTTP_PROXY, "http://127.0.0.1:18080");
+  assert.equal(config.containerEnv.HTTPS_PROXY, "http://127.0.0.1:18080");
+  assert.equal(config.containerEnv.NO_PROXY, "localhost,127.0.0.1");
+  assert.match(config.postStartCommand, /adw-init-firewall/);
+  assert.ok(config.postCreateCommand.indexOf("adw-init-firewall") !== -1);
+  assert.ok(config.postCreateCommand.indexOf("adw-init-firewall") < config.postCreateCommand.indexOf("adw-project-setup"));
+});
+
+test("the generated file set is exactly MANAGED_FILES and every recorded digest matches its own bytes", () => {
+  const { files, marker } = render();
+
+  assert.deepEqual([...files.keys()].sort(), [...MANAGED_FILES].sort());
+  assert.equal(MANAGED_FILES.length, 13);
+  assert.equal(files.has("project-requirements.md"), false, "project-requirements.md is no longer generated");
+
+  const digestKeys = Object.keys(marker).filter((key) => key.endsWith("_sha256")).sort();
+  assert.deepEqual(digestKeys, Object.keys(DIGESTED_FILES).sort(), "every marker digest must name a generated file");
+  for (const [key, name] of Object.entries(DIGESTED_FILES)) {
+    assert.equal(marker[key], sha256(files.get(name)), `${key} must be the digest of ${name}`);
+  }
+
+  assert.equal(marker.schema, 3);
+  assert.equal(marker.profile, "managed-devcontainer");
+  assert.equal(marker.permission_profile, "managed-development");
+  assert.equal(marker.requirements_schema, JSON.parse(files.get("project-requirements.json")).schema);
+  assert.equal(Object.hasOwn(marker, "agent_tools"), false, "the per-agent profile no longer exists");
+});
+
+test("a managed container always provisions both agents", () => {
+  const { config, allowedDomains, claudeSettings } = render();
+
+  for (const target of ["/home/vscode/.codex", "/home/vscode/.claude"]) {
+    assert.equal(config.mounts.some((mount) => mount.includes(`target=${target},`)), true, `${target} must be mounted`);
+  }
+  for (const extension of ["openai.chatgpt", "anthropic.claude-code"]) {
+    assert.equal(config.customizations.vscode.extensions.includes(extension), true, `${extension} must be installed`);
+  }
+  for (const domain of ["api.openai.com", "auth.openai.com", "chatgpt.com", "api.anthropic.com", "claude.ai", "console.anthropic.com"]) {
+    assert.equal(allowedDomains.has(domain), true, `${domain} must be reachable`);
+  }
+  assert.equal(config.containerEnv.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, "1");
+  assert.equal(config.containerEnv.DISABLE_AUTOUPDATER, "1");
+  assert.equal(config.build.args.ADW_AGENT_TOOLS, "both");
+
+  assert.deepEqual(new Set(claudeSettings.sandbox.network.allowedDomains), allowedDomains);
+  assert.equal(claudeSettings.sandbox.network.strictAllowlist, true);
+  assert.equal(claudeSettings.sandbox.autoAllowBashIfSandboxed, true);
+  assert.deepEqual(claudeSettings.permissions.allow, ["WebSearch"]);
+  assert.equal(claudeSettings.hooks.PreToolUse.length, 2);
+});
+
+test("web access is reflected consistently in the build arg, the marker, and the managed Claude settings", async (t) => {
+  await t.test("public-pages", () => {
+    const { config, marker, claudeSettings } = render({ webAccess: "public-pages" });
+    assert.equal(config.build.args.ADW_WEB_ACCESS, "public-pages");
+    assert.equal(marker.web_access, "public-pages");
+    assert.equal(claudeSettings.sandbox.network.strictAllowlist, true);
+    assert.equal(claudeSettings.sandbox.network.allowManagedDomainsOnly, undefined);
+  });
+
+  await t.test("hosted-only", () => {
+    const { config, marker, claudeSettings } = render({ webAccess: "hosted-only" });
+    assert.equal(config.build.args.ADW_WEB_ACCESS, "hosted-only");
+    assert.equal(marker.web_access, "hosted-only");
+    assert.equal(claudeSettings.sandbox.network.strictAllowlist, true);
+    assert.equal(claudeSettings.sandbox.network.allowManagedDomainsOnly, true);
+  });
+
+  const root = mkdtempSync(join(tmpdir(), "adw-managed-web-"));
+  assert.throws(() => managedDevelopmentFiles(root, templateRoot, { webAccess: "unrestricted" }), /unsupported web access profile/);
+});
+
+test("integration domains are validated, deduplicated, and recorded in both the allowlist and the marker", () => {
+  const { files, marker, allowedDomains } = render({ integrationDomains: ["tracker.example.com", "tracker.example.com"] });
+
+  assert.deepEqual(marker.integration_domains, ["tracker.example.com"]);
+  assert.equal(allowedDomains.has("tracker.example.com"), true);
+  const text = files.get("allowed-domains.txt");
+  assert.equal(text.split(/\r?\n/).filter((line) => line.trim() === "tracker.example.com").length, 1);
+  assert.doesNotMatch(text, /\*|https?:\/\//);
+
+  const root = mkdtempSync(join(tmpdir(), "adw-managed-domains-"));
+  assert.throws(() => managedDevelopmentFiles(root, templateRoot, { integrationDomains: "tracker.example.com" }), /must be an array/);
+  assert.throws(() => managedDevelopmentFiles(root, templateRoot, { integrationDomains: ["https://tracker.example.com/path"] }), /invalid integration domain/);
+  assert.throws(() => managedDevelopmentFiles(root, templateRoot, { integrationDomains: ["tracker.example.com\nmalicious.example.com"] }), /invalid integration domain/);
+  assert.throws(() => managedDevelopmentFiles(root, templateRoot, { integrationDomains: ["*.example.com"] }), /invalid integration domain/);
+});
+
+test("the generated project setup script is valid shell and never copies repository prose into a command", () => {
+  const root = mkdtempSync(join(tmpdir(), "adw-managed-setup-"));
+  writeFileSync(join(root, "package.json"), `${JSON.stringify({
+    private: true,
+    engines: { node: ">=20" },
+    scripts: { dev: "malicious-repository-text-must-not-be-copied --port 4173" },
+  }, null, 2)}\n`);
+  writeFileSync(join(root, "package-lock.json"), `${JSON.stringify({ name: "fixture", lockfileVersion: 3, packages: {} }, null, 2)}\n`);
+
+  const setup = managedDevelopmentFiles(root, templateRoot, {}).files.get("project-setup.sh");
+  const scriptPath = join(root, "generated-project-setup.sh");
+  writeFileSync(scriptPath, setup);
+  const parsed = spawnSync("bash", ["-n", scriptPath], { encoding: "utf8" });
+  assert.equal(parsed.status, 0, parsed.stderr);
+  assert.match(setup, /^npm ci$/m);
+  assert.doesNotMatch(setup, /malicious-repository-text-must-not-be-copied/);
+});
+
+test("managed firewall scripts are valid shell and establish deny-by-default before DNS resolution", () => {
+  for (const name of ["init-firewall.sh", "post-create.sh"]) {
+    const result = spawnSync("bash", ["-n", join(templateRoot, name)], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+  }
+  const firewall = readFileSync(join(templateRoot, "init-firewall.sh"), "utf8");
+  assert.ok(firewall.indexOf("iptables -P OUTPUT DROP") < firewall.lastIndexOf("resolve_domains\n"));
+  assert.match(firewall, /ip6tables -P OUTPUT DROP/);
+  assert.match(firewall, /awk '\$1 == "nameserver"/);
+  assert.match(firewall, /dig \+short \+time="\$dns_timeout" \+tries=1 @"\$resolver"/);
+  assert.match(firewall, /--uid-owner "\$uid" -p udp -d "\$resolver" --dport 53 -j ACCEPT/);
+  assert.match(firewall, /--uid-owner "\$uid" -p tcp -d "\$resolver" --dport 53 -j ACCEPT/);
+  assert.match(firewall, /--uid-owner "\$proxy_uid" -p tcp --dport 443 -j "\$dispatcher_chain"/);
+  assert.match(firewall, /public-pages\) web_fetch_enabled=1/);
+  assert.match(firewall, /iptables -I "\$dispatcher_chain" 1 -j "\$next_chain"/);
+  assert.match(firewall, /--chuid "\$proxy_user" --exec \/usr\/local\/bin\/adw-egress-proxy/);
+  assert.match(firewall, /failed to resolve required domain after \$\{dns_attempts\} attempts/);
+  assert.doesNotMatch(firewall, /^iptables -A OUTPUT -p (?:udp|tcp) --dport 53 -j ACCEPT$/m);
+  assert.doesNotMatch(firewall, /iptables -P OUTPUT ACCEPT/);
+  assert.doesNotMatch(firewall, /\bipset\b/);
+
+  // The post-create step verifies both pinned agents before it touches credentials.
+  const postCreate = readFileSync(join(templateRoot, "post-create.sh"), "utf8");
+  assert.match(postCreate, /agent_commands=\(codex claude\)/);
+  assert.match(postCreate, /command -v "\$command"/);
+  assert.doesNotMatch(postCreate, /\/usr\/local\/bin\/(codex|claude)/);
+});
+
+test("managed shell templates pass shellcheck when it is available", { skip: spawnSync("shellcheck", ["--version"], { encoding: "utf8" }).status === 0 ? false : "shellcheck is not installed" }, () => {
+  const result = spawnSync("shellcheck", ["--severity=warning", join(templateRoot, "init-firewall.sh"), join(templateRoot, "post-create.sh")], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stdout || result.stderr);
+});
+
+test("the managed git wrapper permits ordinary Git and blocks unsafe auto-approved pushes", () => {
   const wrapper = join(templateRoot, "git-wrapper.sh");
   const version = spawnSync("bash", [wrapper, "--version"], { encoding: "utf8" });
   assert.equal(version.status, 0, version.stderr);
@@ -91,263 +253,4 @@ test("managed git wrapper permits ordinary Git and blocks unsafe auto-approved p
     assert.equal(result.status, 64, `${args.join(" ")}: ${result.stderr}`);
     assert.match(result.stderr, /ADW blocks/);
   }
-});
-
-test("managed development files always include both agent tools, credentials, extensions, environment, and domains", async (t) => {
-  const cases = [
-    { profile: "codex" },
-    { profile: "claude" },
-    { profile: "both" },
-  ];
-  const domainsByAgent = {
-    codex: ["api.openai.com", "auth.openai.com", "chatgpt.com"],
-    claude: ["api.anthropic.com", "claude.ai", "console.anthropic.com"],
-  };
-  const extensionByAgent = { codex: "openai.chatgpt", claude: "anthropic.claude-code" };
-  const mountByAgent = { codex: "/home/vscode/.codex", claude: "/home/vscode/.claude" };
-
-  for (const { profile, agents } of cases) {
-    await t.test(profile, () => {
-      const root = mkdtempSync(join(tmpdir(), `adw-agent-${profile}-`));
-      const generated = managedDevelopmentFiles(root, templateRoot, {
-        agentTools: profile,
-        integrationDomains: ["tracker.example.com", "TRACKER.EXAMPLE.COM"],
-      });
-      const config = JSON.parse(generated.files.get("devcontainer.json"));
-      const marker = JSON.parse(generated.files.get("adw-managed.json"));
-      const allowedDomains = new Set(generated.files.get("allowed-domains.txt")
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line && !line.startsWith("#")));
-      const claudeSettings = JSON.parse(generated.files.get("claude-settings.json"));
-      const claudeSandbox = claudeSettings.sandbox;
-      assert.deepEqual(new Set(claudeSandbox.network.allowedDomains), allowedDomains);
-      assert.equal(claudeSandbox.network.allowManagedDomainsOnly, undefined);
-      assert.equal(claudeSandbox.network.strictAllowlist, true);
-      assert.equal(claudeSandbox.autoAllowBashIfSandboxed, true);
-      assert.deepEqual(claudeSettings.permissions.allow, ["WebSearch"]);
-      assert.equal(claudeSettings.hooks.PreToolUse.length, 2);
-
-      assert.equal(config.build.args.ADW_AGENT_TOOLS, "both");
-      assert.equal(config.build.args.ADW_WEB_ACCESS, "public-pages");
-      assert.equal(marker.agent_tools, "both");
-      assert.equal(marker.web_access, "public-pages");
-      assert.equal(marker.project_requirements_sha256, createHash("sha256").update(generated.files.get("project-requirements.json")).digest("hex"));
-      assert.equal(marker.project_setup_sha256, createHash("sha256").update(generated.files.get("project-setup.sh")).digest("hex"));
-      assert.equal(marker.allowed_domains_sha256, createHash("sha256").update(generated.files.get("allowed-domains.txt")).digest("hex"));
-      assert.equal(marker.egress_proxy_sha256, createHash("sha256").update(generated.files.get("egress-proxy.mjs")).digest("hex"));
-      assert.equal(marker.git_wrapper_sha256, createHash("sha256").update(generated.files.get("git-wrapper.sh")).digest("hex"));
-      assert.deepEqual(marker.integration_domains, ["tracker.example.com"]);
-      assert.ok(allowedDomains.has("tracker.example.com"));
-      assert.equal([...allowedDomains].filter((domain) => domain === "tracker.example.com").length, 1);
-
-      for (const agent of ["codex", "claude"]) {
-        assert.equal(config.mounts.some((mount) => mount.includes(`target=${mountByAgent[agent]},`)), true);
-        assert.equal(config.customizations.vscode.extensions.includes(extensionByAgent[agent]), true);
-        for (const domain of domainsByAgent[agent]) assert.equal(allowedDomains.has(domain), true);
-      }
-      assert.equal(config.containerEnv.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, "1");
-      assert.equal(config.containerEnv.DISABLE_AUTOUPDATER, "1");
-      assert.doesNotMatch(generated.files.get("allowed-domains.txt"), /\*|https?:\/\//);
-    });
-  }
-});
-
-test("managed development files reject invalid agent profiles and integration domains", () => {
-  const root = mkdtempSync(join(tmpdir(), "adw-agent-invalid-"));
-  assert.throws(() => managedDevelopmentFiles(root, templateRoot, { agentTools: "other" }), /unsupported agent tools profile/);
-  assert.throws(() => managedDevelopmentFiles(root, templateRoot, { webAccess: "unrestricted" }), /unsupported web access profile/);
-  assert.throws(() => managedDevelopmentFiles(root, templateRoot, { integrationDomains: "tracker.example.com" }), /must be an array/);
-  assert.throws(() => managedDevelopmentFiles(root, templateRoot, { integrationDomains: ["https://tracker.example.com/path"] }), /invalid integration domain/);
-  assert.throws(() => managedDevelopmentFiles(root, templateRoot, { integrationDomains: ["tracker.example.com\nmalicious.example.com"] }), /invalid integration domain/);
-});
-
-test("public page access is explicit in every managed policy surface", () => {
-  const root = mkdtempSync(join(tmpdir(), "adw-public-pages-"));
-  const generated = managedDevelopmentFiles(root, templateRoot, { agentTools: "both", webAccess: "public-pages" });
-  const config = JSON.parse(generated.files.get("devcontainer.json"));
-  const marker = JSON.parse(generated.files.get("adw-managed.json"));
-  const claudeSettings = JSON.parse(generated.files.get("claude-settings.json"));
-  assert.equal(config.build.args.ADW_WEB_ACCESS, "public-pages");
-  assert.equal(marker.web_access, "public-pages");
-  assert.equal(claudeSettings.sandbox.network.allowManagedDomainsOnly, undefined);
-  assert.equal(claudeSettings.sandbox.network.strictAllowlist, true);
-});
-
-test("managed firewall scripts are valid shell and establish deny-by-default before DNS resolution", () => {
-  for (const name of ["init-firewall.sh", "post-create.sh"]) {
-    const result = spawnSync("bash", ["-n", join(templateRoot, name)], { encoding: "utf8" });
-    assert.equal(result.status, 0, result.stderr);
-  }
-  const firewall = readFileSync(join(templateRoot, "init-firewall.sh"), "utf8");
-  assert.ok(firewall.indexOf("iptables -P OUTPUT DROP") < firewall.lastIndexOf("resolve_domains\n"));
-  assert.match(firewall, /ip6tables -P OUTPUT DROP/);
-  assert.match(firewall, /expected Codex and Claude Code/);
-  assert.match(firewall, /verification_domain="api\.openai\.com"/);
-  assert.match(firewall, /public-pages\) web_fetch_enabled=1/);
-  assert.match(firewall, /awk '\$1 == "nameserver"/);
-  assert.match(firewall, /dig \+short \+time="\$dns_timeout" \+tries=1 @"\$resolver"/);
-  assert.match(firewall, /--uid-owner "\$uid" -p udp -d "\$resolver" --dport 53 -j ACCEPT/);
-  assert.match(firewall, /--uid-owner "\$uid" -p tcp -d "\$resolver" --dport 53 -j ACCEPT/);
-  assert.match(firewall, /--uid-owner "\$proxy_uid" -p tcp --dport 443 -j "\$dispatcher_chain"/);
-  assert.match(firewall, /if \[ "\$web_fetch_enabled" -eq 1 \]; then\n    iptables -A "\$next_chain" -p tcp --dport 443 -j ACCEPT/);
-  assert.match(firewall, /iptables -I "\$dispatcher_chain" 1 -j "\$next_chain"/);
-  assert.doesNotMatch(firewall, /\bipset\b/);
-  assert.match(firewall, /--chuid "\$proxy_user" --exec \/usr\/local\/bin\/adw-egress-proxy/);
-  assert.doesNotMatch(firewall, /^iptables -A OUTPUT -p (?:udp|tcp) --dport 53 -j ACCEPT$/m);
-  assert.match(firewall, /failed to resolve required domain after \$\{dns_attempts\} attempts/);
-  assert.match(firewall, /adw-firewall-refresh\.log/);
-  assert.doesNotMatch(firewall, /iptables -P OUTPUT ACCEPT/);
-});
-
-test("managed shell templates pass shellcheck when it is available", { skip: spawnSync("shellcheck", ["--version"], { encoding: "utf8" }).status === 0 ? false : "shellcheck is not installed" }, () => {
-  const result = spawnSync("shellcheck", ["--severity=warning", join(templateRoot, "init-firewall.sh"), join(templateRoot, "post-create.sh")], { encoding: "utf8" });
-  assert.equal(result.status, 0, result.stdout || result.stderr);
-});
-
-test("init derives a reviewable project-specific development environment from repository evidence", () => {
-  const root = mkdtempSync(join(tmpdir(), "adw-managed-discovery-"));
-  mkdirSync(join(root, "services/api"), { recursive: true });
-  mkdirSync(join(root, "services/dotnet"), { recursive: true });
-  mkdirSync(join(root, "services/worker"), { recursive: true });
-  git(root, "init", "-q", "-b", "main");
-  git(root, "config", "user.name", "ADW Test");
-  git(root, "config", "user.email", "adw@example.invalid");
-  writeFileSync(join(root, "package.json"), `${JSON.stringify({
-    private: true,
-    engines: { node: ">=20" },
-    scripts: { dev: "malicious-repository-text-must-not-be-copied --port 4173" },
-  }, null, 2)}\n`);
-  writeFileSync(join(root, "package-lock.json"), `${JSON.stringify({ name: "fixture", lockfileVersion: 3, packages: {} }, null, 2)}\n`);
-  writeFileSync(join(root, ".nvmrc"), "20.11.1\n");
-  writeFileSync(join(root, ".env.example"), "APP_PORT=3000\nDATABASE_URL=\n");
-  writeFileSync(join(root, "compose.yaml"), "services:\n  postgres:\n    image: postgres:17\n    ports:\n      - \"55432:5432\"\n");
-  writeFileSync(join(root, "services/api/pyproject.toml"), "[project]\nname = \"api\"\nversion = \"0.0.0\"\nrequires-python = \">=3.11\"\n");
-  writeFileSync(join(root, "services/api/requirements.txt"), "psycopg2==2.9.10\n");
-  writeFileSync(join(root, "services/worker/go.mod"), "module example.invalid/worker\n\ngo 1.22.4\n");
-  writeFileSync(join(root, "services/dotnet/global.json"), `${JSON.stringify({ sdk: { version: "8.0.408" } }, null, 2)}\n`);
-  writeFileSync(join(root, "services/dotnet/App.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup><ItemGroup><PackageReference Include=\"DuckDB.NET.Data.Full\" Version=\"1.5.0\" /></ItemGroup></Project>\n");
-  writeFileSync(join(root, "services/dotnet/packages.lock.json"), `${JSON.stringify({ version: 1, dependencies: { "net8.0": {} } }, null, 2)}\n`);
-  git(root, "add", ".");
-  git(root, "commit", "-q", "-m", "fixture");
-
-  const previewResult = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "preview", "--execution", "managed-devcontainer", "--project-root", root], { encoding: "utf8" });
-  assert.equal(previewResult.status, 0, previewResult.stderr);
-  const preview = JSON.parse(previewResult.stdout);
-  assert.deepEqual(preview.development_environment.selected_versions, { dotnet: "8.0.408", go: "1.22.4", node: "20", python: "3.11" });
-  assert.deepEqual(preview.development_environment.forward_ports.map(({ port }) => port), [3000, 4173, 55432]);
-  assert.ok(preview.development_environment.setup_commands.some(({ command, source }) => command === "npm ci" && source === "package-lock.json"));
-  assert.ok(preview.development_environment.setup_commands.some(({ command }) => command.includes("services/api") && command.includes("requirements.txt")));
-  assert.ok(preview.development_environment.setup_commands.some(({ command }) => command.includes("services/worker") && command.includes("go mod download")));
-  assert.ok(preview.development_environment.setup_commands.some(({ command, source }) => command.includes("services/dotnet") && command.includes("dotnet restore --locked-mode") && source === "services/dotnet/packages.lock.json"));
-  assert.ok(preview.development_environment.system_packages.some(({ name }) => name === "libpq-dev"));
-  assert.ok(preview.development_environment.unresolved.some(({ requirement }) => requirement === "compose services"));
-  assert.ok(preview.development_environment.unresolved.some(({ requirement }) => requirement === "environment variable DATABASE_URL"));
-  assert.ok(preview.docs.generated_files.includes("components/services-dotnet.md"));
-
-  const initialized = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--execution", "managed-devcontainer", "--project-root", root], { encoding: "utf8" });
-  assert.equal(initialized.status, 0, initialized.stderr);
-  const config = JSON.parse(readFileSync(join(root, ".devcontainer/devcontainer.json"), "utf8"));
-  assert.equal(config.build.args.NODE_MAJOR, "20");
-  assert.match(config.build.args.ADW_PROJECT_APT_PACKAGES, /\blibpq-dev\b/);
-  assert.equal(config.features["ghcr.io/devcontainers/features/python:1"].version, "3.11");
-  assert.equal(config.features["ghcr.io/devcontainers/features/go:1"].version, "1.22.4");
-  assert.equal(config.features["ghcr.io/devcontainers/features/dotnet:1"].version, "8.0.408");
-  assert.deepEqual(config.forwardPorts, [3000, 4173, 55432]);
-  assert.match(config.postCreateCommand, /adw-project-setup/);
-
-  const setup = readFileSync(join(root, ".devcontainer/project-setup.sh"), "utf8");
-  assert.match(setup, /^npm ci$/m);
-  assert.match(setup, /go mod download/);
-  assert.match(setup, /dotnet restore --locked-mode/);
-  assert.doesNotMatch(setup, /malicious-repository-text-must-not-be-copied/);
-  const requirementsGuide = readFileSync(join(root, ".devcontainer/project-requirements.md"), "utf8");
-  assert.match(requirementsGuide, /DuckDB\.NET\.Data\.Full` 1\.5\.0/);
-  assert.match(requirementsGuide, /restored by `dotnet restore`/);
-  const architecture = readFileSync(join(root, "worktrees/docs/architecture.md"), "utf8");
-  const dotnetComponent = readFileSync(join(root, "worktrees/docs/components/services-dotnet.md"), "utf8");
-  assert.match(architecture, /services\/dotnet/);
-  assert.match(dotnetComponent, /Embedded DuckDB persistence/);
-  assert.match(dotnetComponent, /DuckDB\.NET\.Data\.Full/);
-  const shellCheck = spawnSync("bash", ["-n", join(root, ".devcontainer/project-setup.sh")], { encoding: "utf8" });
-  assert.equal(shellCheck.status, 0, shellCheck.stderr);
-  const allowedDomains = readFileSync(join(root, ".devcontainer/allowed-domains.txt"), "utf8");
-  assert.match(allowedDomains, /^proxy\.golang\.org$/m);
-  assert.match(allowedDomains, /^api\.nuget\.org$/m);
-  assert.match(allowedDomains, /^globalcdn\.nuget\.org$/m);
-
-  const doctor = spawnSync(process.execPath, [doctorScript, "--project-root", root], {
-    encoding: "utf8",
-    env: { ...process.env, ADW_MANAGED_DEVCONTAINER: "1" },
-  });
-  assert.equal(doctor.status, 0, doctor.stderr || doctor.stdout);
-});
-
-test("doctor blocks a required managed profile outside its runtime and passes its runtime evidence inside", () => {
-  const root = mkdtempSync(join(tmpdir(), "adw-managed-doctor-"));
-  git(root, "init", "-q", "-b", "main");
-  git(root, "config", "user.name", "ADW Test");
-  git(root, "config", "user.email", "adw@example.invalid");
-  writeFileSync(join(root, "README.md"), "# fixture\n");
-  git(root, "add", ".");
-  git(root, "commit", "-q", "-m", "fixture");
-  const previewResult = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "preview", "--execution", "managed-devcontainer", "--project-root", root], { encoding: "utf8" });
-  assert.equal(previewResult.status, 0, previewResult.stderr);
-  const preview = JSON.parse(previewResult.stdout);
-  const initialized = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--execution", "managed-devcontainer", "--project-root", root], { encoding: "utf8" });
-  assert.equal(initialized.status, 0, initialized.stderr);
-
-  const outside = spawnSync(process.execPath, [doctorScript, "--project-root", root], { encoding: "utf8" });
-  assert.equal(outside.status, 1, outside.stderr || outside.stdout);
-  assert.equal(JSON.parse(outside.stdout).checks.find(({ id }) => id === "execution:runtime").status, "fail");
-
-  const inside = spawnSync(process.execPath, [doctorScript, "--project-root", root], {
-    encoding: "utf8",
-    env: { ...process.env, ADW_MANAGED_DEVCONTAINER: "1" },
-  });
-  assert.equal(inside.status, 0, inside.stderr || inside.stdout);
-  assert.equal(JSON.parse(inside.stdout).checks.find(({ id }) => id === "execution:runtime").status, "pass");
-
-  const setupPath = join(root, ".devcontainer/project-setup.sh");
-  writeFileSync(setupPath, `${readFileSync(setupPath, "utf8")}\n# unreviewed drift\n`);
-  const drifted = spawnSync(process.execPath, [doctorScript, "--project-root", root], {
-    encoding: "utf8",
-    env: { ...process.env, ADW_MANAGED_DEVCONTAINER: "1" },
-  });
-  assert.equal(drifted.status, 1, drifted.stderr || drifted.stdout);
-  const driftedChecks = JSON.parse(drifted.stdout).checks;
-  assert.equal(driftedChecks.find(({ id }) => id === "execution:generated-files").status, "fail");
-  assert.equal(driftedChecks.find(({ id }) => id === "execution:managed-files").status, "pass");
-  assert.equal(driftedChecks.find(({ id }) => id === "execution:hardening").status, "pass");
-});
-
-test("initialization always creates both provider routes and passes doctor", () => {
-  const root = mkdtempSync(join(tmpdir(), "adw-managed-doctor-"));
-  git(root, "init", "-q", "-b", "main");
-  git(root, "config", "user.name", "ADW Test");
-  git(root, "config", "user.email", "adw@example.invalid");
-  writeFileSync(join(root, "README.md"), "# fixture\n");
-  git(root, "add", ".");
-  git(root, "commit", "-q", "-m", "fixture");
-  const onboardingPath = join(root, "onboarding.json");
-  writeFileSync(onboardingPath, `${JSON.stringify({
-    schema: 1,
-    execution: { isolation: "managed-devcontainer" },
-  }, null, 2)}\n`);
-  const previewResult = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "preview", "--onboarding", onboardingPath, "--project-root", root], { encoding: "utf8" });
-  assert.equal(previewResult.status, 0, previewResult.stderr || previewResult.stdout);
-  const preview = JSON.parse(previewResult.stdout);
-  const initialized = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "apply", "--confirmed", "--preview-digest", preview.preview_digest, "--onboarding", onboardingPath, "--project-root", root], { encoding: "utf8" });
-  assert.equal(initialized.status, 0, initialized.stderr);
-
-  const doctor = spawnSync(process.execPath, [doctorScript, "--project-root", root], {
-    encoding: "utf8",
-    env: { ...process.env, ADW_MANAGED_DEVCONTAINER: "1" },
-  });
-  assert.equal(doctor.status, 0, doctor.stderr || doctor.stdout);
-  const snapshot = JSON.parse(doctor.stdout);
-  assert.equal(snapshot.checks.find(({ id }) => id === "execution:managed-files").status, "pass");
-  assert.deepEqual(snapshot.checks.filter(({ id }) => id.startsWith("routing:")).map(({ id }) => id), ["routing:AGENTS.md", "routing:CLAUDE.md"]);
-  assert.equal(existsSync(join(root, "AGENTS.md")), true);
-  assert.equal(existsSync(join(root, "CLAUDE.md")), true);
 });
