@@ -15,7 +15,7 @@ import { ContractError } from "./safe-files.mjs";
 import { RUNTIMES, WEB_ACCESS_MODES, isValidDomain } from "./config.mjs";
 
 const MANIFESTS = new Set([
-  "package.json", "pyproject.toml", "requirements.txt", "Pipfile", "Pipfile.lock", "poetry.lock", "uv.lock",
+  "package.json", "pyproject.toml", "requirements.txt", "Pipfile", "Pipfile.lock", "poetry.lock", "uv.lock", "environment.yml", "environment.yaml",
   "go.mod", "Cargo.toml", "Gemfile", "Gemfile.lock", "pom.xml", "build.gradle", "build.gradle.kts",
 ]);
 const DOTNET_PROJECT_EXTENSION = /\.(?:csproj|fsproj|vbproj)$/i;
@@ -34,6 +34,8 @@ const OFFICIAL_FEATURES = {
   dotnet: "ghcr.io/devcontainers/features/dotnet:1",
 };
 
+const CONDA_FEATURE = "ghcr.io/devcontainers/features/conda:2";
+
 const ECOSYSTEM_DOMAINS = {
   node: ["registry.npmjs.org"],
   python: ["pypi.org", "files.pythonhosted.org"],
@@ -43,6 +45,7 @@ const ECOSYSTEM_DOMAINS = {
   ruby: ["rubygems.org", "index.rubygems.org"],
   dotnet: ["api.nuget.org", "globalcdn.nuget.org"],
 };
+const CONDA_DOMAINS = ["repo.anaconda.com", "conda.anaconda.org"];
 
 // Both agents share one skill tree, so a managed container always carries both.
 const AGENT_DOMAINS = [
@@ -63,6 +66,16 @@ function readText(path) {
 function readJson(path, source) {
   try { return JSON.parse(readFileSync(path, "utf8")); }
   catch (error) { throw new ContractError(`cannot inspect ${source}: ${error.message}`); }
+}
+
+function condaEnvironment(projectRoot, path) {
+  const text = readText(path);
+  const match = text?.match(/^\s*-\s*python\s*(?:={1,2}\s*)?([0-9]+(?:\.[0-9]+){0,2})\b/im);
+  return {
+    path,
+    version: match?.[1] ?? null,
+    source: sourcePath(projectRoot, path),
+  };
 }
 
 function sourcePath(projectRoot, path, fragment = "") {
@@ -334,6 +347,7 @@ export function discoverDevelopmentEnvironment(projectRoot, { runtimeVersions = 
   const setupCommands = [];
   const unresolved = [];
   const dependencyFiles = [];
+  const condaEnvironmentFiles = [];
   const roots = componentRoots(projectRoot);
   const rootPackagePath = join(projectRoot, "package.json");
   const rootPackage = existsSync(rootPackagePath) ? readJson(rootPackagePath, "package.json") : null;
@@ -373,9 +387,22 @@ export function discoverDevelopmentEnvironment(projectRoot, { runtimeVersions = 
       else unresolved.push({ requirement: `install Node dependencies in ${component}`, source: sourcePath(projectRoot, packagePath), reason: "no lockfile proves a reproducible install command" });
     }
 
+    const condaPath = ["environment.yml", "environment.yaml"].map((name) => join(componentRoot, name)).find(existsSync);
+    if (condaPath) {
+      const conda = condaEnvironment(projectRoot, condaPath);
+      condaEnvironmentFiles.push(conda.path);
+      dependencyFiles.push(conda.path);
+      if (conda.version) {
+        runtimes.push({ name: "python", version: conda.version, requested: conda.version, source: conda.source, component });
+      } else {
+        unresolved.push({ requirement: `Python runtime in Conda environment for ${component}`, source: conda.source, reason: "environment.yml does not declare a numeric Python version" });
+      }
+      setupCommands.push({ command: inComponent(projectRoot, componentRoot, `conda env create --file ${conda.path.split(sep).pop()}`), source: conda.source });
+    }
+
     const pyprojectPath = join(componentRoot, "pyproject.toml");
     const pythonFiles = ["requirements.txt", "Pipfile", "Pipfile.lock", "poetry.lock", "uv.lock"].map((name) => join(componentRoot, name)).filter(existsSync);
-    if (existsSync(pyprojectPath) || pythonFiles.length > 0) {
+    if (!condaPath && (existsSync(pyprojectPath) || pythonFiles.length > 0)) {
       const versionFile = join(componentRoot, ".python-version");
       const pyproject = readText(pyprojectPath);
       const declared = declaredRuntimeVersion(projectRoot, componentRoot, "python");
@@ -529,9 +556,10 @@ export function discoverDevelopmentEnvironment(projectRoot, { runtimeVersions = 
 
   const features = {};
   for (const [name, version] of selected) {
-    if (name === "node" || (name === "python" && version === "3.12")) continue;
+    if (name === "node" || (name === "python" && (version === "3.12" || condaEnvironmentFiles.length > 0))) continue;
     if (OFFICIAL_FEATURES[name]) features[OFFICIAL_FEATURES[name]] = name === "java" ? { version, installMaven: "true", installGradle: "true" } : { version };
   }
+  if (condaEnvironmentFiles.length > 0) features[CONDA_FEATURE] = { version: "24.11.3" };
 
   return {
     schema: 1,
@@ -540,7 +568,10 @@ export function discoverDevelopmentEnvironment(projectRoot, { runtimeVersions = 
     features,
     system_packages: systemPackages.sort((left, right) => compareText(left.name, right.name) || compareText(left.source, right.source)),
     setup_commands: setupCommands,
-    allowed_domains: [...new Set(runtimes.flatMap(({ name }) => ECOSYSTEM_DOMAINS[name] ?? []))].sort(),
+    allowed_domains: [...new Set([
+      ...runtimes.flatMap(({ name }) => ECOSYSTEM_DOMAINS[name] ?? []),
+      ...(condaEnvironmentFiles.length > 0 ? CONDA_DOMAINS : []),
+    ])].sort(),
     forward_ports: ports.sort((left, right) => left.port - right.port),
     environment_variables: variables,
     unresolved,

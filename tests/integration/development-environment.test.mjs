@@ -125,6 +125,38 @@ test("an explicit adw.yaml choice provisions a source-only language", () => {
   assert.ok(!result.unresolved.some(({ requirement }) => requirement === "python source runtime"));
 });
 
+test("a Conda environment provisions Conda and creates the declared environment", () => {
+  const root = scratch("adw-conda-environment");
+  writeFileSync(join(root, "environment.yml"), [
+    "name: analytics",
+    "channels:",
+    "  - conda-forge",
+    "dependencies:",
+    "  - python=3.12",
+    "  - pandas=2.2",
+  ].join("\n"));
+
+  const result = discoverDevelopmentEnvironment(root);
+  const python = result.runtimes.find((runtime) => runtime.name === "python");
+
+  assert.deepEqual({ version: python.version, source: python.source }, { version: "3.12", source: "environment.yml" });
+  assert.equal(result.features["ghcr.io/devcontainers/features/conda:2"].version, "24.11.3");
+  assert.equal(result.features["ghcr.io/devcontainers/features/python:1"], undefined);
+  assert.ok(result.setup_commands.some(({ command, source }) => command === "conda env create --file environment.yml" && source === "environment.yml"));
+  assert.ok(result.allowed_domains.includes("repo.anaconda.com"));
+  assert.ok(result.allowed_domains.includes("conda.anaconda.org"));
+});
+
+test("an unpinned Conda environment remains an explicit setup blocker", () => {
+  const root = scratch("adw-conda-unpinned");
+  writeFileSync(join(root, "environment.yaml"), "name: analytics\ndependencies:\n  - python\n");
+
+  const result = discoverDevelopmentEnvironment(root);
+
+  assert.ok(result.unresolved.some(({ requirement, source }) => requirement === "Python runtime in Conda environment for ." && source === "environment.yaml"));
+  assert.equal(result.features["ghcr.io/devcontainers/features/conda:2"].version, "24.11.3");
+});
+
 test("a chosen runtime is provisioned even when nothing in the repository mentions it", () => {
   const root = scratch("adw-chosen-only");
   writeFileSync(join(root, "README.md"), "# empty\n");
