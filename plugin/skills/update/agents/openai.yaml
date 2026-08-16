@@ -1,4 +1,4 @@
 interface:
   display_name: "ADW Update"
-  short_description: "Repair ADW-managed files"
-  default_prompt: "Use $update to validate the project and preview repair of current release managed files."
+  short_description: "Refresh ADW-managed files"
+  default_prompt: "Use $update to preview and refresh the ADW-managed permission and container files."

@@ -27,7 +27,7 @@ shellcheck --severity=warning \
   plugin/templates/devcontainer/post-create.sh \
   plugin/templates/devcontainer/project-setup.sh
 
-npm run stage:managed-container -- "$stage_dir"
+echo '{}' | node plugin/bin/adw.mjs render-managed --into "$stage_dir" >/dev/null
 npx --yes @devcontainers/cli@0.88.0 read-configuration --workspace-folder "$stage_dir" >/dev/null
 
 config="$stage_dir/.devcontainer/devcontainer.json"

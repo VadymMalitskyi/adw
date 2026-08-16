@@ -1,0 +1,4 @@
+interface:
+  display_name: "ADW Init"
+  short_description: "Initialize ADW in any repository state"
+  default_prompt: "Use $init to set up ADW in this repository."

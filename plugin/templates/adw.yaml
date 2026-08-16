@@ -1,63 +1,54 @@
-# ADW project configuration. Small, handwritten, and readable without schema
-# documentation. Every generated command cites an observable project source.
+# ADW project configuration — the complete stable `adw: 1` contract.
+#
+# `adw:init` generates this file; this template documents every field it may
+# contain. Unknown keys are rejected rather than ignored, and no key anywhere in
+# this file may look like a credential.
 adw: 1
 
 git:
   base_branch: main
 
-docs:
-  branch: docs
-  worktree: worktrees/docs
-  # sync_marker: SYNC.yaml
-
-# Complete, project-owned Markdown templates. Each retains the small set of
-# stable ADW semantic markers documented in the bundled standard template.
-planning:
-  default_template: standard
-  templates:
-    standard: adw/plan-templates/standard.md
-
 execution:
-  # orchestrated  runs the independent groups of one phase in parallel worktrees
-  # sequential    runs one branch and worktree at a time
-  mode: orchestrated
-  # provider-sandbox      lightweight default; the agent provider's own sandbox
+  # provider-sandbox      lightweight; the agent provider's own sandbox
   # project-devcontainer  an existing project-owned container, left unchanged
   # managed-devcontainer  the generated reproducible hardened container
   isolation: provider-sandbox
   # Managed devcontainer only: public-pages | hosted-only
   # web_access: public-pages
 
-# Optional. Record the versions chosen during initialization when the
-# repository does not declare a precise runtime version itself.
+# Optional. Record a runtime version only when the repository does not pin one
+# itself. Supported: node, python, go, rust, java, ruby, dotnet.
 # development:
 #   runtime_versions:
 #     dotnet: "8"
 
 # At least one component. A single root component uses path ".".
-# Each entry of `validate` is either an exact command string or an object with
+# Each `validate` entry is either an exact command string or an object with
 # `command` and optional `cwd`, `timeout_ms`, `required`, and `source`.
 components:
   app:
     path: "."
     validate: []
 
-# Optional. Omit every capability the project does not use.
+# Optional. Omit every capability the project does not use. `domains` lists the
+# hostnames the managed container must be able to reach for that provider.
 # providers:
-#   work_tracker:
-#     provider: azure-devops
-#     required: false
-#     transport: auto
-#     access: read-write
-#     settings:
-#       organization: "<organization>"
-#       project: "<project>"
 #   code_host:
 #     provider: github
 #     required: false
+#     transport: auto
+#     access: read-write
+#     domains:
+#       - api.github.com
+#   work_tracker:
+#     provider: azure-devops
+#     required: false
+#     settings:
+#       organization: "example-org"
+#       project: "example-project"
 
-# Optional plain-language conventions. They guide formatting and never
-# authorize external writes, merging, deployment, or release.
+# Optional plain-language conventions. They guide naming and formatting, and
+# never authorize an external write, a merge, a deployment, or a release.
 # conventions:
-#   branches: Use ADW branch names.
+#   branches: Use adw/<change>/<group> for execution branches.
 #   pull_requests: Keep group pull requests small and draft until reviewed.

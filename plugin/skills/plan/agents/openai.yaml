@@ -1,4 +1,4 @@
 interface:
   display_name: "ADW Plan"
-  short_description: "Plan a repository-grounded ADW change"
-  default_prompt: "Use $plan to write and red-team one ADW plan.md for this change."
+  short_description: "Plan a repository-grounded change"
+  default_prompt: "Use $plan to write and red-team an implementation plan for this change."

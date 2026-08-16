@@ -8,14 +8,12 @@
     "node": ">=20"
   },
   "scripts": {
-    "build:helper": "node src/helpers/build-bundle.mjs --write",
-    "check:helper": "node src/helpers/build-bundle.mjs --check",
-    "stage:managed-container": "node src/stage-managed-devcontainer.mjs",
-    "test:security": "bash scripts/test-security.sh",
+    "build:vendor": "node src/build-vendor.mjs --write",
+    "check:vendor": "node src/build-vendor.mjs --check",
     "test": "node --test",
     "test:contracts": "node --test tests/contracts/*.test.mjs",
-    "test:helpers": "node --test tests/helpers/*.test.mjs",
-    "test:integration": "node --test tests/integration/*.test.mjs"
+    "test:integration": "node --test tests/integration/*.test.mjs",
+    "test:security": "bash scripts/test-security.sh"
   },
   "devDependencies": {
     "esbuild": "^0.25.12",

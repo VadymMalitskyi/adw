@@ -1,4 +1,0 @@
-interface:
-  display_name: "ADW Sync Docs"
-  short_description: "Audit and reconcile ADW docs context"
-  default_prompt: "Use $sync-docs to report documentation context drift without changing files."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "ADW Doctor"
+  short_description: "Diagnose an ADW project without changing it"
+  default_prompt: "Use $doctor to check this project's ADW setup."

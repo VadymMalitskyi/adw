@@ -1,20 +1,66 @@
 ---
 name: update
-description: Preview and repair ADW-managed development and permission files after a plugin update. Use after a provider-managed plugin update or a managed-file doctor failure.
+description: Preview and refresh only ADW-managed permission and devcontainer files after a plugin update. Use after a plugin update, or when adw:doctor reports managed-file or permission drift.
 ---
 
-# Repair Managed Files
+# Refresh managed files
 
-Provider plugin managers update ADW itself. This workflow regenerates only ADW-owned managed-development and permission files through an exact preview, digest, and apply flow. It never rewrites `adw.yaml`, application code, project-owned containers, plans, approvals, or run history. The installed release's project contract is the only contract ADW accepts.
+Provider plugin managers update ADW itself. This workflow regenerates only the
+files ADW owns, through an exact preview and apply pair. It never rewrites
+`adw.yaml`, application code, or a project-owned container.
 
-1. Resolve the installed plugin root from this loaded skill:
-   - In Claude Code, expand `${CLAUDE_PLUGIN_ROOT}` and use `${CLAUDE_PLUGIN_ROOT}/skills/update/SKILL.md` as this skill's absolute locator.
-   - In Codex, use the absolute `SKILL.md` source locator advertised when this skill loaded.
-   - Remove `/skills/update/SKILL.md` from that locator. Never derive plugin resources from the current working directory or the target project.
-2. Resolve the project root with `git rev-parse --show-toplevel` and run `node <plugin-root>/skills/update/scripts/update.mjs preview --project-root <project-root>`.
-3. If project validation fails, stop and report the exact contract errors. Update never translates, reinterprets, or repairs project configuration; that is a separate reviewed change.
-4. Review every proposed write. A `provider-sandbox` or `project-devcontainer` project normally has an empty write set, because ADW owns no managed files there. A `managed-devcontainer` project may propose current release bytes for `.devcontainer/` and both agents' project permission files, preserving compatibility with the recorded managed profile, configured allowlist domains, and committed `development.runtime_versions`.
-5. If no repair is required, report that the managed files are current and stop. Otherwise present the full path list and obtain plain explicit confirmation. Keep the preview digest internal; do not show, name, or ask the person to copy it.
-6. After confirmation, run the same command as `apply --confirmed --preview-digest <internally-retained-preview-digest>`. Any change to HEAD, current managed bytes, generated environment evidence, installed plugin version, or proposed target bytes invalidates the digest. Review the resulting diff; do not commit or push unless separately authorized.
+Read `<plugin-root>/authorization.md` and resolve the plugin root as described
+there.
 
-The repair is an atomic, precondition-checked regeneration of release-owned files that rejects absolute paths, traversal, and symlink escapes. Project configuration and workflow evidence are outside this command's scope.
+## 1. Preview
+
+```
+node <plugin-root>/bin/adw.mjs refresh-preview --project-root <project-root>
+```
+
+This reads the validated `adw.yaml`, re-renders the Codex and Claude permission
+policy, and — when isolation is `managed-devcontainer` — re-renders the managed
+container from the installed release plus the project's own configured runtime
+versions and provider domains.
+
+If `refresh_required` is `false`, everything is current. Say so and stop.
+
+Otherwise show the user every path under `writes` with its action, and what each
+group of files does:
+
+- `.codex/config.toml`, `.codex/rules/adw.rules`, `.claude/settings.json` — the
+  shared permission policy both agents run under;
+- `.devcontainer/*` — the managed container, its egress allowlist, and the
+  digests that let `adw:doctor` detect drift.
+
+Ask once for approval to write exactly those files. Do not show or ask about the
+fingerprint.
+
+## 2. Apply
+
+```
+node <plugin-root>/bin/adw.mjs refresh-apply --project-root <project-root> --fingerprint <fingerprint-from-preview>
+```
+
+The fingerprint binds apply to the exact file set the user reviewed. If it is
+rejected, something changed underneath the preview: re-run the preview and ask
+again.
+
+## 3. Report
+
+Say what changed and what it means for them:
+
+- permission policy changes take effect in the next agent session;
+- managed container changes need a container rebuild and reopen before they are
+  in force;
+- the written files are uncommitted. Ask before committing, and never push.
+
+Run `adw doctor` afterwards to confirm the project is consistent again.
+
+## Boundaries
+
+- `adw.yaml` is never rewritten here. If the project needs a different isolation,
+  web-access mode, runtime version, or provider domain, that is a deliberate
+  `adw.yaml` edit the user approves separately — then re-run this refresh.
+- A project-owned `.devcontainer/` is never touched.
+- Nothing outside the managed file list is written, even if it looks stale.

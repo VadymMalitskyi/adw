@@ -1,4 +1,0 @@
-interface:
-  display_name: "ADW Approve"
-  short_description: "Approve the exact bytes of an ADW plan"
-  default_prompt: "Use $approve to review and approve the current ADW plan.md."

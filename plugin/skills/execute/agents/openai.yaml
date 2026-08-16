@@ -1,4 +1,4 @@
 interface:
   display_name: "ADW Execute"
-  short_description: "Coordinate one approved ADW plan phase"
-  default_prompt: "Use $execute to coordinate one phase of an approved ADW plan and record truthful run evidence."
+  short_description: "Carry out one phase of a confirmed plan"
+  default_prompt: "Use $execute to carry out one phase of the confirmed plan in isolated worktrees."

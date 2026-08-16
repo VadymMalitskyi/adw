@@ -1,4 +1,4 @@
 interface:
   display_name: "ADW Review Plan"
-  short_description: "Red-team an ADW plan before approval"
-  default_prompt: "Use $review-plan to independently review the current ADW plan.md."
+  short_description: "Red-team a plan before execution"
+  default_prompt: "Use $review-plan to independently review this implementation plan."

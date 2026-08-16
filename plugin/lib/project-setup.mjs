@@ -26,14 +26,22 @@ function git(cwd, args, { allowFailure = false } = {}) {
   return { status: result.status, stdout: (result.stdout ?? "").trim() };
 }
 
+// `existsSync` follows symbolic links, so a link pointing at a missing target
+// would look absent. Every segment is inspected with `lstatSync` instead, so a
+// managed path can never be written through a link.
 function readOrEmpty(projectRoot, relativePath) {
   let current = projectRoot;
+  let stat = null;
   for (const part of relativePath.split("/")) {
     current = join(current, part);
-    if (existsSync(current) && lstatSync(current).isSymbolicLink()) throw new ContractError(`${relativePath} cannot be managed through a symbolic link`);
+    try { stat = lstatSync(current); }
+    catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      return "";
+    }
+    if (stat.isSymbolicLink()) throw new ContractError(`${relativePath} cannot be managed through a symbolic link`);
   }
-  if (!existsSync(current)) return "";
-  if (!lstatSync(current).isFile()) throw new ContractError(`${relativePath} must be a regular file`);
+  if (!stat.isFile()) throw new ContractError(`${relativePath} must be a regular file`);
   return readFileSync(current, "utf8");
 }
 
@@ -52,9 +60,15 @@ export function repositoryState(directory) {
 }
 
 function detectedBaseBranch(projectRoot, state) {
-  if (state !== "established") {
+  if (state === "empty-directory") {
     const configured = git(projectRoot, ["config", "--get", "init.defaultBranch"], { allowFailure: true });
     return configured.status === 0 && isValidBranchName(configured.stdout) ? configured.stdout : "main";
+  }
+  if (state === "unborn-repository") {
+    // An unborn repository already has a branch name on HEAD. Honor it rather
+    // than renaming the project's first branch behind the user's back.
+    const unborn = git(projectRoot, ["symbolic-ref", "--quiet", "--short", "HEAD"], { allowFailure: true });
+    return unborn.status === 0 && isValidBranchName(unborn.stdout) ? unborn.stdout : "main";
   }
   const remote = git(projectRoot, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"], { allowFailure: true });
   if (remote.status === 0) return remote.stdout.replace(/^origin\//, "");
