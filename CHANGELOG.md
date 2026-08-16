@@ -4,26 +4,44 @@ All notable changes to this private plugin are documented here.
 
 ## Unreleased
 
-### Planning templates
+### Simplified to a deterministic kernel plus raw skills
 
-- New initializations copy the standard plan template to committed `adw/plan-templates/standard.md` and register it in the optional `planning` block of `adw.yaml`.
-- Projects may register multiple complete Markdown templates, edit headings and project-required sections directly, and select a default without changing the ADW plugin.
-- Four retained `ADW:SECTION` markers preserve the execution-critical semantic core, while an in-plan required-sections manifest durably binds every project-required section. Existing projects without `planning` keep the bundled fallback, and existing plans and approvals are never re-rendered.
-- Contributors may select a preferred project-declared template in ignored `.adw/local.yaml`; explicit per-change selection still wins, and arbitrary personal template paths are not supported.
+ADW now keeps code only where interpretation or partial failure is genuinely
+dangerous. Everything that benefits from judgment is a raw skill again.
 
-### Initialization
+- One `adw:init` skill replaces `adw:init-greenfield` and `adw:init-brownfield` and
+  handles an empty directory, an unborn repository, and an established project.
+- Removed the `adw:approve`, `adw:amend`, `adw:discover`, and `adw:sync-docs` skills.
+  Confirming in conversation authorizes execution; repository discovery folded into
+  `adw:init` and `adw:plan`.
+- Removed the docs branch, docs worktree, `SYNC.yaml`, canonical
+  `changes/<id>/plan.md` storage, `approval.json` and approval history, plan digests,
+  phase run records, the project-owned plan-template registry, `.adw/local.yaml`,
+  `.adw/preferences.md`, and generated routing blocks in `AGENTS.md`/`CLAUDE.md`.
+  Git, the provider's own objects, and the conversation are the record.
+- Replaced every skill script and the generated `plugin/lib/adw-helper.mjs` bundle
+  with one JSON CLI, `plugin/bin/adw.mjs`, over seven handwritten library modules.
+  `plugin/lib/vendor/yaml.mjs` is now the only generated file, and an installed
+  plugin runs without `node_modules`.
+- `npm run build:vendor` / `check:vendor` replace `build:helper` / `check:helper`.
 
-- Replaced the mixed initializer with two explicit workflows: `adw:init-greenfield` for a genuinely empty project and `adw:init-brownfield` for an established Git repository.
-- Greenfield initialization now preview-binds creation of the Git repository, `PROJECT.md`, the stable `make check` validation contract, the first main commit, and the docs branch without generating speculative application code.
-- Brownfield initialization retains repository-derived discovery and byte-preserving adoption, and never commits the established code branch.
-- Moved deterministic initialization mechanics under `plugin/initialization/` so the two skills share one implementation without exposing a third routing command.
-- Documented the brownfield onboarding answers payload in `adw:init-brownfield` so the skill no longer relies on reading the normalizer to learn the schema-1 shape.
+### Project contract
 
-### Security
+- `adw.yaml` keeps only `git`, `execution`, `development`, `components`, `providers`,
+  and `conventions`. `docs`, `planning`, and `execution.mode` are removed; a stale
+  field is now a loud validation error rather than a silent no-op.
+- Provider declarations gained a validated `domains` list, which feeds the managed
+  container's egress allowlist directly.
+- Future versions may add optional fields and commands; removing a field or
+  reinterpreting one requires a major migration.
 
-- The permission profile now protects the files that carry it: `.claude/settings.json`, `.codex/config.toml`, `.codex/rules/adw.rules`, `adw.yaml`, and `.devcontainer/**` require explicit review before an Edit or Write, which `acceptEdits` previously auto-accepted.
-- `adw:execute` verifies permission-policy integrity before its first project command and stops on drift. `plugin/skills/doctor/scripts/snapshot.mjs --checks permissions` exposes that check on its own, so the gate costs nothing beyond reading the policy files.
-- Existing projects report `permissions:claude` drift until `adw:update` re-renders the policy; managed devcontainers also need a rebuild to refresh the recorded payload digests.
+### Permissions and the managed container
+
+- Pushing, tag creation, branch deletion, worktree removal, rebase, and merge now
+  ask the user in both providers instead of being auto-allowed.
+- A managed container always carries both Codex and Claude, so the per-agent
+  `agent_tools` profile is gone and the marker is schema 3.
+- The generated managed file set no longer includes `project-requirements.md`.
 
 ## 1.0.0 - 2026-08-14
 
