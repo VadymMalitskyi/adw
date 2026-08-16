@@ -315,11 +315,12 @@ function pluginVersion() {
   return version;
 }
 
-function managedFiles(projectRoot, { webAccess, integrationDomains, runtimeVersions }) {
+function managedFiles(projectRoot, { webAccess, integrationDomains, runtimeVersions, permissionPolicy }) {
   const generated = managedDevelopmentFiles(projectRoot, join(pluginRoot(), "templates/devcontainer"), {
     webAccess,
     integrationDomains,
     runtimeVersions,
+    permissionPolicy,
     pluginVersion: pluginVersion(),
   });
   return { requirements: generated.requirements, files: [...generated.files].map(([name, content]) => ({ path: `.devcontainer/${name}`, content })) };
@@ -428,7 +429,7 @@ export async function applyInitialization(directory, rawAnswers, expectedFingerp
 export function planRefresh(directory, config) {
   const projectRoot = realpathSync(directory);
   const files = [];
-  for (const file of permissionProjectFiles((path) => readOrEmpty(projectRoot, path), { repairManagedRules: true })) {
+  for (const file of permissionProjectFiles((path) => readOrEmpty(projectRoot, path), { repairManagedRules: true, policy: config.permissions })) {
     const before = readOrEmpty(projectRoot, file.path);
     files.push({ path: file.path, before, after: file.content, action: before ? "repair-permission-policy" : "create-permission-policy" });
   }
@@ -437,6 +438,7 @@ export function planRefresh(directory, config) {
       webAccess: config.execution.web_access,
       integrationDomains: providerDomains(config),
       runtimeVersions: config.development.runtime_versions,
+      permissionPolicy: config.permissions,
     });
     for (const file of generated.files) {
       const before = readOrEmpty(projectRoot, file.path);

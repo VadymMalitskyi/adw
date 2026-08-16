@@ -34,7 +34,9 @@ test("Codex loads ADW exec rules and applies the strictest matching decision", {
     { argv: ["gh", "api", "repos/example/project"], decision: "prompt" },
     { argv: ["gh", "pr", "create"], decision: "prompt" },
     { argv: ["glab", "repo", "view"], decision: "prompt" },
-    { argv: ["datadog-ci", "synthetics", "run-tests"], decision: "prompt" },
+    // Unknown provider CLI shapes receive no auto-approval rule and therefore
+    // fall through to Codex's sandbox/approval policy.
+    { argv: ["datadog-ci", "synthetics", "run-tests"], decision: undefined },
 
     // Refused outright.
     { argv: ["git", "push", "--force", "origin", "main"], decision: "forbidden" },

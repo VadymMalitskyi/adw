@@ -11,6 +11,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseDocument } from "./vendor/yaml.mjs";
 import { InputError, isObject, isSafeRelativePath, normalizeRelativePath, readProjectFile } from "./safe-files.mjs";
+import { defaultPermissionPolicy, normalizePermissionPolicy } from "./permission-policy.mjs";
 
 export const CONTRACT_VERSION = 1;
 export const CAPABILITIES = Object.freeze(["work_tracker", "code_host", "observability", "knowledge"]);
@@ -24,7 +25,7 @@ const ACCESS_MODES = new Set(["read-only", "read-write"]);
 const SECRET_LIKE_KEY = /(?:password|passwd|token|api[_-]?key|secret|credential|authorization|cookie|private[_-]?key)/i;
 const IDENTIFIER = /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/;
 const PLACEHOLDER = /^\s*<[^>]+>\s*$/;
-const PROJECT_KEYS = new Set(["adw", "git", "execution", "development", "components", "providers"]);
+const PROJECT_KEYS = new Set(["adw", "git", "execution", "development", "components", "providers", "permissions"]);
 
 export function defaultProjectConfig(baseBranch = "main") {
   return {
@@ -34,6 +35,7 @@ export function defaultProjectConfig(baseBranch = "main") {
     development: { runtime_versions: {} },
     components: {},
     providers: {},
+    permissions: defaultPermissionPolicy(),
   };
 }
 
@@ -255,6 +257,17 @@ function validateProviders(errors, value, normalized) {
   }
 }
 
+function validatePermissionAccess(errors, rawPermissions, normalized) {
+  for (const [provider, declaration] of Object.entries(rawPermissions?.providers ?? {})) {
+    for (const [operation, decision] of Object.entries(declaration?.operations ?? {})) {
+      if (operation === "read" || decision !== "allow") continue;
+      if (normalized.permissions.providers[provider]?.operations[operation] !== "allow") continue;
+      const writeCapable = Object.values(normalized.providers).some((configured) => configured.provider === provider && configured.access === "read-write");
+      if (!writeCapable) errors.add(`/permissions/providers/${provider}/operations/${operation}`, `allow requires a configured ${provider} provider with access: read-write`);
+    }
+  }
+}
+
 export function isValidDomain(value) {
   return typeof value === "string" && /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(value);
 }
@@ -298,6 +311,11 @@ export function validateProjectConfig(data) {
   if (data.components !== undefined) validateComponents(errors, data.components, normalized);
 
   if (data.providers !== undefined) validateProviders(errors, data.providers, normalized);
+
+  if (data.permissions !== undefined) {
+    normalized.permissions = normalizePermissionPolicy(data.permissions, (path, message) => errors.add(path, message));
+    validatePermissionAccess(errors, data.permissions, normalized);
+  }
 
   return errors.valid ? { valid: true, errors: [], data: normalized } : { valid: false, errors: errors.items };
 }

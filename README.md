@@ -25,7 +25,7 @@ There is no daemon, server, scheduler, telemetry, or workflow database. Git, you
 2. Substantial changes use plan → execute; small ones use `adw:quick`.
 3. **Confirming in conversation is what authorizes execution.** There is no approval artifact, plan digest, or approval record.
 4. Groups inside a phase run in parallel, each in its own branch and worktree, only when their write paths are disjoint. The plan decides how much runs at once; there is no mode setting.
-5. **Every external write is previewed and separately authorized.** Confirming a plan authorizes local implementation and nothing else.
+5. **External writes default to separate authorization.** Only an exact, reviewed generated provider-operation policy can pre-authorize a bounded write; confirming a plan alone authorizes local implementation and nothing else.
 6. **ADW never merges, releases, deploys, or force-pushes.**
 
 Interrupt anything and start a new session. State is reconstructed from Git branches and the marker commit on each group worktree — never from chat history.
@@ -94,6 +94,7 @@ config                       explicit shared policy or discovered defaults, plus
 init-preview / init-apply    confined first-time setup, bound to the reviewed file set
 refresh-preview / refresh-apply   exact repair primitives used by adw:doctor
 doctor                       read-only deterministic checks (--checks all|permissions)
+permissions-explain          explain one provider command/tool decision without executing it
 worktree-preview / worktree-inspect / worktree-prepare / worktree-cleanup-guidance
 render-managed               render .devcontainer/ for build and security tests
 ```

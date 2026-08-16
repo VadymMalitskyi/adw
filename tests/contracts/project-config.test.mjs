@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { loadProjectConfig, parseYaml, providerDomains, validateProjectConfig, validationCommands } from "../../plugin/lib/config.mjs";
+import { defaultPermissionPolicy, explainPermission } from "../../plugin/lib/permission-policy.mjs";
 
 const MINIMAL = `
 adw: 1
@@ -31,6 +32,7 @@ test("the contract accepts a small handwritten configuration and normalizes its 
     development: { runtime_versions: {} },
     components: { app: { path: ".", validate: [] } },
     providers: {},
+    permissions: defaultPermissionPolicy(),
   });
 });
 
@@ -203,6 +205,57 @@ providers:
 `));
   assert.equal(accepted.valid, true, JSON.stringify(accepted.errors));
   assert.deepEqual(providerDomains(accepted.data), ["api.github.com", "dev.azure.com"]);
+});
+
+test("provider operation permissions are normalized and cannot weaken deny floors", () => {
+  const accepted = validateProjectConfig(parseYaml(`
+adw: 1
+providers:
+  code_host:
+    provider: github
+    access: read-write
+permissions:
+  providers:
+    github:
+      operations:
+        comment: allow
+      tools:
+        add_comment: comment
+`));
+  assert.equal(accepted.valid, true, JSON.stringify(accepted.errors));
+  assert.equal(accepted.data.permissions.providers.github.operations.comment, "allow");
+  assert.equal(accepted.data.permissions.providers.github.tools.add_comment, "comment");
+  assert.equal(explainPermission(accepted.data.permissions, { argv: ["gh", "pr", "comment", "42"] }).decision, "allow");
+  assert.equal(explainPermission(accepted.data.permissions, { tool: "mcp__github__add_comment" }).decision, "allow");
+  assert.equal(explainPermission(accepted.data.permissions, { tool: "mcp__github__unknown_write" }).decision, "ask");
+
+  const rejected = validateProjectConfig(parseYaml(`
+adw: 1
+permissions:
+  providers:
+    github:
+      operations:
+        merge: allow
+      tools:
+        merge_pull_request: read
+        execute_action: read
+    notion:
+      operations:
+        update: sometimes
+`));
+  assert.equal(rejected.valid, false);
+  assert.deepEqual(errorPaths(rejected), ["/permissions/providers/github/operations/merge", "/permissions/providers/github/tools/merge_pull_request", "/permissions/providers/github/tools/execute_action", "/permissions/providers/notion/operations/update"]);
+
+  const missingAccess = validateProjectConfig(parseYaml(`
+adw: 1
+permissions:
+  providers:
+    github:
+      operations:
+        comment: allow
+`));
+  assert.equal(missingAccess.valid, false);
+  assert.deepEqual(errorPaths(missingAccess), ["/permissions/providers/github/operations/comment"]);
 });
 
 test("YAML 1.2 duplicate-key rejection still guards the project contract", () => {

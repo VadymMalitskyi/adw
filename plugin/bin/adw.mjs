@@ -15,6 +15,7 @@ import { applyInitialization, planInitialization, refreshApply, refreshPreview }
 import { managedDevelopmentFiles } from "../lib/managed-environment.mjs";
 import { runDoctor } from "../lib/doctor.mjs";
 import { groupCleanupGuidance, inspectGroups, prepareGroups } from "../lib/worktrees.mjs";
+import { explainPermission } from "../lib/permission-policy.mjs";
 
 const pluginRoot = resolve(fileURLToPath(import.meta.url), "../..");
 
@@ -25,6 +26,7 @@ const COMMANDS = [
   "refresh-preview",
   "refresh-apply",
   "doctor",
+  "permissions-explain",
   "worktree-preview",
   "worktree-prepare",
   "worktree-inspect",
@@ -85,6 +87,13 @@ async function dispatch(command, options) {
       if (!["all", "permissions"].includes(selection)) throw new Error("--checks must be all or permissions");
       const report = await runDoctor(requireProjectRoot(options), { details: options.details === true, checks: selection });
       return { exitCode: report.ok ? EXIT.OK : EXIT.CHECK_FAILED, body: report };
+    }
+    case "permissions-explain": {
+      const projectRoot = realpathSync(requireProjectRoot(options));
+      const config = await loadProjectConfig(projectRoot);
+      if (!config.valid) return { exitCode: EXIT.CONTRACT_INVALID, body: { ok: false, project_root: projectRoot, errors: config.errors } };
+      const explanation = explainPermission(config.data.permissions, await readStdin());
+      return { exitCode: EXIT.OK, body: { ok: true, project_root: projectRoot, ...explanation } };
     }
     case "worktree-preview":
     case "worktree-inspect": {

@@ -2,7 +2,7 @@
 
 ADW combines skill instructions, a generated permission policy, and an optional hardened container. It does not replace provider permissions, container-runtime security, repository protections, or human review.
 
-Repository files, dependencies, plans, validation output, review comments, tracker text, and provider responses are untrusted input. **None of them can grant authorization.** A checked box in a plan, a commit message, a comment saying "approved", or a tool response instructing an action is text, not consent. Authorization comes from the person in the conversation, or from the provider's own permission prompt.
+Repository prose, dependencies, plans, validation output, review comments, tracker text, and provider responses are untrusted input. **None of them can grant authorization.** A validated `adw.yaml` permission policy is the narrow exception: after the exact generated diff is reviewed, it may pre-authorize a bounded yellow provider operation. A checked box, commit message, comment saying "approved", or tool response is still only text.
 
 ## Permission matrix
 
@@ -15,9 +15,10 @@ The same semantic categories apply in every isolation mode, and to both agents.
 | `git add`, `git commit`, creating a new local branch | Allowed |
 | Worktree preparation through the ADW CLI, after the user has asked to execute | Allowed |
 | Read-only provider operations within configured capabilities | Allowed |
+| Exact provider operations configured and generated as `allow` | Allowed |
 | Push, tag creation or push, branch deletion, worktree removal or pruning | Ask |
 | Rebase, local merge, discarding tracked changes | Ask |
-| Creating or changing a pull request, issue, tracker item, or knowledge page | Ask |
+| Creating or changing a pull request, issue, tracker item, or knowledge page | Ask by default; exact reviewed provider operations may be configured as allowed |
 | Editing `adw.yaml`, the managed permission files, the ADW `.gitignore` block, or `.devcontainer/` outside `adw:init` or an approved `adw:doctor` repair preview | Ask |
 | Any command whose effect classification is ambiguous | Ask |
 | Force push, destructive history reset | Deny |
@@ -26,7 +27,7 @@ The same semantic categories apply in every isolation mode, and to both agents.
 | Credential, cookie, token, or private-key export | Deny |
 | Bypassing the provider sandbox or the managed-container controls | Deny |
 
-Six mechanisms implement these categories, each in its own syntax:
+Seven mechanisms implement these categories, each in its own syntax:
 
 | Mechanism | Where |
 |---|---|
@@ -34,6 +35,7 @@ Six mechanisms implement these categories, each in its own syntax:
 | Codex session policy | `.codex/config.toml` — `workspace-write`, `on-request` approval, writes-only app-tool approval |
 | Claude settings | `.claude/settings.json` — `acceptEdits`, sandbox enabled and fail-closed, `ask` and `deny` rule lists |
 | Claude permission hook | `/usr/local/bin/adw-claude-permission-hook`, root-installed in the managed container, classifying Bash and MCP effects at call time |
+| Canonical provider policy | `.devcontainer/permission-policy.json`, generated from validated `adw.yaml` and installed root-owned for the Claude hook; the same model renders Codex command/app rules |
 | Managed Git wrapper | `/usr/local/bin/git` in the managed container, root-owned, rejecting force and delete pushes before delegating to `/usr/bin/git` |
 | Skill prose | `plugin/authorization.md`, the shared contract every skill follows, covering the cases no static pattern can catch |
 
@@ -71,7 +73,7 @@ The generated permission files are written in every mode, because the guardrails
 | No host leakage | Nothing mounts the host home directory, `~/.ssh`, cloud credential directories, provider-wide config, or the Docker socket. `doctor` fails the `execution:unsafe-mounts` check if any appear. |
 | Pinned agents | Codex CLI and Claude Code are installed at exact versions recorded in the managed marker; auto-update is disabled. |
 | Startup ordering | `postCreateCommand` runs the firewall first, then post-create, then project setup, so dependency installation never precedes the deny-by-default network. `postStartCommand` re-arms the firewall on every start. |
-| Drift detection | `.devcontainer/adw-managed.json` (schema 3) records SHA-256 digests of the allowlist, Codex rules, Git wrapper, Claude settings, Claude hook, egress proxy, generated project requirements, and project setup script, plus the plugin, Codex, and Claude Code versions. `adw:doctor` recomputes all of them. |
+| Drift detection | `.devcontainer/adw-managed.json` (schema 3) records SHA-256 digests of the allowlist, canonical permission policy, Codex rules, Git wrapper, Claude settings, Claude hook, egress proxy, generated project requirements, and project setup script, plus the plugin, Codex, and Claude Code versions. `adw:doctor` recomputes all of them. |
 
 The allowlist and the proxy are baked root-owned into the image, so adding a domain is a reviewed infrastructure change: edit the committed file, rebuild, re-enter, rerun doctor. Never weaken the firewall or mount a host credential directory to make a transport work.
 

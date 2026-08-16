@@ -15,7 +15,9 @@ import {
   mergeClaudeSettings,
   mergeCodexConfig,
   permissionProjectFiles,
+  renderCodexRules,
 } from "../../plugin/lib/permissions.mjs";
+import { defaultPermissionPolicy, permissionPolicyJson } from "../../plugin/lib/permission-policy.mjs";
 import { permissionChecks } from "../../plugin/lib/doctor.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -137,6 +139,7 @@ test("Codex and Claude implement the same semantic categories from authorization
     { category: "external", argv: ["git", "worktree", "prune"], command: "git worktree prune" },
     { category: "external", argv: ["git", "rebase", "main"], command: "git rebase main" },
     { category: "external", argv: ["git", "merge", "feature"], command: "git merge feature" },
+    { category: "external", argv: ["git", "reset", "HEAD~1"], command: "git reset HEAD~1" },
     { category: "external", argv: ["gh", "pr", "create", "--draft"], command: "gh pr create --draft" },
     { category: "external", argv: ["gh", "pr", "ready", "42"], command: "gh pr ready 42" },
     { category: "external", argv: ["gh", "issue", "comment", "7"], command: "gh issue comment 7" },
@@ -217,11 +220,35 @@ test("Claude policy uses sandbox-first Bash plus explicit external-write review"
   assert.match(managed.hooks.PreToolUse[1].matcher, /mcp__/);
 });
 
-function hookDecision(tool_name, tool_input = {}) {
-  const result = spawnSync(process.execPath, [hook], { input: JSON.stringify({ tool_name, tool_input }), encoding: "utf8" });
+function hookDecision(tool_name, tool_input = {}, env = {}) {
+  const result = spawnSync(process.execPath, [hook], { input: JSON.stringify({ tool_name, tool_input }), encoding: "utf8", env: { ...process.env, ...env } });
   assert.equal(result.status, 0, result.stderr);
   return result.stdout ? JSON.parse(result.stdout).hookSpecificOutput.permissionDecision : null;
 }
+
+test("one canonical provider policy customizes Codex and Claude consistently", () => {
+  const policy = defaultPermissionPolicy();
+  policy.providers.github.operations.comment = "allow";
+  policy.providers.github.tools.add_comment = "comment";
+
+  const rules = renderCodexRules(policy);
+  assert.match(rules, /pattern = \["gh","pr","comment"\], decision = "allow"/);
+  assert.doesNotMatch(rules, /pattern = \["gh","pr","comment"\], decision = "prompt"/);
+
+  const codex = mergeCodexConfig("", policy);
+  assert.match(codex, /\[apps\."github"\.tools\."add_comment"\]\napproval_mode = "approve"/);
+  const claude = JSON.parse(mergeClaudeSettings("", policy));
+  assert.ok(claude.permissions.allow.includes("mcp__github__add_comment"));
+
+  const directory = mkdtempSync(join(tmpdir(), "adw-provider-policy-"));
+  const policyPath = join(directory, "permission-policy.json");
+  writeFileSync(policyPath, permissionPolicyJson(policy));
+  const env = { ADW_PERMISSION_POLICY: policyPath };
+  assert.equal(hookDecision("Bash", { command: "gh pr comment 42 --body ok" }, env), "allow");
+  assert.equal(hookDecision("mcp__github__add_comment", {}, env), "allow");
+  assert.equal(hookDecision("mcp__github__merge_pull_request", {}, env), "ask", "unknown dangerous tools fail to ask");
+  assert.equal(hookDecision("Bash", { command: "gh pr merge 42" }, env), "deny", "the hard safety floor still wins");
+});
 
 test("Claude managed hook allows sandboxed local work, asks for external effects, and denies forbidden effects", () => {
   assert.equal(hookDecision("mcp__github__get_file_contents"), "allow");
@@ -341,7 +368,7 @@ test("the permissions gate fails closed on drifted policy without inspecting the
   assert.equal(JSON.parse(drifted.stdout).ok, false);
   assert.match(JSON.parse(drifted.stdout).checks.find(({ id }) => id === "permissions:claude").summary, /drifted/);
 
-  writeFileSync(join(root, ".codex/rules/adw.rules"), CODEX_RULES.replace('prefix_rule(pattern = ["gh", "pr", "merge"], decision = "forbidden")\n', ""));
+  writeFileSync(join(root, ".codex/rules/adw.rules"), CODEX_RULES.replace('prefix_rule(pattern = ["gh","pr","merge"], decision = "forbidden")\n', ""));
   assert.equal(permissionChecks(root).find(({ id }) => id === "permissions:codex").status, "fail");
 
   const rejected = spawnSync(process.execPath, [cli, "doctor", "--checks", "everything", "--project-root", root], { encoding: "utf8" });

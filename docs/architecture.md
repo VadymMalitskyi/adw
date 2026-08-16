@@ -35,6 +35,7 @@ Every command prints exactly one JSON object on stdout, including on failure (`{
 | Command | Input | Answers |
 |---|---|---|
 | `config` | `--project-root` | Explicit policy or discovered defaults, plus explicit validation overrides |
+| `permissions-explain` | `--project-root`, argv array or tool name JSON on stdin | Effective provider operation decision without execution |
 | `init-preview` | `--project-root`, answers JSON on stdin | Which files would change, what is unresolved, and a fingerprint |
 | `init-apply` | `--project-root`, `--fingerprint`, answers JSON on stdin | Applies exactly the previewed file set |
 | `refresh-preview` | `--project-root` | Which ADW-managed files doctor can repair from the installed release |

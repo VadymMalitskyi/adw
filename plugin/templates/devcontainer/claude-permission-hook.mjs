@@ -1,5 +1,16 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+
+const policyPath = process.env.ADW_PERMISSION_POLICY ?? "/etc/adw/permission-policy.json";
+
+function loadPolicy() {
+  if (!existsSync(policyPath)) return [];
+  const parsed = JSON.parse(readFileSync(policyPath, "utf8"));
+  if (parsed?.schema !== 1 || !Array.isArray(parsed.entries)) throw new Error("ADW permission policy has an invalid schema");
+  return parsed.entries;
+}
+
+const policyEntries = loadPolicy();
 
 function result(permissionDecision, permissionDecisionReason) {
   process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision, permissionDecisionReason } })}\n`);
@@ -191,6 +202,33 @@ function hasAmbiguousSensitiveSyntax(command) {
   });
 }
 
+function policyResult(decision, subject) {
+  if (decision === "allow") return ["allow", `ADW project policy allows ${subject}.`];
+  if (decision === "ask") return ["ask", `ADW project policy requires approval for ${subject}.`];
+  if (decision === "deny") return ["deny", `ADW project policy denies ${subject}.`];
+  throw new Error(`invalid ADW permission decision: ${String(decision)}`);
+}
+
+function configuredCommandDecision(command) {
+  const segments = shellAnalysis(command);
+  let selected = null;
+  const rank = { allow: 0, ask: 1, deny: 2 };
+  for (const entry of policyEntries) {
+    if (entry?.kind !== "command" || !Array.isArray(entry.pattern) || !rank.hasOwnProperty(entry.decision)) continue;
+    const matches = segments.some((words) => entry.pattern.length <= words.length && entry.pattern.every((part, index) => {
+      const value = words[index]?.value;
+      return Array.isArray(part) ? part.includes(value) : part === value;
+    }));
+    if (matches && (!selected || rank[entry.decision] > rank[selected.decision])) selected = entry;
+  }
+  return selected ? policyResult(selected.decision, `${selected.provider}.${selected.operation}`) : null;
+}
+
+function configuredToolDecision(tool) {
+  const selected = policyEntries.find((entry) => entry?.kind === "tool" && tool === `mcp__${entry.mcp_server}__${entry.tool}`);
+  return selected ? policyResult(selected.decision, `${selected.provider}.${selected.operation}`) : null;
+}
+
 const providerExecutables = ["gh", "az", "glab", "jira", "datadog-ci", "datadog", "notion"];
 
 function classifyBash(command) {
@@ -203,10 +241,12 @@ function classifyBash(command) {
       || /\bgh\s+auth\s+token\b/i.test(normalized)) {
     return ["deny", "ADW forbids destructive history changes, credential export, force-push, merge, release, publish, and deployment commands."];
   }
+  const configured = configuredCommandDecision(command);
+  if (configured) return configured;
   if (/\bgit\b[^;|&\n]*\bpush\b|\bgh\s+api\b/i.test(normalized)
       || /\bgh\s+(?:pr|issue|run|workflow)\s+(?:close|comment|create|delete|disable|edit|enable|ready|reopen|rerun|review|run)\b/i.test(normalized)
       || /\baz\s+(?:boards\s+work-item\s+(?:create|delete|update)|repos\s+pr\s+(?:create|update)|devops\s+invoke)\b/i.test(normalized)
-      || /\bgit\b[^;|&\n]*\b(?:branch\s+-D|checkout\s+--|restore\s+--worktree)\b/i.test(normalized)
+      || /\bgit\b[^;|&\n]*\b(?:reset|branch\s+-D|checkout\s+--|restore\s+--worktree)\b/i.test(normalized)
       || isRecursiveForcedRemove(command)
       || /\b(?:npm|pnpm|yarn|bun)\s+run\s+(?:release|publish|deploy)\b|\b(?:make|just|task)\s+(?:release|publish|deploy)\b/i.test(normalized)
       || /\b(?:docker\s+push|ssh|scp|sftp)\b/i.test(normalized)
@@ -228,6 +268,11 @@ try {
   const input = JSON.parse(readFileSync(0, "utf8"));
   const tool = String(input.tool_name ?? "");
   if (tool.startsWith("mcp__")) {
+    const configured = configuredToolDecision(tool);
+    if (configured) {
+      result(...configured);
+      process.exit(0);
+    }
     const operation = tool.split("__").at(-1).toLowerCase();
     const mutating = /(?:^|_)(?:add|approve|archive|assign|cancel|close|comment|create|delete|deploy|disable|edit|enable|execute|merge|modify|move|publish|release|remove|resolve|run|send|set|submit|transition|trigger|update|upload|write)(?:_|$)/.test(operation);
     if (!mutating && /^(?:(?:wit|git|core|repo|repos|build|work|workitem)_)?(?:get|list|read|search|find|fetch|query|view|show|status|check|inspect|lookup|describe)(?:_|$)/.test(operation)) {

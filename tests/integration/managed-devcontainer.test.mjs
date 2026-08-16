@@ -10,6 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { MANAGED_FILES, managedDevelopmentFiles } from "../../plugin/lib/managed-environment.mjs";
+import { defaultPermissionPolicy } from "../../plugin/lib/permission-policy.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const templateRoot = join(repositoryRoot, "plugin/templates/devcontainer");
@@ -19,6 +20,7 @@ const templateRoot = join(repositoryRoot, "plugin/templates/devcontainer");
 const DIGESTED_FILES = {
   allowed_domains_sha256: "allowed-domains.txt",
   codex_rules_sha256: "codex.rules",
+  permission_policy_sha256: "permission-policy.json",
   git_wrapper_sha256: "git-wrapper.sh",
   claude_settings_sha256: "claude-settings.json",
   claude_hook_sha256: "claude-permission-hook.mjs",
@@ -109,7 +111,7 @@ test("the generated file set is exactly MANAGED_FILES and every recorded digest 
   const { files, marker } = render();
 
   assert.deepEqual([...files.keys()].sort(), [...MANAGED_FILES].sort());
-  assert.equal(MANAGED_FILES.length, 13);
+  assert.equal(MANAGED_FILES.length, 14);
   assert.equal(files.has("project-requirements.md"), false, "project-requirements.md is no longer generated");
 
   const digestKeys = Object.keys(marker).filter((key) => key.endsWith("_sha256")).sort();
@@ -123,6 +125,17 @@ test("the generated file set is exactly MANAGED_FILES and every recorded digest 
   assert.equal(marker.permission_profile, "managed-development");
   assert.equal(marker.requirements_schema, JSON.parse(files.get("project-requirements.json")).schema);
   assert.equal(Object.hasOwn(marker, "agent_tools"), false, "the per-agent profile no longer exists");
+});
+
+test("one custom provider policy renders into both agent adapters and the canonical container file", () => {
+  const permissionPolicy = defaultPermissionPolicy();
+  permissionPolicy.providers.github.operations.comment = "allow";
+  permissionPolicy.providers.github.tools.add_comment = "comment";
+  const { files, marker } = render({ permissionPolicy });
+  assert.match(files.get("codex.rules"), /pattern = \["gh","pr","comment"\], decision = "allow"/);
+  assert.equal(JSON.parse(files.get("permission-policy.json")).entries.some(({ kind, provider, operation, decision }) => kind === "tool" && provider === "github" && operation === "comment" && decision === "allow"), true);
+  assert.ok(JSON.parse(files.get("claude-settings.json")).permissions.allow.includes("mcp__github__add_comment"));
+  assert.equal(marker.permission_policy_sha256, sha256(files.get("permission-policy.json")));
 });
 
 test("a managed container always provisions both agents", () => {

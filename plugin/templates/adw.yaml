@@ -50,3 +50,16 @@ adw: 1
 #     settings:
 #       organization: "example-org"
 #       project: "example-project"
+
+# Optional provider-operation approval policy. Defaults are read=allow,
+# writes=ask, and destructive operations=deny. Exact tool names bind MCP/app
+# calls to an operation. Deny safety floors cannot be weakened.
+# permissions:
+#   providers:
+#     github:
+#       app: github
+#       mcp_server: github
+#       operations:
+#         comment: allow
+#       tools:
+#         add_comment: comment

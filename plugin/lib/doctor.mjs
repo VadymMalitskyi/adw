@@ -12,7 +12,8 @@ import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadProjectConfig } from "./config.mjs";
-import { CODEX_RULES, PERMISSION_FILES, PERMISSION_PROFILE, managedClaudeSettings, mergeClaudeSettings, mergeCodexConfig } from "./permissions.mjs";
+import { PERMISSION_FILES, PERMISSION_PROFILE, managedClaudeSettings, mergeClaudeSettings, mergeCodexConfig, renderCodexRules } from "./permissions.mjs";
+import { defaultPermissionPolicy, permissionPolicyJson } from "./permission-policy.mjs";
 import { MANAGED_FILES } from "./managed-environment.mjs";
 
 const pluginRoot = resolve(fileURLToPath(import.meta.url), "../..");
@@ -56,7 +57,7 @@ function manifestCheck(check) {
 // Both providers run the same skills, so both policy files must be present and
 // byte-current. This is also the cheap pre-execution gate: a workflow can call
 // it alone and fail closed on drift.
-export function permissionChecks(projectRoot) {
+export function permissionChecks(projectRoot, policy = defaultPermissionPolicy()) {
   const check = makeCheck(false);
   const missing = PERMISSION_FILES.filter((path) => !regularProjectFile(projectRoot, path));
   if (missing.length === PERMISSION_FILES.length) {
@@ -66,22 +67,22 @@ export function permissionChecks(projectRoot) {
   let codexValid = regularProjectFile(projectRoot, ".codex/config.toml") && regularProjectFile(projectRoot, ".codex/rules/adw.rules");
   if (codexValid) {
     const config = readFileSync(join(projectRoot, ".codex/config.toml"), "utf8");
-    codexValid = readFileSync(join(projectRoot, ".codex/rules/adw.rules"), "utf8") === CODEX_RULES;
-    try { codexValid = codexValid && mergeCodexConfig(config) === config; } catch { codexValid = false; }
+    codexValid = readFileSync(join(projectRoot, ".codex/rules/adw.rules"), "utf8") === renderCodexRules(policy);
+    try { codexValid = codexValid && mergeCodexConfig(config, policy) === config; } catch { codexValid = false; }
   }
-  checks.push(check("permissions:codex", codexValid ? "pass" : "fail", codexValid ? "Codex uses workspace-write, on-request, writes-only app approval, and the current ADW exec rules" : "Codex permission configuration is missing, unsafe, or drifted"));
+  checks.push(check("permissions:codex", codexValid ? "pass" : "fail", codexValid ? "Codex uses workspace-write, on-request, and the current generated command/app policy" : "Codex permission configuration is missing, unsafe, or drifted"));
   let claudeValid = regularProjectFile(projectRoot, ".claude/settings.json");
   if (claudeValid) {
     try {
       const current = JSON.parse(readFileSync(join(projectRoot, ".claude/settings.json"), "utf8"));
-      claudeValid = JSON.stringify(current) === JSON.stringify(JSON.parse(mergeClaudeSettings(JSON.stringify(current))));
+      claudeValid = JSON.stringify(current) === JSON.stringify(JSON.parse(mergeClaudeSettings(JSON.stringify(current), policy)));
     } catch { claudeValid = false; }
   }
   checks.push(check("permissions:claude", claudeValid ? "pass" : "fail", claudeValid ? "Claude Code auto-allows sandboxed Bash and keeps the ADW hook plus ask/deny backstops" : "Claude Code permission configuration is missing, unsafe, or drifted"));
   return checks;
 }
 
-function managedDevcontainerChecks(projectRoot, execution, check) {
+function managedDevcontainerChecks(projectRoot, execution, policy, check) {
   const directory = join(projectRoot, ".devcontainer");
   const missing = MANAGED_FILES.filter((name) => !existsSync(join(directory, name)));
   if (missing.length > 0) return [check("execution:managed-files", "fail", `managed devcontainer is missing: ${missing.join(", ")}`)];
@@ -167,14 +168,16 @@ function managedDevcontainerChecks(projectRoot, execution, check) {
     && /^[a-z0-9+.-]*(?: [a-z0-9+.-]+)*$/.test(configObject?.build?.args?.ADW_PROJECT_APT_PACKAGES ?? "");
   checks.push(check("execution:generated-files", generatedValid ? "pass" : "fail", generatedValid ? "generated project requirements and setup bytes match the managed marker" : "generated project requirements, setup bytes, schema, or package arguments differ from the managed marker"));
 
-  const permissionsValid = readFileSync(join(directory, "codex.rules"), "utf8") === CODEX_RULES
-    && readFileSync(join(directory, "claude-settings.json"), "utf8") === managedClaudeSettings({ allowedDomains: [...configuredDomains], webAccess: marker.web_access })
+  const permissionsValid = readFileSync(join(directory, "codex.rules"), "utf8") === renderCodexRules(policy)
+    && readFileSync(join(directory, "permission-policy.json"), "utf8") === permissionPolicyJson(policy)
+    && readFileSync(join(directory, "claude-settings.json"), "utf8") === managedClaudeSettings({ allowedDomains: [...configuredDomains], webAccess: marker.web_access, policy })
     && readFileSync(join(directory, "claude-permission-hook.mjs"), "utf8") === readFileSync(join(pluginRoot, "templates/devcontainer/claude-permission-hook.mjs"), "utf8")
     && /COPY \.devcontainer\/codex\.rules/.test(dockerfile)
     && /COPY \.devcontainer\/git-wrapper\.sh \/usr\/local\/bin\/git/.test(dockerfile)
     && /managed-settings\.d\/20-adw\.json/.test(dockerfile)
     && /adw-claude-permission-hook/.test(dockerfile)
     && marker?.codex_rules_sha256 === sha256(readFileSync(join(directory, "codex.rules")))
+    && marker?.permission_policy_sha256 === sha256(readFileSync(join(directory, "permission-policy.json")))
     && marker?.git_wrapper_sha256 === sha256(readFileSync(join(directory, "git-wrapper.sh")))
     && marker?.claude_settings_sha256 === sha256(readFileSync(join(directory, "claude-settings.json")))
     && marker?.claude_hook_sha256 === sha256(readFileSync(join(directory, "claude-permission-hook.mjs")));
@@ -185,10 +188,10 @@ function managedDevcontainerChecks(projectRoot, execution, check) {
   return checks;
 }
 
-function executionChecks(projectRoot, execution, check) {
+function executionChecks(projectRoot, execution, policy, check) {
   const checks = [check("execution:configuration", "pass", `${execution.isolation} isolation`, { isolation: execution.isolation })];
-  checks.push(...permissionChecks(projectRoot));
-  if (execution.isolation === "managed-devcontainer") return [...checks, ...managedDevcontainerChecks(projectRoot, execution, check)];
+  checks.push(...permissionChecks(projectRoot, policy));
+  if (execution.isolation === "managed-devcontainer") return [...checks, ...managedDevcontainerChecks(projectRoot, execution, policy, check)];
   if (execution.isolation === "project-devcontainer") {
     const configured = existsSync(join(projectRoot, ".devcontainer/devcontainer.json"));
     const active = process.env.ADW_PROJECT_DEVCONTAINER === "1" || process.env.REMOTE_CONTAINERS === "true" || process.env.CODESPACES === "true";
@@ -204,7 +207,11 @@ export async function runDoctor(directory, { details = false, checks: selection 
   const projectRoot = realpathSync(directory);
   const check = makeCheck(details);
   if (selection === "permissions") {
-    const checks = permissionChecks(projectRoot);
+    let config;
+    try { config = await loadProjectConfig(projectRoot); }
+    catch (error) { return { ok: false, read_only: true, project_root: projectRoot, checks: [check("permissions:configuration", "fail", error.message)] }; }
+    if (!config.valid) return { ok: false, read_only: true, project_root: projectRoot, checks: [check("permissions:configuration", "fail", "adw.yaml does not match the project policy contract", { errors: config.errors })] };
+    const checks = permissionChecks(projectRoot, config.data.permissions);
     return { ok: !checks.some(({ status }) => status === "fail"), read_only: true, project_root: projectRoot, checks };
   }
 
@@ -230,7 +237,7 @@ export async function runDoctor(directory, { details = false, checks: selection 
   const uniqueComponents = new Set(componentPaths).size === componentPaths.length;
   checks.push(check("components", uniqueComponents ? "info" : "fail", componentPaths.length === 0 ? "component boundaries are discovered from repository evidence" : `${componentPaths.length} component override(s) have unambiguous ownership`, uniqueComponents ? {} : { paths: componentPaths }));
 
-  checks.push(...executionChecks(projectRoot, project.execution, check));
+  checks.push(...executionChecks(projectRoot, project.execution, project.permissions, check));
 
   const providers = Object.entries(project.providers);
   if (providers.length === 0) checks.push(check("providers", "info", "no providers configured; the lightweight workflow is enabled"));

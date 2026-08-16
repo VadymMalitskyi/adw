@@ -16,8 +16,8 @@ Every capability supports four provider-neutral operations: `read`, `create`, `u
 |---|---|---|
 | `work_tracker` | Azure DevOps Boards, GitHub Issues | Read a work item; create a parent or child item; update its content; link items or a pull request |
 | `code_host` | GitHub, Azure DevOps Repos | Read repository and pull-request state; create or update one draft pull request per branch; link related objects |
-| `observability` | Datadog | `read` only — logs, metrics, traces, monitors, incidents, CI evidence. `create`, `update`, and `link` are unavailable regardless of what the credential could do |
-| `knowledge` | Notion | Read documentation; publish or update a page only with separate authorization; link a page to the change |
+| `observability` | Datadog | Read logs, metrics, traces, monitors, incidents, and CI evidence; configured writes require `access: read-write` and effective permission policy |
+| `knowledge` | Notion | Read documentation; publish, update, or link a page under the effective permission policy |
 
 Provider references live in `plugin/integrations/providers/` and are instructions for a skill to read, not code. Adding a provider such as Jira, Linear, Sentry, or Confluence means adding a reference document, not changing the workflow.
 
@@ -64,7 +64,7 @@ Azure DevOps supports `work_tracker` through Boards and `code_host` through Repo
 
 ## Reads are the default; writes are not
 
-Read-only provider operations within a configured capability run without a fresh prompt. Every mutation — a tracker item, a pull request, a knowledge page — follows the same protocol:
+Read-only provider operations within a configured capability run without a fresh prompt. Mutations default to `ask`; an exact reviewed operation/tool mapping may make a bounded mutation `allow`. For every mutation that remains `ask`:
 
 1. Read the current target state and confirm the capability actually grants the operation.
 2. Show the exact provider, target, operation, and redacted payload, including whether a retry could duplicate something.
@@ -75,7 +75,7 @@ Read-only provider operations within a configured capability run without a fresh
 
 There are no run-record receipts. ADW does not maintain a second database of what it did beside Git and the providers themselves — the pull request, the tracker item, and the commit are the record. An organization needing richer audit evidence can add it in its own tooling.
 
-Confirming a plan authorizes local implementation. It does not authorize any later external write. Authentication proves capability, never intent.
+Confirming a plan authorizes local implementation. It does not authorize any later external write unless the reviewed generated permission policy already classifies that exact operation as `allow`. Authentication proves capability, never intent.
 
 ADW never merges a pull request, marks one ready, publishes a release, publishes a package, deploys, or applies infrastructure. It never closes, resolves, or transitions a tracker item to a terminal state, because merge and deployment are outside its scope.
 

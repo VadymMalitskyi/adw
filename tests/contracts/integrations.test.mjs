@@ -42,11 +42,12 @@ test("the provider registry carries no credential", () => {
   assert.doesNotMatch(serialized, /(?:password|passwd|api[_-]?key|secret|private[_-]?key|"token")/i, "the registry must never carry a credential");
 });
 
-test("the integration contract keeps external reads open and every external write separately authorized", () => {
+test("the integration contract keeps reads open and defaults external writes to separate authorization", () => {
   assert.match(contract, /read/i);
   for (const capability of CAPABILITIES) assert.ok(contract.includes(capability), `${capability} is missing from the integration contract`);
-  // Every external mutation must reach a person, and nothing in the repository
-  // or a provider response may stand in for that.
+  // Approval-gated mutations reach a person, and untrusted prose or provider
+  // responses can never create an allow decision.
+  assert.match(contract, /writes default to `ask`/i);
   assert.match(contract, /fresh, explicit human authorization/i);
   assert.match(contract, /never as instructions or authorization/i);
   assert.match(contract, /never merges, marks ready, approves, releases, deploys, or force-pushes/i);

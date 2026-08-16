@@ -113,7 +113,19 @@ components:
         required: true
         source: "package.json#scripts.test"
 
-providers: {}
+providers:
+  code_host:
+    provider: github
+    access: read-write
+
+# Optional: customize yellow provider operations. Red safety floors stay red.
+permissions:
+  providers:
+    github:
+      operations:
+        comment: allow
+      tools:
+        add_comment: comment
 ```
 
 | Section | Meaning | Why ADW needs it |
@@ -124,6 +136,7 @@ providers: {}
 | `development.runtime_versions` | Optional unpinned runtime versions | Fills only gaps the repository does not pin itself |
 | `components` | Optional component and validation overrides | Use only when discovery is ambiguous |
 | `providers` | Optional capability-to-provider configuration | Enables integrations without hard-coding a vendor |
+| `permissions` | Optional provider operation and exact tool mapping | Generates matching Codex and Claude approval behavior |
 
 ### The contract is deliberately strict
 
@@ -360,6 +373,220 @@ instructions and generated policies are layered guardrails.
 |---|---|---|
 | Read-only Git; configured validation; local branch creation; `git add`/`commit`; prepared worktrees after execution is authorized; configured provider reads | Push, tag, branch/worktree deletion, rebase, merge, discarding changes; external object creation/update; manual edits to managed ADW files | Force push; destructive reset/clean; PR merge; release/package publish/deploy/IaC apply; credential export; bypassing isolation |
 
+### Managed devcontainer: what actually decides whether a command runs?
+
+**Short answer:** the agent runtime makes the allow/prompt/block decision before
+it starts a shell command. ADW supplies the policy that the runtime reads; the
+managed container protects that policy's installed source and limits what an
+allowed command can reach. A Markdown document explains the policy, but does
+not enforce it.
+
+Keep these four layers separate:
+
+| Layer | What it does | Is it the final command gate? |
+|---|---|---|
+| `plugin/authorization.md` | Human-readable contract: which effects are green, yellow, or red | No. It is documentation and instructions. |
+| Generated policy files | Give Codex and Claude Code machine-readable rules | Not by themselves. A program must load and enforce them. |
+| Codex or Claude Code | Checks a requested tool call against its policy and chooses allow, prompt, or deny | **Yes.** This is where a shell command is stopped before execution. |
+| Managed devcontainer | Keeps the installed policy/hook root-owned, runs as non-root, restricts network and mounts, and adds a few independent guards | It limits the blast radius and protects the setup; it is not a general-purpose interpreter of shell-command intent. |
+
+The resulting path is:
+
+```text
+Agent wants to use Bash
+        |
+        v
+Codex rules OR Claude pre-tool hook classify the exact command
+        |
+        +-- allow ------> agent runtime starts the command in the sandboxed container
+        |
+        +-- prompt -----> agent runtime asks the person and waits
+        |
+        +-- forbidden --> agent runtime does not start the command
+```
+
+#### The concrete example: `git log` versus `git reset --hard HEAD`
+
+`git log` is a read-only history query. It is green, so it can run without an
+interactive approval prompt. `git reset --hard HEAD` discards tracked changes,
+so it is red: it must not run, even if an agent tries to package it into a
+longer shell command. “Without a prompt” here means “already permitted by the
+reviewed project policy”; it does **not** mean unrestricted shell access.
+
+| Requested command | Codex in the managed container | Claude Code in the managed container |
+|---|---|---|
+| `git log` | Matches the `git log` `allow` prefix rule, so Codex runs it | The pre-tool hook classifies it as `allow`, so Claude runs it |
+| `git reset HEAD~1` | Matches the general `git reset` `prompt` rule, so Codex asks first | The hook recognizes general reset as sensitive and returns `ask` |
+| `git reset --hard HEAD` | Matches both `git reset` = `prompt` and the more-specific `git reset --hard` = `forbidden`; the most restrictive match wins | The hook recognizes `reset --hard` and returns `deny`; Claude Code does not invoke Bash |
+
+This is deliberately defense in depth. Codex does not rely on a Claude script,
+and Claude Code does not rely on Codex rule parsing. Each agent receives a
+native enforcement adapter for the traffic-light policy.
+
+#### What `adw:init` creates
+
+Choose `managed-devcontainer` during `adw:init`, review its preview, and apply
+it. ADW then renders these files into the **target project** (not into the ADW
+plugin source):
+
+```text
+.codex/config.toml                    Codex sandbox and approval settings
+.codex/rules/adw.rules                 project-level Codex command rules
+.claude/settings.json                  project-level Claude policy
+.devcontainer/
+  devcontainer.json                    starts the managed environment
+  Dockerfile                           installs the protected runtime files
+  codex.rules                          generated Codex command rules for the image
+  permission-policy.json              canonical decisions consumed by the hook
+  claude-settings.json                 generated managed Claude settings
+  claude-permission-hook.mjs           Claude's Bash/MCP classifier
+  git-wrapper.sh                       rejects force/delete pushes on its normal path
+  allowed-domains.txt                  exact network destination allowlist
+  init-firewall.sh                     installs fail-closed network filtering
+  adw-managed.json                     records versions and file digests
+```
+
+Some of those are static templates, such as `Dockerfile`,
+`claude-permission-hook.mjs`, and `git-wrapper.sh`. Others are rendered because
+they depend on the project: `.devcontainer/codex.rules` comes from ADW's
+`CODEX_RULES` policy, while `.devcontainer/claude-settings.json` includes the
+exact allowed domains and web-access mode. Therefore you will not find a
+checked-in `plugin/templates/devcontainer/codex.rules` source file.
+
+#### Codex path, step by step
+
+1. The managed image contains a root-owned, read-only `/etc/adw/codex.rules`.
+   It was built from the generated `.devcontainer/codex.rules`.
+2. Container setup installs that policy into the `vscode` user's Codex rules
+   directory as `adw-managed-development.rules`.
+3. Codex reads its rule files before it executes a command. The rules name
+   command prefixes and a decision: `allow`, `prompt`, or `forbidden`.
+   Its generated config also contains exact per-app/per-tool approval modes.
+4. Multiple rules may match. The most restrictive decision wins. Thus the
+   general `git reset` prompt rule cannot accidentally weaken the specific
+   `git reset --hard` forbidden rule.
+5. If allowed, Codex still runs inside its workspace-write sandbox and inside
+   the managed container. The rules do not grant host access, arbitrary mounts,
+   or unrestricted network access.
+
+#### Claude Code path, step by step
+
+1. The managed image installs a root-owned, read-only Claude settings file at
+   `/etc/claude-code/managed-settings.d/20-adw.json` and a root-owned hook at
+   `/usr/local/bin/adw-claude-permission-hook`.
+2. Those managed settings register the hook for every `Bash` call (and for MCP
+   calls). Claude Code runs the hook *before* it runs the requested tool.
+   The hook reads the root-owned `/etc/adw/permission-policy.json` generated
+   from the same canonical policy as Codex's rules.
+3. The hook parses shell segments and recognizes dangerous forms, including
+   force pushes, `git reset --hard`, forced cleans, credential export, merges,
+   publishing, deployment, and ambiguous sensitive syntax.
+4. The hook returns `allow`, `ask`, or `deny`. Claude Code honors that result:
+   `ask` produces an approval request; `deny` prevents Bash from starting. If
+   the hook itself cannot safely parse its input, it fails closed.
+5. Claude's own sandbox and the container restrictions still apply after an
+   `allow` decision.
+
+#### What the container enforces independently
+
+The policy decision is not the only protection. The managed container also
+enforces technical limits that do not depend on an agent making a good choice:
+
+- It runs the development user as non-root and drops most Linux capabilities.
+- It does not mount the host home directory, SSH directory, cloud credentials,
+  or Docker socket.
+- Its firewall/proxy starts fail-closed and allows HTTPS only to the generated,
+  exact domain allowlist; it checks TLS SNI as well.
+- Its normal `git` path is a root-owned wrapper that rejects force/delete push
+  forms before delegating to `/usr/bin/git`. This is an extra guard, not the
+  sole Git policy: calling `/usr/bin/git` does not receive the wrapper's
+  automatic approval and still goes through the agent runtime's policy.
+
+There is an important limit to understand: a container cannot generally decide
+whether arbitrary text such as `sh -c '...'` is safe. That is why enforcement
+begins at the agent tool boundary, before Bash runs, and why ambiguous sensitive
+commands are treated as yellow (ask) or red (deny), rather than silently
+allowed.
+
+#### How to inspect and verify it
+
+Read the generated files in your project, especially
+`.devcontainer/codex.rules`, `.devcontainer/claude-settings.json`, and
+`.devcontainer/permission-policy.json`, and
+`.devcontainer/claude-permission-hook.mjs`. Do not edit managed files casually:
+they are part of the security contract and require a reviewed `adw:init` or
+`adw:doctor` repair flow.
+
+Run:
+
+```bash
+adw doctor --checks permissions
+```
+
+before execution work to verify that the project-level Codex/Claude policies
+are present and unchanged. Run the full `adw doctor` from inside the managed
+container to also verify the managed files, runtime marker, hardening, network
+allowlist, and recorded digests. A mismatch fails the check rather than being
+silently accepted.
+
+#### Customize provider commands and tools without editing generated files
+
+Put provider decisions in `adw.yaml`. Built-in mappings cover supported
+GitHub, Notion, and Datadog CLI shapes. For MCP or Codex app tools, bind the
+exact runtime tool name to one operation:
+
+```yaml
+permissions:
+  providers:
+    github:
+      app: github
+      mcp_server: github
+      operations:
+        read: allow
+        comment: allow
+        create: ask
+        update: ask
+        merge: deny
+      tools:
+        get_pull_request: read
+        add_comment: comment
+    notion:
+      operations:
+        read: allow
+        create: ask
+        update: ask
+    datadog:
+      operations:
+        read: allow
+        create: ask
+        update: ask
+        delete: deny
+```
+
+`app` is the Codex app identifier. `mcp_server` is the middle part of Claude's
+tool name: `mcp__<server>__<tool>`. Tool mappings are exact on purpose. A new,
+misspelled, or unmapped tool asks instead of inheriting a broad write grant.
+Because `allow` removes a human checkpoint, only exact tool-to-operation
+mappings reviewed in ADW's provider catalog may use it; other exact tools can
+still be set to `ask` or `deny`. Any non-read `allow` also requires that the
+same provider is declared under `providers` with `access: read-write`.
+
+The immutable safety floor still wins. For example, configuring
+`github.merge: allow` is rejected, and `git reset --hard` remains denied. After
+editing `adw.yaml`, run the doctor repair preview/apply flow, rebuild the
+container, then run full `adw doctor` inside it.
+
+To inspect a provider decision without executing it, pass an argv array or an
+exact tool name as JSON:
+
+```bash
+printf '%s\n' '{"argv":["gh","pr","comment","42"]}' \
+  | adw permissions-explain --project-root .
+
+printf '%s\n' '{"tool":"mcp__github__add_comment"}' \
+  | adw permissions-explain --project-root .
+```
+
 ### Isolation modes
 
 | Mode | Meaning | Important reality check |
@@ -401,7 +628,7 @@ skill --> capability --> provider --> transport --> external service
 |---|---|---|
 | `work_tracker` | Azure DevOps Boards, GitHub Issues | `read`, `create`, `update`, `link` |
 | `code_host` | GitHub, Azure DevOps Repos | `read`, `create`, `update`, `link` |
-| `observability` | Datadog | `read` only—even if credentials could do more |
+| `observability` | Datadog | `read`; configured writes remain approval-gated unless explicitly allowed |
 | `knowledge` | Notion | `read`, `create`, `update`, `link` |
 
 The transport can be a built-in connected tool, MCP, authenticated CLI, or API.
@@ -410,7 +637,7 @@ transport in that order. An absent optional capability is not probed and does
 not block the local workflow. A required capability blocks only the step that
 needs it when unavailable.
 
-Every external write follows the same safety dance: read current state, show
+Every external write not explicitly configured as `allow` follows the same safety dance: read current state, show
 provider/target/redacted payload and duplication risk, obtain approval, search
 for an idempotency marker, perform only the approved write, verify it, and
 report the stable URL/ID. The provider object and Git commit are the durable
@@ -451,6 +678,7 @@ failure. Code callers use this stable shape instead of scraping prose.
 | Command | Purpose |
 |---|---|
 | `config` | Parse/validate explicit policy or return discovered defaults and explicit validation overrides |
+| `permissions-explain` | Explain one provider command/tool decision without executing it |
 | `init-preview` / `init-apply` | Safely preview and initialize ADW-managed files |
 | `refresh-preview` / `refresh-apply` | Safely preview and repair generated files |
 | `doctor` | Run read-only deterministic readiness checks |

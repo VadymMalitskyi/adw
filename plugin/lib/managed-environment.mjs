@@ -9,7 +9,8 @@
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
-import { CODEX_RULES, PERMISSION_PROFILE, managedClaudeSettings } from "./permissions.mjs";
+import { PERMISSION_PROFILE, managedClaudeSettings, renderCodexRules } from "./permissions.mjs";
+import { defaultPermissionPolicy, permissionPolicyJson } from "./permission-policy.mjs";
 import { ContractError } from "./safe-files.mjs";
 import { RUNTIMES, WEB_ACCESS_MODES, isValidDomain } from "./config.mjs";
 
@@ -51,7 +52,7 @@ const AGENT_DOMAINS = [
 
 export const MANAGED_FILES = Object.freeze([
   "devcontainer.json", "Dockerfile", "allowed-domains.txt", "egress-proxy.mjs", "init-firewall.sh",
-  "post-create.sh", "codex.rules", "git-wrapper.sh", "claude-settings.json", "claude-permission-hook.mjs",
+  "post-create.sh", "codex.rules", "permission-policy.json", "git-wrapper.sh", "claude-settings.json", "claude-permission-hook.mjs",
   "project-requirements.json", "project-setup.sh", "adw-managed.json",
 ]);
 
@@ -574,7 +575,7 @@ function normalizedIntegrationDomains(domains) {
   return [...new Set(domains)].sort();
 }
 
-export function managedDevelopmentFiles(projectRoot, templateRoot, { webAccess = "public-pages", integrationDomains = [], runtimeVersions = {}, pluginVersion } = {}) {
+export function managedDevelopmentFiles(projectRoot, templateRoot, { webAccess = "public-pages", integrationDomains = [], runtimeVersions = {}, pluginVersion, permissionPolicy = defaultPermissionPolicy() } = {}) {
   if (!WEB_ACCESS_MODES.includes(webAccess)) throw new ContractError(`unsupported web access profile: ${webAccess}`);
   const configuredIntegrationDomains = normalizedIntegrationDomains(integrationDomains);
   const requirements = discoverDevelopmentEnvironment(projectRoot, { runtimeVersions });
@@ -606,7 +607,9 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { webAccess =
   addDomainSection("Project dependency sources detected during ADW initialization", requirements.allowed_domains);
   const allowedDomains = `${allowedBase}${domainSections.length > 0 ? `\n\n${domainSections.join("\n\n")}` : ""}\n`;
   const sandboxDomains = allowedDomains.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith("#"));
-  const claudeSettings = managedClaudeSettings({ allowedDomains: sandboxDomains, webAccess });
+  const codexRules = renderCodexRules(permissionPolicy);
+  const policyJson = permissionPolicyJson(permissionPolicy);
+  const claudeSettings = managedClaudeSettings({ allowedDomains: sandboxDomains, webAccess, policy: permissionPolicy });
 
   const marker = readJson(join(templateRoot, "adw-managed.json"), "managed devcontainer marker");
   marker.schema = 3;
@@ -617,7 +620,8 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { webAccess =
   marker.permission_profile = PERMISSION_PROFILE;
   marker.integration_domains = configuredIntegrationDomains;
   marker.allowed_domains_sha256 = sha256(allowedDomains);
-  marker.codex_rules_sha256 = sha256(CODEX_RULES);
+  marker.codex_rules_sha256 = sha256(codexRules);
+  marker.permission_policy_sha256 = sha256(policyJson);
   marker.git_wrapper_sha256 = sha256(readFileSync(join(templateRoot, "git-wrapper.sh"), "utf8"));
   marker.claude_settings_sha256 = sha256(claudeSettings);
   marker.claude_hook_sha256 = sha256(readFileSync(join(templateRoot, "claude-permission-hook.mjs"), "utf8"));
@@ -634,7 +638,8 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { webAccess =
     ["egress-proxy.mjs", readFileSync(join(templateRoot, "egress-proxy.mjs"), "utf8")],
     ["init-firewall.sh", readFileSync(join(templateRoot, "init-firewall.sh"), "utf8")],
     ["post-create.sh", readFileSync(join(templateRoot, "post-create.sh"), "utf8")],
-    ["codex.rules", CODEX_RULES],
+    ["codex.rules", codexRules],
+    ["permission-policy.json", policyJson],
     ["git-wrapper.sh", readFileSync(join(templateRoot, "git-wrapper.sh"), "utf8")],
     ["claude-settings.json", claudeSettings],
     ["claude-permission-hook.mjs", readFileSync(join(templateRoot, "claude-permission-hook.mjs"), "utf8")],

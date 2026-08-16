@@ -8,8 +8,8 @@ ADW depends on four capabilities:
 
 - `work_tracker`: read work items; create, update, comment on, and link them.
 - `code_host`: read repository and pull-request state; create or update draft pull requests.
-- `observability`: bounded read-only investigation of logs, metrics, traces, monitors, incidents, and CI evidence.
-- `knowledge`: read documentation; publish or update it only with separate authorization.
+- `observability`: bounded investigation of logs, metrics, traces, monitors, incidents, and CI evidence; writes are disabled by default and require explicit read-write provider access plus operation policy.
+- `knowledge`: read documentation; publish or update it under the effective permission policy.
 
 Keep provider and transport separate. A provider implements a capability; a transport reaches it through `native`, `mcp`, `cli`, or `api`. Prefer an already available authenticated transport in that order unless `adw.yaml` selects one with `transport`. Never authenticate, refresh credentials, install a tool, or write configuration implicitly.
 
@@ -18,9 +18,9 @@ Each capability supports exactly four provider-neutral operations. A provider re
 | Operation | Meaning |
 |---|---|
 | `read` | Fetch bounded existing state for context. |
-| `create` | Create one new object after separate authorization. |
-| `update` | Change one existing object after separate authorization. |
-| `link` | Associate two existing objects after separate authorization. |
+| `create` | Create one new object under its effective operation decision. |
+| `update` | Change one existing object under its effective operation decision. |
+| `link` | Associate two existing objects under its effective operation decision. |
 
 ## Availability
 
@@ -54,9 +54,9 @@ A plan states one delivery strategy:
 
 ADW never merges, marks ready, approves, releases, deploys, or force-pushes in either strategy.
 
-## Before every external write
+## Before every approval-gated external write
 
-External reads need no write authorization but must stay within the configured capability scope. Before every external mutation, or one clearly enumerated batch:
+External reads need no write authorization but must stay within the configured capability scope. An exact operation/tool mapping may classify a bounded write as `allow`; otherwise writes default to `ask`. Before every mutation classified as `ask`, or one clearly enumerated batch:
 
 1. Read the current target and check capability, provider, transport, identity, repository/project, and permissions.
 2. Present the exact provider, target, operation, and redacted payload. Explain material effects and whether a retry could duplicate anything.
@@ -72,5 +72,5 @@ There is no receipt artifact and no run record. The provider's own object, the G
 
 - Planning may read configured context. It may create or link a tracker parent only after separate mutation authorization.
 - A user confirming a plan authorizes execution. It never authorizes an external write; each of those is asked for separately when it happens.
-- Execution may read configured context and propose writes, each separately authorized. The entire `observability` capability stays read-only.
+- Execution may read configured context and propose writes. Each write is separately authorized unless the exact generated operation policy says `allow`. Observability writes additionally require `access: read-write`.
 - Never close a work item, mark a pull request ready, approve or merge it, deploy, release, publish a package, change a monitor, or send a notification.
