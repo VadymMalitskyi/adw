@@ -12,7 +12,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ContractError, InputError, PathError, isObject, isSafeRelativePath, normalizeRelativePath } from "./safe-files.mjs";
-import { isValidBranchName } from "./config.mjs";
+import { DEFAULT_BRANCH_TEMPLATE, isValidBranchName, isValidBranchTemplate, renderBranchTemplate } from "./config.mjs";
 
 const IDENTIFIER = /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/;
 const CHANGE_ID = /^[a-z0-9](?:[a-z0-9_-]|\.[a-z0-9_-]+)*$/;
@@ -93,6 +93,8 @@ export function normalizeGroupRequest(raw) {
   if (realpathSync(top.stdout) !== projectRoot) throw new InputError("project_root must be the Git top level");
   if (typeof raw.change_id !== "string" || !CHANGE_ID.test(raw.change_id)) throw new ContractError("change_id must be a safe change id");
   if (!isValidBranchName(raw.base_branch)) throw new ContractError("base_branch must be a valid Git branch name");
+  const branchTemplate = raw.branch_template ?? DEFAULT_BRANCH_TEMPLATE;
+  if (!isValidBranchTemplate(branchTemplate)) throw new ContractError("branch_template must include {change_id} and {group_id} and render to a valid Git branch name");
   if (typeof raw.base_commit !== "string" || !COMMIT.test(raw.base_commit)) throw new ContractError("base_commit must be a 40-hex commit");
   if (!Array.isArray(raw.groups) || raw.groups.length === 0) throw new ContractError("at least one group is required");
 
@@ -118,7 +120,7 @@ export function normalizeGroupRequest(raw) {
       const cwd = entry.cwd === undefined || entry.cwd === "." ? "." : requireRelativePath(entry.cwd, `group ${groupId} validation[${index}].cwd`);
       return { command: entry.command, cwd, required: entry.required !== false, ...(entry.timeout_ms ? { timeout_ms: entry.timeout_ms } : {}) };
     });
-    const branch = item.branch ?? `adw/${raw.change_id}/${groupId}`;
+    const branch = item.branch ?? renderBranchTemplate(branchTemplate, raw.change_id, groupId);
     if (!isValidBranchName(branch)) throw new ContractError(`group ${groupId} branch is not a valid Git branch name`);
     const worktree = requireRelativePath(item.worktree ?? `worktrees/${raw.change_id}/${groupId}`, `group ${groupId} worktree`);
     if (branches.has(branch)) throw new ContractError(`duplicate group branch: ${branch}`);

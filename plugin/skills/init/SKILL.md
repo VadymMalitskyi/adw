@@ -1,13 +1,13 @@
 ---
 name: init
-description: Initialize ADW in any repository state — an empty directory, an unborn Git repository, or an established project — by detecting what the repository already proves and asking only what it cannot. Previews the exact files, then writes them after explicit approval. Use when adopting ADW in a project for the first time.
+description: Initialize ADW in any repository state — an empty directory, an unborn Git repository, or an established project — through a guided setup interview that recommends evidence-based choices, previews exact files, then writes them after explicit approval. Use when adopting ADW in a project for the first time.
 ---
 
 # Initialize ADW
 
 One skill covers every repository state. Detect what the repository proves,
-ask only what evidence cannot settle, show the exact bytes, then write them
-after the user approves.
+present it as a recommendation, ask the user to confirm or change each setup
+area, show the exact bytes, then write them after the user approves.
 
 Read `<plugin-root>/authorization.md` first and follow it throughout. Resolve
 the plugin root as described there.
@@ -30,27 +30,55 @@ Read enough of the repository to answer the questions below honestly: the
 manifests, lockfiles, `README`, and existing `.devcontainer/`. Do not write
 anything yet and do not run project commands.
 
-## 2. Ask only what evidence cannot settle
+## 2. Run a guided setup interview
 
-Ask these, and nothing else. Each has a default you should state.
+Ask every topic below, even when repository evidence supplies a recommendation.
+Keep the interview compact: state the detected value, the recommended default,
+and the effect of changing it. Let the user accept the recommendation, choose
+another supported value, or say that they want no override recorded. Ask in
+short rounds and wait for the user's answer before moving on; do not dump the
+whole questionnaire into one message.
 
-1. **Isolation** — `provider-sandbox` is the default lightweight option.
+1. **Base branch** — state the detected branch and ask whether ADW should use
+   it. An explicit answer records `git.base_branch`; otherwise it stays Git
+   discovery.
+2. **Group branch convention** — recommend
+   `adw/{change_id}/{group_id}` and ask for the template to use for ADW group
+   branches. It must include both `{change_id}` and `{group_id}` and render to
+   a valid Git branch name. An explicit answer records `git.branch_template`
+   and is passed to the worktree commands during execution.
+3. **Isolation** — `provider-sandbox` is the default lightweight option.
    Offer `managed-devcontainer` when the project needs a generated, hardened,
    reproducible container with fail-closed egress, and `project-devcontainer`
    when the repository already owns `.devcontainer/devcontainer.json`. Say
    plainly that `provider-sandbox` is the weaker boundary.
-2. **Web access** — managed container only. `public-pages` (default) allows a
+4. **Web access** — managed container only. `public-pages` (default) allows a
    bounded public page-read channel; `hosted-only` restricts egress to exactly
    the allowlisted domains.
-3. **Runtime versions** — only for runtimes the preview reports as unresolved.
-   Never invent a version the repository already pins.
-4. **Providers** — optional work tracker, code host, observability, and
-   knowledge integrations, with the exact hostnames each needs so the managed
-   container can reach them. Never ask for or accept a credential.
+5. **Runtime versions** — review every detected runtime. Keep repository-pinned
+   versions as evidence; ask whether each unresolved runtime needs a shared
+   numeric version. Never invent a version the repository already pins.
+6. **Components and validation** — review each detected component and its
+   validation commands. Ask whether discovery is sufficient or whether the
+   project needs an explicit component or validation override.
+7. **Providers** — ask separately about optional work tracker, code host,
+   observability, and knowledge integrations, with the exact hostnames each
+   needs so the managed container can reach them. Never ask for or accept a
+   credential.
+8. **Workflow conventions** — ask about commit-message, pull-request, review,
+   and issue-linking conventions. Explain that only the branch template is a
+   current ADW setting; keep other conventions in existing repository-owned
+   instructions or contributor documentation. Do not create or rewrite those
+   files during init.
+
 Do not ask about execution mode, plan templates, or documentation branches.
-Repository instruction files own project conventions. Personal preferences
-belong in `~/.config/adw/profile.md` or the Git-ignored `.adw/user.md`, never
-in the shared project policy.
+Repository instruction files own conventions that do not have an ADW setting.
+Personal preferences belong in `~/.config/adw/profile.md` or the Git-ignored
+`.adw/user.md`, never in the shared project policy.
+
+If the user asks to persist a convention for which ADW has no setting, stop
+after the preview and propose a separate, deliberate documentation change.
+Do not silently add unsupported fields to `adw.yaml`.
 
 `<plugin-root>/templates/adw.yaml` documents every field the generated
 configuration may contain, if you need to explain one.
@@ -67,22 +95,26 @@ with the answers as JSON on stdin:
 
 ```json
 {
+  "base_branch": "main",
+  "branch_template": "adw/{change_id}/{group_id}",
   "isolation": "managed-devcontainer",
   "web_access": "public-pages",
-  "base_branch": "main",
   "runtime_versions": { "dotnet": "8" },
   "providers": { "code_host": { "provider": "github", "required": false, "domains": ["api.github.com"] } }
 }
 ```
 
-Every field is optional. Omit `base_branch` to use the detected default branch,
-and omit `components` to use detected components as planning evidence. Init
-writes `adw.yaml` only when the approved answers introduce a shared policy or
-override; it does not persist discovery as configuration.
+Every field is optional. Omit `base_branch` and `branch_template` to use the
+detected/default Git conventions, and omit `components` to use detected
+components as planning evidence. Init writes `adw.yaml` only when the approved
+answers introduce a shared policy or override; it does not persist discovery as
+configuration.
 
 Present to the user:
 
 - the repository state and whether apply will run `git init`;
+- each recommended choice, the user's selection, and any choice that remains
+  repository discovery rather than shared policy;
 - the chosen isolation and what it means for them;
 - every path under `writes`, grouped as configuration, permission policy,
   managed container, and ignore entries;

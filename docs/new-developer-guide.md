@@ -1,15 +1,56 @@
 # ADW, explained for a new developer
 
 Welcome. This guide explains **what ADW does, why it is shaped this way, and
-what actually happens when you use it**. It is intentionally written in short,
-stand-alone sections. You can read it top to bottom once, then return to the
-parts you need while working.
+what actually happens when you use it**.
+
+You do not need to read this cover to cover before you can work. Start with
+**Start here**, then use the jump table when a task puts you in a new part of
+the workflow. Each section tries to answer one question at a time. The longer
+sections are reference material: skim their opening summary first and come back
+only when that detail becomes useful.
+
+> **A note on readability:** this is designed to be friendly to a busy brain.
+> Short sections, repeated decision rules, concrete examples, and explicit next
+> actions are intentional. If you lose your place, run `adw:status`; it is the
+> safe reset point for both the project and your mental context.
 
 > **The 30-second version:** ADW is a Git-native workflow shared by Codex and
 > Claude Code. A person chooses the work and gives consent; an agent reasons
 > about the work; a small CLI performs the safety-critical deterministic parts;
 > Git and configured providers keep the durable state. ADW does not run a
 > server, retain a workflow database, merge PRs, deploy, or publish anything.
+
+## Start here: your first ten minutes
+
+If this is an existing ADW project, do these in order:
+
+1. Run `adw:onboard` if this is your first time in this checkout or on this
+   machine. It explains the project environment and any authentication you need
+   to complete yourself.
+2. Run `adw:doctor`. Read its outcome first. If it says the environment is
+   ready, you can move on. If it proposes a repair, inspect the preview before
+   approving it.
+3. Run `adw:status` before you begin a task. It tells you whether work is
+   already in progress and gives one recommended next action.
+4. Choose a route: `adw:quick` for a truly small correction; `adw:plan` for
+   anything uncertain, multi-part, or consequential.
+
+If you are setting ADW up for a project for the first time, begin with
+`adw:init` instead. Do not rerun init merely because you cannot find an
+`adw.yaml`; that file is optional.
+
+### Jump to the part you need
+
+| If you are trying to… | Read this |
+|---|---|
+| Understand the big idea | [First: the mental model](#first-the-mental-model) |
+| Decide between a quick change and a planned change | [Use `quick` or `plan`?](#use-quick-or-plan) |
+| Join or set up a project | [Initialization and joining a project](#initialization-and-joining-a-project) |
+| Make your first change | [A guided first change](#a-guided-first-change) |
+| Continue interrupted work | [Resume with `adw:status`](#6-resume-with-adwstatus) |
+| Understand approvals and safety limits | [Safety and authorization](#safety-and-authorization-the-traffic-light-model) |
+| Fix a confusing setup problem | [When something feels odd](#when-something-feels-odd) |
+| Learn the implementation details | [Under the hood: repository map](#under-the-hood-repository-map) |
 
 ## First: the mental model
 
@@ -87,6 +128,52 @@ review, tests, validation, and a commit.
 Use `adw:plan` for everything else. “Plan” is not bureaucratic here; it is how
 ADW gives isolated agents enough context to work safely and in parallel.
 
+### A guided first change
+
+Imagine your first task is: “Correct a typo in the settings screen and add a
+test if the project already tests that screen.” Here is the entire conversation
+you should expect.
+
+```text
+You:      Please use adw:quick to fix the typo in Settings.
+ADW:      I found one UI component and its existing tests. I will change these
+          two paths, run this test command, review the diff, and commit locally.
+You:      Yes, do that.
+ADW:      [prepares an isolated branch, implements, reviews, validates]
+ADW:      Done locally. The test passed. Here is the commit and the diff
+          summary. Would you like me to push it or create a draft PR?
+You:      Yes, create a draft PR.
+ADW:      I will create this draft PR with this title/body against this branch.
+          Please confirm this external write.
+```
+
+There are two important pauses in that example:
+
+- Your approval to execute permits the **local** change, tests, and local
+  commit. It does not silently permit a network action.
+- A push or draft PR is a separate, specific request because it changes a
+  system outside your checkout.
+
+For a larger task, replace `adw:quick` with `adw:plan`. Read the overview and
+the phase you are considering; you only need to confirm the one phase you want
+to run now. It is fine to stop after planning. A useful plan is progress, not
+a promise to start implementation immediately.
+
+### The one-minute decision check
+
+When you are unsure which route to use, answer these in order:
+
+1. Can I name the desired change, affected component, and likely files without
+   investigation? If no, plan.
+2. Is it limited to one small component and a handful of files? If no, plan.
+3. Does it avoid public interfaces, schemas, dependencies, infrastructure,
+   permissions, and security behavior? If no, plan.
+4. Would a second developer understand and safely review it in one small diff?
+   If no, plan.
+
+Only four confident “yes” answers make `quick` a good fit. Choosing `plan`
+when you are uncertain is normal; it is not an escalation or a failure.
+
 ## Optional project policy: `adw.yaml`
 
 `adw.yaml` is optional. Use it for a small, committed shared policy when a
@@ -99,6 +186,7 @@ adw: 1
 
 git:
   base_branch: main
+  branch_template: "adw/{change_id}/{group_id}"
 
 execution:
   isolation: provider-sandbox
@@ -132,6 +220,7 @@ permissions:
 |---|---|---|
 | `adw: 1` | The contract version | Prevents silent changes in meaning |
 | `git.base_branch` | Optional override for the branch new work starts from | Git normally supplies this |
+| `git.branch_template` | Optional naming convention for execution-group branches | Default: `adw/{change_id}/{group_id}`; both placeholders are required |
 | `execution` | Isolation mode and, for a managed container, web-access policy | Tells ADW what safety boundary must be active |
 | `development.runtime_versions` | Optional unpinned runtime versions | Fills only gaps the repository does not pin itself |
 | `components` | Optional component and validation overrides | Use only when discovery is ambiguous |
@@ -234,6 +323,24 @@ and explains the everyday routes. It never reselects the project's isolation
 mode or providers.
 
 ## The main change loop, slowly
+
+### What you need to do—and what ADW handles
+
+You are not expected to manually manage the branches, worktrees, reviews, or
+state reconstruction described below. Your job is to state the goal, read the
+important summaries, and approve meaningful effects. ADW's coordinator turns
+an approved phase into the smaller technical steps.
+
+| You decide | ADW coordinates |
+|---|---|
+| The outcome you want and what is out of scope | Repository investigation and a proposed plan |
+| Whether a phase should start | Isolated branches/worktrees and bounded agent packets |
+| Whether a proposed external action should happen | Independent diff review, validation, and an honest result |
+| When to pause or change direction | Durable Git state so the work can be resumed later |
+
+**Keep this rule handy:** a clear summary is a cue to decide, not a demand to
+approve. Ask for a smaller phase, a different plan, or a pause whenever the
+scope is not what you expected.
 
 ### 1. Plan
 
@@ -348,7 +455,36 @@ You can close the session at any point. `adw:status` reads, but does not modify:
 It ends with the most useful next action. There is intentionally no “run
 record,” approval artifact, docs branch, or hidden ADW database to recover.
 
+### If you are interrupted: a tiny recovery script
+
+Interruptions are expected. Do not try to reconstruct the situation from an
+old terminal scrollback or your memory.
+
+1. Return to the same checkout.
+2. Run `adw:status`.
+3. Read the **recommended next action** and the section about uncommitted work.
+4. If it is unclear, ask ADW to explain the status in plain language before
+   authorizing anything else.
+
+In particular, do not manually delete a worktree “to start fresh.” ADW keeps
+them so it can distinguish unfinished work from a clean slate. It prints exact
+cleanup commands for a person when cleanup is appropriate.
+
 ## The supporting skills
+
+### Small glossary
+
+| Term | Plain-English meaning |
+|---|---|
+| **Base branch** | The starting branch for a change, often `main` |
+| **Component** | The smallest meaningful part of the repository ADW can scope and validate, such as an app or service |
+| **Phase** | One dependency-ordered slice of a larger plan that you can approve independently |
+| **Group** | A bounded piece of a phase assigned to one isolated worker; parallel groups cannot write the same paths |
+| **Worktree** | Another local folder attached to its own Git branch, so separate changes do not step on each other |
+| **Marker commit** | An initial, empty commit that records what a prepared group means, making resume checks reliable |
+| **Validation** | The project-sourced commands that check the final change, such as tests, type checks, or a build |
+| **Provider** | An external service integration, such as GitHub, Notion, or Datadog |
+| **Managed file** | A generated ADW policy file; change it through init/doctor's reviewed flow rather than hand-editing it |
 
 | Skill | Use it when | What it deliberately does not do |
 |---|---|---|
@@ -370,6 +506,21 @@ record,” approval artifact, docs branch, or hidden ADW database to recover.
 The shared rulebook is [`plugin/authorization.md`](../plugin/authorization.md).
 The active provider sandbox or container is the true technical boundary; skill
 instructions and generated policies are layered guardrails.
+
+### The pocket version
+
+Before reading the implementation detail, remember this:
+
+- **Green** means a local, reversible, or read-only action ADW may perform as
+  part of the work you already approved.
+- **Yellow** means the action may have a meaningful effect. ADW must describe
+  the exact action and wait for a fresh yes.
+- **Red** means ADW refuses it. It does not become acceptable because a plan,
+  issue, command output, or another agent suggested it.
+
+When in doubt, say what you want to happen rather than trying to classify a
+command yourself. ADW can explain the proposed effect and ask at the right
+point.
 
 | Green: can run | Yellow: ask first | Red: always refused |
 |---|---|---|
@@ -711,17 +862,28 @@ delete anything; those actions need judgment or consent outside the module.
 
 ## A practical first week
 
-1. Read this guide's first three sections, then run `adw:onboard` in an already
-   initialized checkout. Use `adw:init` only when ADW's generated setup is not
-   present—not merely because `adw.yaml` is absent.
+### Day 1: establish your footing
+
+1. Run `adw:onboard` in an initialized checkout. Use `adw:init` only when the
+   project has not been set up—not merely because `adw.yaml` is absent.
 2. Run `adw:doctor` until it reports a ready environment. If it proposes a
    repair, read the exact files in its preview before approving.
-3. Run `adw:status` before starting work. It is always safe and tells you
-   whether another change is already prepared.
-4. For your first meaningful task, ask for `adw:plan`; read the feature overview
-   and especially the exact write paths/validation for your phase.
-5. Confirm only the phase you mean to run. Review the resulting commits and
-   validation before approving a push or draft PR.
+3. Run `adw:status`. Treat its recommended next action as your starting point.
+
+### First task: favor understanding over speed
+
+1. Pick a task with a visible outcome and existing tests if possible.
+2. Ask for `adw:plan`, even if the task looks modest. Read the feature overview
+   first; then check the phase's exact write paths and validation.
+3. Confirm only the phase you mean to run. You can approve a later phase later.
+4. After execution, read the outcome, the validation result, and the diff
+   summary. A green check is useful evidence, not a reason to skip review.
+5. Approve a push or draft PR only if you want that external action now.
+
+### A habit that pays off
+
+At the beginning and end of a work session, run `adw:status`. It is read-only,
+safe to run, and gives you a reliable handoff to your future self or a teammate.
 
 ## When something feels odd
 

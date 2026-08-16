@@ -11,7 +11,7 @@ import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from "
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ContractError, InputError, applyAtomicWrites, isObject, isSafeRelativePath } from "./safe-files.mjs";
-import { ISOLATION_MODES, RUNTIMES, WEB_ACCESS_MODES, isValidBranchName, isValidDomain, loadProjectConfig, parseYaml, providerDomains, validateProjectConfig } from "./config.mjs";
+import { ISOLATION_MODES, RUNTIMES, WEB_ACCESS_MODES, isValidBranchName, isValidBranchTemplate, isValidDomain, loadProjectConfig, parseYaml, providerDomains, validateProjectConfig } from "./config.mjs";
 import { permissionProjectFiles } from "./permissions.mjs";
 import { managedDevelopmentFiles } from "./managed-environment.mjs";
 
@@ -152,12 +152,16 @@ function yamlScalar(value) {
   return JSON.stringify(String(value));
 }
 
-function renderProjectConfig({ baseBranch, isolation, webAccess, runtimeVersions, components, providers, includeGit, includeComponents }) {
+function renderProjectConfig({ baseBranch, branchTemplate, isolation, webAccess, runtimeVersions, components, providers, includeGit, includeBranchTemplate, includeComponents }) {
   const lines = [
     "# ADW project policy. Omit a setting to use repository discovery or ADW's safe default.",
     "adw: 1",
   ];
-  if (includeGit) lines.push("", "git:", `  base_branch: ${yamlScalar(baseBranch)}`);
+  if (includeGit || includeBranchTemplate) {
+    lines.push("", "git:");
+    if (includeGit) lines.push(`  base_branch: ${yamlScalar(baseBranch)}`);
+    if (includeBranchTemplate) lines.push(`  branch_template: ${yamlScalar(branchTemplate)}`);
+  }
   // `web_access` bounds the generated container's egress; it means nothing
   // outside the managed devcontainer, so it is recorded only there.
   if (isolation !== "provider-sandbox" || webAccess !== "public-pages") {
@@ -247,7 +251,7 @@ function replaceManagedBlock(original, start, end, body) {
 function checkAnswers(answers) {
   if (!isObject(answers)) throw new InputError("answers must be a JSON object");
   for (const key of Object.keys(answers)) {
-    if (!["isolation", "web_access", "base_branch", "runtime_versions", "components", "providers"].includes(key)) {
+    if (!["isolation", "web_access", "base_branch", "branch_template", "runtime_versions", "components", "providers"].includes(key)) {
       throw new InputError(`unsupported answer field: ${key}`);
     }
   }
@@ -256,6 +260,7 @@ function checkAnswers(answers) {
   const webAccess = answers.web_access ?? "public-pages";
   if (!WEB_ACCESS_MODES.includes(webAccess)) throw new ContractError(`web_access must be one of: ${WEB_ACCESS_MODES.join(", ")}`);
   if (answers.base_branch !== undefined && !isValidBranchName(answers.base_branch)) throw new ContractError("base_branch must be a valid Git branch name");
+  if (answers.branch_template !== undefined && !isValidBranchTemplate(answers.branch_template)) throw new ContractError("branch_template must include {change_id} and {group_id} and render to a valid Git branch name");
   const runtimeVersions = answers.runtime_versions ?? {};
   if (!isObject(runtimeVersions)) throw new ContractError("runtime_versions must be a mapping object");
   for (const [name, version] of Object.entries(runtimeVersions)) {
@@ -280,7 +285,7 @@ function checkAnswers(answers) {
       return { name: component.name, path: component.path, validate: (component.validate ?? []).map((item) => (typeof item === "string" ? { command: item } : item)) };
     });
   }
-  return { isolation, webAccess, runtimeVersions, providers, components, baseBranch: answers.base_branch };
+  return { isolation, webAccess, runtimeVersions, providers, components, baseBranch: answers.base_branch, branchTemplate: answers.branch_template };
 }
 
 // Preserve an existing project-owned container; never silently convert it.
@@ -344,6 +349,7 @@ export function planInitialization(directory, rawAnswers = {}) {
   };
 
   const explicitPolicy = answers.baseBranch !== undefined
+    || answers.branchTemplate !== undefined
     || answers.components !== undefined
     || answers.isolation !== undefined && answers.isolation !== "provider-sandbox"
     || answers.web_access !== undefined && answers.web_access !== "public-pages"
@@ -355,12 +361,14 @@ export function planInitialization(directory, rawAnswers = {}) {
   if (explicitPolicy) {
     add("adw.yaml", renderProjectConfig({
       baseBranch,
+      branchTemplate: answers.branchTemplate,
       isolation: execution.isolation,
       webAccess: answers.webAccess,
       runtimeVersions: answers.runtimeVersions,
       components: answers.components ?? components,
       providers: answers.providers,
       includeGit: answers.baseBranch !== undefined,
+      includeBranchTemplate: answers.branchTemplate !== undefined,
       includeComponents: answers.components !== undefined,
     }), "create-project-policy");
   }

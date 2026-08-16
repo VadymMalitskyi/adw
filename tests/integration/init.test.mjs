@@ -159,6 +159,13 @@ test("provider sandbox is the lightweight choice and creates no container", () =
   for (const path of PERMISSION_FILES) assert.ok(existsSync(join(root, path)), `${path} is missing`);
 });
 
+test("an explicit group branch convention is saved as shared policy", () => {
+  const root = commitRepository(scratch("branch-template"));
+  initialize(root, { branch_template: "feature/{change_id}-{group_id}" });
+  const policy = readFileSync(join(root, "adw.yaml"), "utf8");
+  assert.match(policy, /branch_template: "feature\/\{change_id\}-\{group_id\}"/);
+});
+
 test("a monorepo reports discovered component evidence without persisting it as policy", () => {
   const root = fromFixture("monorepo");
   const { preview } = initialize(root, { isolation: "provider-sandbox" });

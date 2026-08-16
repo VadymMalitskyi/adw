@@ -43,6 +43,7 @@ adw: 1
 
 git:
   base_branch: main
+  branch_template: "adw/{change_id}/{group_id}"
 
 execution:
   isolation: provider-sandbox   # provider-sandbox | project-devcontainer | managed-devcontainer
@@ -66,8 +67,9 @@ providers: {}                   # work_tracker | code_host | observability | kno
 ```
 
 - `git` and `components` are optional overrides. Without them, ADW infers the
-  Git base branch and reads repository evidence for component and validation
-  context.
+  Git base branch, uses `adw/{change_id}/{group_id}` for group branches, and
+  reads repository evidence for component and validation context. A custom
+  `git.branch_template` must include `{change_id}` and `{group_id}`.
 - A validation entry may be a plain command string, which inherits the component's `cwd`, a 120 s timeout, and `required: true`.
 - Provider `domains` are validated hostnames and feed the managed container's egress allowlist directly.
 - **Credentials are never allowed anywhere in this file.** Any credential-like key is refused, including inside provider `settings`.

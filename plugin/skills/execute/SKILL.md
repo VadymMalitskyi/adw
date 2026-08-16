@@ -15,7 +15,8 @@ plugin root as described there.
 
 ## 1. Confirm what you are executing
 
-1. Run `adw config` and require exit 0.
+1. Run `adw config` and require exit 0. Retain `git.base_branch` and
+   `git.branch_template` from its validated configuration.
 2. Run `adw doctor --checks permissions`. If the permission policy has drifted,
    stop and invoke `adw:doctor` to preview and repair it — execution must not
    proceed on a weakened policy.
@@ -59,12 +60,14 @@ with stdin:
   "project_root": "<project-root>",
   "change_id": "<change-id>",
   "base_branch": "main",
+  "branch_template": "adw/{change_id}/{group_id}",
   "base_commit": "<40-hex commit on base_branch>",
   "groups": [ { "group_id": "api", "tasks": ["..."], "affected_paths": ["src/api"], "validation": ["npm test"] } ]
 }
 ```
 
-Resolve `base_commit` yourself with `git rev-parse`. If any group reports
+Resolve `base_commit` yourself with `git rev-parse`, and pass the configured
+`git.branch_template` rather than assuming ADW's default. If any group reports
 blockers, resolve them with the user before preparing — never force past one.
 
 Then `worktree-prepare` with the identical stdin. Each group gets its own branch

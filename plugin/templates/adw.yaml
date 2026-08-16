@@ -9,6 +9,8 @@ adw: 1
 # Optional. ADW otherwise derives the base branch from Git.
 # git:
 #   base_branch: main
+#   # Must include both placeholders. Default: adw/{change_id}/{group_id}
+#   branch_template: "adw/{change_id}/{group_id}"
 
 # Optional. `provider-sandbox` is the default.
 # execution:

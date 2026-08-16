@@ -62,6 +62,16 @@ test("parallel groups prepare into isolated branches and worktrees", () => {
   assert.notEqual(prepared.body.groups[0].branch, prepared.body.groups[1].branch);
 });
 
+test("a configured branch template names generated group branches", () => {
+  const { root, head } = repository();
+  const preview = run("worktree-preview", {
+    ...request(root, head, [{ group_id: "api", tasks: ["x"], affected_paths: ["src/api"] }]),
+    branch_template: "feature/{change_id}-{group_id}",
+  });
+  assert.equal(preview.status, 0, JSON.stringify(preview.body));
+  assert.equal(preview.body.groups[0].branch, "feature/demo-api");
+});
+
 test("a marker commit lets a later session resume from Git alone", () => {
   const { root, head } = repository();
   const first = run("worktree-prepare", request(root, head, TWO_GROUPS));
