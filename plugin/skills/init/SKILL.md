@@ -53,6 +53,9 @@ Ask these, and nothing else. Each has a default you should state.
 Do not ask about execution mode, plan templates, documentation branches, or
 personal preferences. None of those exist.
 
+`<plugin-root>/templates/adw.yaml` documents every field the generated
+configuration may contain, if you need to explain one.
+
 ## 3. Preview
 
 Run:

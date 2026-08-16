@@ -65,6 +65,9 @@ Apply the findings you agree with. Report the ones you rejected and why.
 
 Present the plan in the conversation. If the user asks for a file, write it to
 the path they name and nothing else — ask before committing it, and never push.
+`<plugin-root>/templates/plan.md` is an optional skeleton you may start from;
+nothing parses it, so rename, reorder, or drop its sections whenever the change
+is better served that way.
 
 Then state plainly what happens next: they confirm the plan and the phase they
 want, and `adw:execute` carries it out. Nothing about the plan is binding until
