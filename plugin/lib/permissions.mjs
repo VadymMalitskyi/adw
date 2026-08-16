@@ -169,7 +169,9 @@ export const CLAUDE_DENY = [
   "Bash(gh pr merge *)", "Bash(gh release create *)", "Bash(gh release delete *)", "Bash(gh release edit *)", "Bash(gh release upload *)",
   "Bash(npm publish *)", "Bash(npm unpublish *)", "Bash(pnpm publish *)", "Bash(yarn publish *)", "Bash(dotnet nuget push *)", "Bash(dotnet nuget delete *)",
   "Bash(kubectl apply *)", "Bash(kubectl delete *)", "Bash(helm install *)", "Bash(helm upgrade *)", "Bash(helm uninstall *)", "Bash(terraform apply *)", "Bash(terraform destroy *)",
-  "Bash(gh auth token *)", "Read(./.env)", "Read(./.env.*)", "Read(~/.ssh/**)",
+  // Both spellings: a bare `gh auth token` has no trailing argument to glob.
+  "Bash(gh auth token)", "Bash(gh auth token *)",
+  "Read(./.env)", "Read(./.env.*)", "Read(~/.ssh/**)",
 ];
 
 export const CLAUDE_ALLOW = ["WebSearch"];

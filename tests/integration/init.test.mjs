@@ -35,6 +35,7 @@ function scratch(name) {
 }
 
 function commitRepository(root) {
+  mkdirSync(root, { recursive: true });
   git(root, ["init", "-q", "-b", "main"]);
   git(root, ["config", "user.email", "test@example.test"]);
   git(root, ["config", "user.name", "ADW Test"]);
@@ -295,11 +296,16 @@ test("permission files written into an existing configuration are merged, not cl
 });
 
 test("initialization never writes outside the project root", () => {
-  const root = commitRepository(scratch("confined"));
-  const parent = realpathSync(join(root, ".."));
-  const before = new Set(readdirSync(parent));
+  // A dedicated parent so a concurrently running test's temporary directory
+  // cannot be mistaken for an escape.
+  const parent = scratch("confined");
+  const root = commitRepository(join(parent, "project"));
+  const sibling = join(parent, "sibling");
+  mkdirSync(sibling, { recursive: true });
+
   initialize(root, { isolation: "managed-devcontainer" });
-  const after = new Set(readdirSync(parent));
-  assert.deepEqual([...after].filter((entry) => !before.has(entry)), []);
+
+  assert.deepEqual(readdirSync(parent).sort(), ["project", "sibling"]);
+  assert.deepEqual(readdirSync(sibling), []);
   assert.ok(statSync(join(root, "adw.yaml")).isFile());
 });
