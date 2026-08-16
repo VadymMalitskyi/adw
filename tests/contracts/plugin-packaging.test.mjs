@@ -92,8 +92,6 @@ test("every runtime command works from a copy of plugin/ outside the repository"
   execFileSync("git", ["config", "user.email", "adw@example.invalid"], { cwd: project });
   execFileSync("git", ["add", "."], { cwd: project });
   execFileSync("git", ["commit", "-q", "-m", "fixture"], { cwd: project });
-  const baseCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: project, encoding: "utf8" }).trim();
-
   // Run from a neutral working directory so nothing can be picked up from the repository.
   const run = (command, options = [], stdin = "") => {
     const result = spawnSync(process.execPath, [cli, command, ...options], { cwd: workspace, encoding: "utf8", input: stdin });
@@ -125,17 +123,6 @@ test("every runtime command works from a copy of plugin/ outside the repository"
   assert.equal(doctorReport.body.read_only, true);
   assert.deepEqual(doctorReport.body.checks.filter(({ status }) => status === "fail"), []);
   assert.equal(doctorReport.status, 0, JSON.stringify(doctorReport.body));
-
-  const worktree = run("worktree-preview", [], `${JSON.stringify({
-    project_root: project,
-    change_id: "portability-1",
-    base_branch: "main",
-    base_commit: baseCommit,
-    groups: [{ group_id: "g1", tasks: ["prove the CLI runs from an installed copy"], affected_paths: ["src/app.mjs"] }],
-  })}\n`);
-  assert.equal(worktree.status, 0, JSON.stringify(worktree.body));
-  assert.equal(worktree.body.ok, true);
-  assert.equal(worktree.body.groups[0].branch, "adw/portability-1/g1");
 });
 
 test("the portable CLI reports an unknown command instead of guessing", () => {
@@ -149,7 +136,7 @@ test("the portable CLI reports an unknown command instead of guessing", () => {
   const reported = JSON.parse(result.stdout);
   assert.equal(reported.ok, false);
   assert.match(reported.error.message, /unknown command "explain"/);
-  for (const command of ["config", "init-preview", "init-apply", "refresh-preview", "refresh-apply", "doctor", "worktree-preview"]) {
+  for (const command of ["config", "init-preview", "init-apply", "refresh-preview", "refresh-apply", "doctor"]) {
     assert.ok(reported.error.message.includes(command), `${command} must be advertised`);
   }
 });

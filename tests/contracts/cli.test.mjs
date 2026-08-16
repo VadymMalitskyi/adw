@@ -17,10 +17,6 @@ const COMMANDS = [
   "refresh-apply",
   "doctor",
   "permissions-explain",
-  "worktree-preview",
-  "worktree-prepare",
-  "worktree-inspect",
-  "worktree-cleanup-guidance",
   "render-managed",
 ];
 
@@ -67,7 +63,6 @@ test("every command answers with one JSON object on stdout", () => {
     [["config", "--project-root", root], ""],
     [["doctor", "--project-root", root], ""],
     [["init-preview", "--project-root", root], "{}"],
-    [["worktree-preview"], "{}"],
     [["not-a-command"], ""],
   ];
   for (const [args, input] of cases) {
@@ -90,7 +85,7 @@ test("exit codes are stable and distinguish input, contract, and check failures"
   assert.equal(invoke(["init-apply", "--project-root", root], "{}").status, EXIT.INPUT);
 
   // Malformed stdin.
-  const malformed = invoke(["worktree-preview"], "{not json");
+  const malformed = invoke(["init-preview", "--project-root", root], "{not json");
   assert.equal(malformed.status, EXIT.INPUT);
   assert.match(JSON.parse(malformed.stdout).error.message, /not valid JSON/);
 
@@ -106,6 +101,10 @@ test("exit codes are stable and distinguish input, contract, and check failures"
   const removedConventions = invoke(["init-preview", "--project-root", root], JSON.stringify({ conventions: { branches: "feature/*" } }));
   assert.equal(removedConventions.status, EXIT.INPUT);
   assert.match(JSON.parse(removedConventions.stdout).error.message, /unsupported answer field: conventions/);
+
+  const removedBranchTemplate = invoke(["init-preview", "--project-root", root], JSON.stringify({ branch_template: "adw/{change_id}/{group_id}" }));
+  assert.equal(removedBranchTemplate.status, EXIT.INPUT);
+  assert.match(JSON.parse(removedBranchTemplate.stdout).error.message, /unsupported answer field: branch_template/);
 });
 
 test("doctor exits 5 when a check fails and 0 when every check passes", () => {

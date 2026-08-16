@@ -122,6 +122,7 @@ test("Codex and Claude implement the same semantic categories from authorization
     { category: "automatic", argv: ["git", "diff", "--stat"], command: "git diff --stat" },
     { category: "automatic", argv: ["git", "log", "--oneline"], command: "git log --oneline" },
     { category: "automatic", argv: ["git", "worktree", "list"], command: "git worktree list" },
+    { category: "automatic", argv: ["git", "worktree", "add", "-b", "adw/change/group", "worktrees/change/group", "HEAD"], command: "git worktree add -b adw/change/group worktrees/change/group HEAD" },
     { category: "automatic", argv: ["git", "add", "-A"], command: "git add -A" },
     { category: "automatic", argv: ["git", "commit", "-m", "message"], command: "git commit -m message" },
     { category: "automatic", argv: ["git", "switch", "-c", "adw/change/group"], command: "git switch -c adw/change/group" },

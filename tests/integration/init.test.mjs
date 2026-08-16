@@ -150,6 +150,14 @@ test("an explicitly selected managed devcontainer generates its full file set", 
   assert.ok(applied.writes.some(({ path }) => path === ".devcontainer/Dockerfile"));
 });
 
+test("branch_template is no longer a supported init answer; branch naming is an execution-time choice", () => {
+  const root = commitRepository(scratch("branch-template-rejected"));
+  const result = run("init-preview", root, { branch_template: "feature/{change_id}-{group_id}" });
+  assert.equal(result.status, 2);
+  assert.match(result.body.error.message, /unsupported answer field: branch_template/);
+  assert.equal(existsSync(join(root, "adw.yaml")), false);
+});
+
 test("provider sandbox is the lightweight choice and creates no container", () => {
   const root = commitRepository(scratch("sandbox"));
   const { applied } = initialize(root, { isolation: "provider-sandbox" });
@@ -157,13 +165,6 @@ test("provider sandbox is the lightweight choice and creates no container", () =
   assert.equal(applied.execution.reopen_required, false);
   // Both providers still get the shared permission policy.
   for (const path of PERMISSION_FILES) assert.ok(existsSync(join(root, path)), `${path} is missing`);
-});
-
-test("an explicit group branch convention is saved as shared policy", () => {
-  const root = commitRepository(scratch("branch-template"));
-  initialize(root, { branch_template: "feature/{change_id}-{group_id}" });
-  const policy = readFileSync(join(root, "adw.yaml"), "utf8");
-  assert.match(policy, /branch_template: "feature\/\{change_id\}-\{group_id\}"/);
 });
 
 test("a monorepo reports discovered component evidence without persisting it as policy", () => {

@@ -16,7 +16,7 @@ There are two things a contributor authors: a plan, and a yes.
 
 Skills are raw instructions. They own everything that benefits from judgment and should stay visible in the conversation: reading the repository, planning, reviewing a plan, splitting a phase into groups, spawning implementers and reviewers, running Git and validation commands, summarizing status, and asking for authorization.
 
-Code exists only where interpretation or partial failure is genuinely dangerous. One CLI, `plugin/bin/adw.mjs`, and seven library modules under `plugin/lib/` own path confinement and atomic writes, the `adw.yaml` contract, permission-policy generation, managed-container rendering, init and refresh, readiness checks, and worktree preparation. Every command prints one JSON object.
+Code exists only where interpretation or partial failure is genuinely dangerous. One CLI, `plugin/bin/adw.mjs`, and library modules under `plugin/lib/` own path confinement and atomic writes, the `adw.yaml` contract, permission-policy generation, managed-container rendering, init and refresh, and readiness checks. Every command prints one JSON object. Branch and worktree preparation for execution groups uses native Git directly, coordinated by the `adw:execute` skill rather than a custom CLI protocol.
 
 There is no daemon, server, scheduler, telemetry, or workflow database. Git, your files, and your providers hold all the state.
 
@@ -29,7 +29,7 @@ There is no daemon, server, scheduler, telemetry, or workflow database. Git, you
 5. **External writes default to separate authorization.** Only an exact, reviewed generated provider-operation policy can pre-authorize a bounded write; confirming a plan alone authorizes local implementation and nothing else.
 6. **ADW never merges, releases, deploys, or force-pushes.**
 
-Interrupt anything and start a new session. State is reconstructed from Git branches and the marker commit on each group worktree — never from chat history.
+Interrupt anything and start a new session. State is reconstructed from Git branches, worktrees, and commits — never from chat history. An ordinary branch cannot prove it was prepared for the same prior task packet; ADW reports what Git can actually establish and asks before reusing it.
 
 ## Project configuration
 
@@ -43,7 +43,6 @@ adw: 1
 
 git:
   base_branch: main
-  branch_template: "adw/{change_id}/{group_id}"
 
 execution:
   isolation: provider-sandbox   # provider-sandbox | project-devcontainer | managed-devcontainer
@@ -67,9 +66,11 @@ providers: {}                   # work_tracker | code_host | observability | kno
 ```
 
 - `git` and `components` are optional overrides. Without them, ADW infers the
-  Git base branch, uses `adw/{change_id}/{group_id}` for group branches, and
-  reads repository evidence for component and validation context. A custom
-  `git.branch_template` must include `{change_id}` and `{group_id}`.
+  Git base branch and reads repository evidence for component and validation
+  context. Execution-group branch and worktree names are ordinary
+  execution-time choices made in conversation, not configuration; `adw:execute`
+  proposes `adw/<change-id>/<group-id>` as a readable convention, but any valid
+  Git branch name works.
 - A validation entry may be a plain command string, which inherits the component's `cwd`, a 120 s timeout, and `required: true`.
 - Provider `domains` are validated hostnames and feed the managed container's egress allowlist directly.
 - **Credentials are never allowed anywhere in this file.** Any credential-like key is refused, including inside provider `settings`.
@@ -99,7 +100,6 @@ init-preview / init-apply    confined first-time setup, bound to the reviewed fi
 refresh-preview / refresh-apply   exact repair primitives used by adw:doctor
 doctor                       read-only deterministic checks (--checks all|permissions)
 permissions-explain          explain one provider command/tool decision without executing it
-worktree-preview / worktree-inspect / worktree-prepare / worktree-cleanup-guidance
 render-managed               render .devcontainer/ for build and security tests
 ```
 

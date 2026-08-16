@@ -27,7 +27,7 @@ test("the contract accepts a small handwritten configuration and normalizes its 
   assert.equal(result.valid, true, JSON.stringify(result.errors));
   assert.deepEqual(result.data, {
     adw: 1,
-    git: { base_branch: "main", branch_template: "adw/{change_id}/{group_id}" },
+    git: { base_branch: "main" },
     execution: { isolation: "provider-sandbox", web_access: "public-pages" },
     development: { runtime_versions: {} },
     components: { app: { path: ".", validate: [] } },
@@ -63,22 +63,15 @@ components:
   assert.equal(result.data.execution.web_access, "hosted-only");
 });
 
-test("a project can customize the execution-group branch convention", () => {
+test("git.branch_template is an unknown, rejected key — branch naming is an execution-time choice, not configuration", () => {
   const result = validateProjectConfig(parseYaml(`
 adw: 1
 git:
+  base_branch: main
   branch_template: "feature/{change_id}-{group_id}"
 `));
-  assert.equal(result.valid, true, JSON.stringify(result.errors));
-  assert.equal(result.data.git.branch_template, "feature/{change_id}-{group_id}");
-
-  const invalid = validateProjectConfig(parseYaml(`
-adw: 1
-git:
-  branch_template: "feature/{change_id}"
-`));
-  assert.equal(invalid.valid, false);
-  assert.ok(errorPaths(invalid).includes("/git/branch_template"));
+  assert.equal(result.valid, false);
+  assert.ok(errorPaths(result).includes("/git/branch_template"));
 });
 
 test("removed 1.0 sections are rejected loudly instead of being silently ignored", () => {
@@ -330,10 +323,9 @@ test("the loader reads and validates the project file itself", async () => {
     "  branch_template: \"feature/{change_id}-{group_id}\"",
     "",
   ].join("\n"));
-  const templateOnly = await loadProjectConfig(directory);
-  assert.equal(templateOnly.valid, true);
-  assert.equal(templateOnly.data.git.base_branch, "main");
-  assert.equal(templateOnly.data.git.branch_template, "feature/{change_id}-{group_id}");
+  const rejected = await loadProjectConfig(directory);
+  assert.equal(rejected.valid, false);
+  assert.ok(rejected.errors.some(({ path }) => path === "/git/branch_template"));
 
   const defaults = await loadProjectConfig(directory, "missing.yaml");
   assert.equal(defaults.valid, true);

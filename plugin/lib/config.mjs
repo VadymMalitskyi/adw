@@ -1,7 +1,7 @@
 // The stable ADW project contract.
 //
 // `adw.yaml` holds only settings that retained behavior actually reads: the
-// base branch and group-branch convention, the isolation and web-access choices that shape the managed
+// base branch, the isolation and web-access choices that shape the managed
 // container, runtime versions the repository cannot pin itself, component
 // paths with their project-owned validation commands, optional provider
 // declarations. Anything else is rejected rather
@@ -19,7 +19,6 @@ export const ISOLATION_MODES = Object.freeze(["provider-sandbox", "project-devco
 export const WEB_ACCESS_MODES = Object.freeze(["public-pages", "hosted-only"]);
 export const RUNTIMES = Object.freeze(["node", "python", "go", "rust", "java", "ruby", "dotnet"]);
 export const DEFAULT_TIMEOUT_MS = 120000;
-export const DEFAULT_BRANCH_TEMPLATE = "adw/{change_id}/{group_id}";
 
 const TRANSPORTS = new Set(["auto", "native", "mcp", "cli", "api"]);
 const ACCESS_MODES = new Set(["read-only", "read-write"]);
@@ -31,7 +30,7 @@ const PROJECT_KEYS = new Set(["adw", "git", "execution", "development", "compone
 export function defaultProjectConfig(baseBranch = "main") {
   return {
     adw: CONTRACT_VERSION,
-    git: { base_branch: baseBranch, branch_template: DEFAULT_BRANCH_TEMPLATE },
+    git: { base_branch: baseBranch },
     execution: { isolation: "provider-sandbox", web_access: "public-pages" },
     development: { runtime_versions: {} },
     components: {},
@@ -135,22 +134,6 @@ export function isValidBranchName(value) {
   if (value.startsWith("-") || value.startsWith("/") || value.endsWith("/") || value.endsWith(".lock")) return false;
   if (value.includes("..") || value.includes("//") || value.includes("@{")) return false;
   return !/[~^:?*[\\]/.test(value) && !hasControlCharacters(value);
-}
-
-// Branch templates are intentionally narrow: the two identifiers distinguish
-// every prepared group, while the surrounding literal establishes a project
-// convention.  Keeping the template declarative prevents arbitrary commands
-// or path-like interpolation from entering the worktree protocol.
-export function isValidBranchTemplate(value) {
-  if (typeof value !== "string" || value.length === 0 || value.length > 255) return false;
-  if (!value.includes("{change_id}") || !value.includes("{group_id}")) return false;
-  const literals = value.replaceAll("{change_id}", "").replaceAll("{group_id}", "");
-  if (literals.includes("{") || literals.includes("}")) return false;
-  return isValidBranchName(renderBranchTemplate(value, "change", "group"));
-}
-
-export function renderBranchTemplate(template, changeId, groupId) {
-  return template.replaceAll("{change_id}", changeId).replaceAll("{group_id}", groupId);
 }
 
 function checkBranchName(errors, value, path) {
@@ -299,12 +282,8 @@ export function validateProjectConfig(data, inferredBase = "main") {
   const normalized = defaultProjectConfig(inferredBase);
 
   if (data.git !== undefined && checkObject(errors, data.git, "/git")) {
-    checkKnownKeys(errors, data.git, new Set(["base_branch", "branch_template"]), "/git");
+    checkKnownKeys(errors, data.git, new Set(["base_branch"]), "/git");
     if (data.git.base_branch !== undefined && checkBranchName(errors, data.git.base_branch, "/git/base_branch")) normalized.git.base_branch = data.git.base_branch;
-    if (data.git.branch_template !== undefined) {
-      if (!isValidBranchTemplate(data.git.branch_template)) errors.add("/git/branch_template", "must include {change_id} and {group_id} and render to a valid Git branch name");
-      else normalized.git.branch_template = data.git.branch_template;
-    }
   }
 
   if (data.execution !== undefined && checkObject(errors, data.execution, "/execution")) {

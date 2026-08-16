@@ -12,8 +12,7 @@ The same semantic categories apply in every isolation mode, and to both agents.
 |---|---|
 | Read-only Git: `status`, `diff`, `log`, `show`, `blame`, `grep`, `ls-files`, `rev-parse`, branch listing, worktree listing, `remote get-url` | Allowed |
 | The project's configured validation commands | Allowed |
-| `git add`, `git commit`, creating a new local branch | Allowed |
-| Worktree preparation through the ADW CLI, after the user has asked to execute | Allowed |
+| `git add`, `git commit`, creating a new local branch, `git worktree add` for a confirmed execution group | Allowed |
 | Read-only provider operations within configured capabilities | Allowed |
 | Exact provider operations configured and generated as `allow` | Allowed |
 | Push, tag creation or push, branch deletion, worktree removal or pruning | Ask |
@@ -93,7 +92,7 @@ Run `npm run test:security` to build both pinned agents and exercise firewall se
 ## Filesystem and process safety
 
 - Every managed write goes through one confined atomic-write path. It rejects absolute paths, `..` traversal, backslashes, NUL bytes, symlinked destinations, and symlinked ancestors; it re-resolves each path immediately before mutation; and it rolls the whole set back if any single write fails.
-- Group worktrees are prepared only through the ADW CLI, which refuses symlinked or already-occupied targets, refuses a branch already checked out elsewhere, refuses a branch whose marker commit does not match this run, and refuses overlapping write paths between concurrent groups. It never deletes a branch or worktree.
+- Group worktrees are prepared with native Git after the `adw:execute` skill inspects `git worktree list` and `git show-ref` for the proposed branch and target path; it refuses a symlinked or already-occupied target, a branch already checked out elsewhere, and overlapping write paths between concurrent groups. A branch that already exists is treated as a resumed attempt confirmed with the user, never silently reused — there is no marker commit to validate it against. It never deletes a branch or worktree.
 - Validation commands come from repository manifests/CI or explicit `adw.yaml`
   overrides, each citing its source, and are shown before they run.
 - Exit codes, timeouts, and signals are preserved. A failure is never translated into success.

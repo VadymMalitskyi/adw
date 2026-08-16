@@ -42,32 +42,28 @@ whole questionnaire into one message.
 1. **Base branch** — state the detected branch and ask whether ADW should use
    it. An explicit answer records `git.base_branch`; otherwise it stays Git
    discovery.
-2. **Group branch convention** — recommend
-   `adw/{change_id}/{group_id}` and ask for the template to use for ADW group
-   branches. It must include both `{change_id}` and `{group_id}` and render to
-   a valid Git branch name. An explicit answer records `git.branch_template`
-   and is passed to the worktree commands during execution.
-3. **Isolation** — `provider-sandbox` is the default lightweight option.
+2. **Isolation** — `provider-sandbox` is the default lightweight option.
    Offer `managed-devcontainer` when the project needs a generated, hardened,
    reproducible container with fail-closed egress, and `project-devcontainer`
    when the repository already owns `.devcontainer/devcontainer.json`. Say
    plainly that `provider-sandbox` is the weaker boundary.
-4. **Web access** — managed container only. `public-pages` (default) allows a
+3. **Web access** — managed container only. `public-pages` (default) allows a
    bounded public page-read channel; `hosted-only` restricts egress to exactly
    the allowlisted domains.
-5. **Runtime versions** — review every detected runtime. Keep repository-pinned
+4. **Runtime versions** — review every detected runtime. Keep repository-pinned
    versions as evidence; ask whether each unresolved runtime needs a shared
    numeric version. Never invent a version the repository already pins.
-6. **Components and validation** — review each detected component and its
+5. **Components and validation** — review each detected component and its
    validation commands. Ask whether discovery is sufficient or whether the
    project needs an explicit component or validation override.
-7. **Providers** — ask separately about optional work tracker, code host,
+6. **Providers** — ask separately about optional work tracker, code host,
    observability, and knowledge integrations, with the exact hostnames each
    needs so the managed container can reach them. Never ask for or accept a
    credential.
-8. **Workflow conventions** — ask about commit-message, pull-request, review,
-   and issue-linking conventions. Explain that only the branch template is a
-   current ADW setting; keep other conventions in existing repository-owned
+7. **Workflow conventions** — ask about commit-message, pull-request, review,
+   branch-naming, and issue-linking conventions. Explain that ADW treats
+   branch and worktree names as ordinary execution-time choices, not
+   configuration; keep every convention in existing repository-owned
    instructions or contributor documentation. Do not create or rewrite those
    files during init.
 
@@ -96,7 +92,6 @@ with the answers as JSON on stdin:
 ```json
 {
   "base_branch": "main",
-  "branch_template": "adw/{change_id}/{group_id}",
   "isolation": "managed-devcontainer",
   "web_access": "public-pages",
   "runtime_versions": { "dotnet": "8" },
@@ -104,11 +99,10 @@ with the answers as JSON on stdin:
 }
 ```
 
-Every field is optional. Omit `base_branch` and `branch_template` to use the
-detected/default Git conventions, and omit `components` to use detected
-components as planning evidence. Init writes `adw.yaml` only when the approved
-answers introduce a shared policy or override; it does not persist discovery as
-configuration.
+Every field is optional. Omit `base_branch` to use the detected/default Git
+base branch, and omit `components` to use detected components as planning
+evidence. Init writes `adw.yaml` only when the approved answers introduce a
+shared policy or override; it does not persist discovery as configuration.
 
 Present to the user:
 

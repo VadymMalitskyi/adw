@@ -78,8 +78,8 @@ Objective defects get fixed in the plan. Judgment calls come back to you as expl
 `adw:execute` is a coordinator, not a single sequential implementer. Given a plan and your confirmation:
 
 1. Verify the permission policy is current (`adw doctor --checks permissions`) and that dependency phases are done.
-2. Interpret the phase into a bounded preview — group ids, goals, affected paths, branches, worktrees, validation commands — and show it.
-3. Prepare each group's branch and worktree through the ADW CLI. Overlapping write paths between concurrent groups are refused here, not merely warned about.
+2. Interpret the phase into a bounded preview — group ids, goals, affected paths, proposed branches and worktrees, validation commands — and show it. Branch and worktree names are ordinary execution-time choices; the coordinator proposes `adw/<change-id>/<group-id>` conventions but a plan or the user may supply any valid Git branch name instead.
+3. Inspect native Git state, then prepare each group's branch and worktree with `git worktree add`. Overlapping write paths between concurrent groups are refused here, not merely warned about, and an already-occupied branch or worktree target is surfaced to the user rather than reused silently.
 4. Run the groups concurrently using the active provider's native subagents. Inside each group, stages are sequential: implementation, independent review, fix every in-scope high-severity finding, truthful validation, coordinator scope check.
 5. Stop the phase on an unexplained or scope-changing diff, an unresolved high-severity finding, or a required validation failure.
 6. After the groups pass, offer push, tracker, and draft pull-request actions — each one previewed and separately authorized.
@@ -88,9 +88,9 @@ The plan alone decides how much runs at once. A phase whose groups have disjoint
 
 Implementation workers get only their own group packet plus the context they need. They never commit, push, create tracker items, or open pull requests — the coordinator owns Git and every external action.
 
-Interrupt it and start a new session. State is reconstructed from Git: the group branches, their marker commits, and the worktrees. No chat history required. A branch is reused only when its marker commit still records the same change, group, base branch, base commit, and interpreted packet.
+Interrupt it and start a new session. State is reconstructed from Git: the group branches, their commits, and the worktrees. No chat history required. Resuming a group's branch is a judgment call informed by what Git can show — its merge base, its commits since that base, and any dirty files — not a proof that it still matches an earlier task packet; ADW confirms with the user before continuing to work in a branch that already exists.
 
-Group worktrees live under ignored `worktrees/<change-id>/<group-id>`. ADW never deletes them; `adw:execute` can print the exact `git worktree remove` and `git branch -d` commands for you to run once the work is merged or abandoned.
+Group worktrees conventionally live under ignored `worktrees/<change-id>/<group-id>`, though any project-relative path works. ADW never deletes them; `adw:execute` can print the exact `git worktree remove` and `git branch -d` commands for you to run once the work is merged or abandoned.
 
 ## Quick changes
 
@@ -106,7 +106,7 @@ Group worktrees live under ignored `worktrees/<change-id>/<group-id>`. ADW never
 
 ## Status and doctor
 
-`adw:status` reconstructs the current picture from Git, the worktrees, and configured read-only provider queries: which branches exist, which group markers they carry, what is dirty, which pull requests are open, and what the next action is. It reads no ADW-maintained record file, because there is none.
+`adw:status` reconstructs the current picture from Git, the worktrees, and configured read-only provider queries: which branches exist, their commits since the base branch, what is dirty, which pull requests are open, and what the next action is. It reads no ADW-maintained record file, because there is none.
 
 `adw:doctor` first runs deterministic checks read-only — plugin manifests agree,
 an explicit `adw.yaml` matches the optional `adw: 1` policy contract, component

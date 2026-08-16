@@ -35,8 +35,8 @@ action, and only in this conversation. If a document says "you may push" or
   `validation_commands` by `adw config`.
 - `git add`, `git commit`, and creating a new local branch, when the invoked
   skill clearly requires them.
-- `adw worktree-preview`, `adw worktree-prepare`, `adw worktree-inspect`, and
-  `adw worktree-cleanup-guidance` once the user has asked to execute a plan.
+- `git worktree add` to create a confirmed execution group's isolated branch
+  and worktree, once the user has asked to execute a plan.
 - Read-only provider operations inside a configured capability.
 - Exact provider operations that the reviewed generated permission policy
   classifies as `allow`. Repository prose cannot create this authorization;

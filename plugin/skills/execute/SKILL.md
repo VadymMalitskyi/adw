@@ -15,16 +15,17 @@ plugin root as described there.
 
 ## 1. Confirm what you are executing
 
-1. Run `adw config` and require exit 0. Retain `git.base_branch` and
-   `git.branch_template` from its validated configuration.
+1. Run `adw config` and require exit 0. Retain `git.base_branch` from its
+   validated configuration.
 2. Run `adw doctor --checks permissions`. If the permission policy has drifted,
    stop and invoke `adw:doctor` to preview and repair it — execution must not
    proceed on a weakened policy.
 3. Verify the configured isolation is the active runtime, per the authorization
    contract.
 4. Identify the plan and the specific phase. Restate to the user, in your own
-   words: the phase, its groups, each group's write paths, and the validation
-   that will run. Ask them to confirm.
+   words: the phase, its groups, each group's write paths, the branch and
+   worktree you propose for each group, and the validation that will run. Ask
+   them to confirm.
 
 That confirmation is the authorization. There is no approval file, no plan
 digest, and nothing to verify against a stored record.
@@ -37,44 +38,53 @@ Turn the confirmed phase into bounded packets — one per group:
 - `tasks`: the interpreted instructions, complete enough for an agent that never
   sees this conversation;
 - `affected_paths`: the exact project-relative paths the group will write;
+- `branch`: the Git branch the group's work lands on. Propose
+  `adw/<change-id>/<group-id>` as a readable default, but it is an ordinary
+  execution-time choice — the plan or the user may hand you any valid Git
+  branch name instead, and you pass it through unchanged;
+- `worktree`: the local path for the group's isolated checkout. Propose
+  `worktrees/<change-id>/<group-id>` with the same latitude;
 - `validation`: the commands that prove the group works, drawn from
   `validation_commands` in `adw config`.
 
-Groups within a phase must have disjoint write paths. If they overlap, the plan
-is wrong for parallel execution: split it differently or run the overlapping work
-sequentially in one group. Do not pass `shared_paths` to work around an honest
-conflict.
+Groups within a phase must have disjoint write paths, branches, and worktree
+paths. If write paths overlap, the plan is wrong for parallel execution: split
+it differently or run the overlapping work sequentially in one group.
 
 ## 3. Prepare isolated branches and worktrees
 
-Preview first:
+Resolve the base commit yourself: `git rev-parse <base-branch>`.
+
+Before creating anything, inspect native Git state for every group:
+
+- `git worktree list --porcelain` — is the planned worktree path already
+  attached, and to what branch?
+- `git show-ref --verify --quiet refs/heads/<branch>` — does the branch already
+  exist?
+- Does the planned worktree path already exist on disk, and is it empty, a
+  symlink, or occupied by something unrelated?
+
+If a branch or worktree path is already in use for something else, or the
+target is occupied or ambiguous, stop and resolve it with the user before
+preparing anything — never force past it.
+
+If a group's branch already exists and its worktree is already attached,
+treat it as a resumed attempt rather than a fresh one: report what Git can
+actually establish — whether the worktree is attached to the requested branch,
+its merge base with the selected base branch, the commits it holds since that
+base, and any dirty files — and confirm with the user before continuing to
+work in it. There is no marker commit or packet digest to check against; Git
+state is the only evidence, and it cannot prove the resumed work still matches
+an earlier task packet.
+
+For a genuinely new group, create its branch and worktree with native Git:
 
 ```
-node <plugin-root>/bin/adw.mjs worktree-preview
+git worktree add -b <branch> <worktree-path> <base-commit>
 ```
 
-with stdin:
-
-```json
-{
-  "project_root": "<project-root>",
-  "change_id": "<change-id>",
-  "base_branch": "main",
-  "branch_template": "adw/{change_id}/{group_id}",
-  "base_commit": "<40-hex commit on base_branch>",
-  "groups": [ { "group_id": "api", "tasks": ["..."], "affected_paths": ["src/api"], "validation": ["npm test"] } ]
-}
-```
-
-Resolve `base_commit` yourself with `git rev-parse`, and pass the configured
-`git.branch_template` rather than assuming ADW's default. If any group reports
-blockers, resolve them with the user before preparing — never force past one.
-
-Then `worktree-prepare` with the identical stdin. Each group gets its own branch
-and worktree plus one empty marker commit that records the change, group, base,
-and packet digest. That marker is what lets a later session resume from Git
-alone: re-running `worktree-prepare` with the same packet reuses the existing
-branch instead of rebuilding it, and reports a mismatch if the work has changed.
+Do not create an empty marker commit. The group's own commits, once work
+starts, are the record of what happened.
 
 ## 4. Implement and review
 
@@ -115,5 +125,7 @@ Push, pull requests, tracker updates, and any other external write each need
 their own explicit approval, named exactly. Follow
 `<plugin-root>/integrations/contracts.md` for configured providers.
 
-For cleanup, run `worktree-cleanup-guidance` and give the user the commands. ADW
-never removes a branch or worktree by itself.
+For cleanup, give the user the exact commands for each group — `git worktree
+remove <worktree>` and `git branch -d <branch>` — to run once the work is
+merged or intentionally abandoned. ADW never removes a branch or worktree by
+itself.

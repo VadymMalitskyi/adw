@@ -36,9 +36,9 @@ Never hand-edit the bundle. Every other file under `plugin/bin/` and `plugin/lib
 
 ## Recovering an interrupted change
 
-Start a new session and run `adw:status`. State is reconstructed from Git alone: the group branches, the marker commit on each one, the worktrees under `worktrees/`, the diff, and — when a `code_host` is configured — the open pull requests. Chat history is not required and is not trusted.
+Start a new session and run `adw:status`. State is reconstructed from Git alone: the group branches, their commits, the worktrees they are attached to, the diff, and — when a `code_host` is configured — the open pull requests. Chat history is not required and is not trusted.
 
-An interrupted execution resumes on the same evidence. A group branch is reused only when its marker commit still records the same change id, group id, base branch, base commit, and interpreted task packet, and still sits directly on that base commit. Anything else is reported as a blocker rather than silently reused.
+An interrupted execution resumes on the same evidence. Resuming a group's branch is a judgment call: Git can show its merge base with the configured base branch, the commits it holds since that base, and whether its worktree is dirty, but an ordinary branch carries no digest or trailer proving it was prepared for the same prior task packet. ADW reports what Git can establish and confirms with the user before continuing to work in a branch that already exists, rather than silently reusing or refusing it.
 
 ADW never removes a branch or worktree for you. Ask for the cleanup commands and run them yourself once the work is merged or deliberately abandoned.
 
@@ -62,5 +62,6 @@ Earlier releases carried a second workflow database beside Git. If you remember 
 | `adw:discover` | Folded into `adw:init`, `adw:plan`, and `adw:doctor` |
 | The old `adw:sync-docs` branch-maintenance workflow | Use the new `adw:sync-docs` skill, which audits normal-branch documentation against live repository changes |
 | `adw:init-greenfield`, `adw:init-brownfield` | One `adw:init` that detects the repository state |
-| `conventions:` in `adw.yaml` | Use `git.branch_template` for execution-group branch names; keep every other convention in repository-owned instruction and contributor documentation |
+| `conventions:` in `adw.yaml` | Keep every convention, including branch naming, in repository-owned instruction and contributor documentation |
 | `adw:update` | Invoke `adw:doctor`; it diagnoses first and offers the same preview-bound managed-file repair when needed |
+| `git.branch_template` in `adw.yaml` | Branch and worktree names are ordinary execution-time choices proposed and confirmed during `adw:execute`, not project configuration |

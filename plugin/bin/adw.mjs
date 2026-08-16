@@ -4,8 +4,9 @@
 // This file is a dispatcher and nothing else: it parses arguments, reads JSON
 // from stdin when a command takes structured input, hands the work to the
 // owning library module, and prints one JSON object. Domain behavior — path
-// confinement, contract validation, policy rendering, worktree mechanics —
-// lives in plugin/lib. Reasoning lives in skills.
+// confinement, contract validation, policy rendering — lives in plugin/lib.
+// Reasoning, including branch and worktree preparation with native Git,
+// lives in skills.
 import { mkdirSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,7 +15,6 @@ import { loadProjectConfig, validationCommands } from "../lib/config.mjs";
 import { applyInitialization, planInitialization, refreshApply, refreshPreview } from "../lib/project-setup.mjs";
 import { managedDevelopmentFiles } from "../lib/managed-environment.mjs";
 import { runDoctor } from "../lib/doctor.mjs";
-import { groupCleanupGuidance, inspectGroups, prepareGroups } from "../lib/worktrees.mjs";
 import { explainPermission } from "../lib/permission-policy.mjs";
 
 const pluginRoot = resolve(fileURLToPath(import.meta.url), "../..");
@@ -27,10 +27,6 @@ const COMMANDS = [
   "refresh-apply",
   "doctor",
   "permissions-explain",
-  "worktree-preview",
-  "worktree-prepare",
-  "worktree-inspect",
-  "worktree-cleanup-guidance",
   "render-managed",
 ];
 
@@ -95,17 +91,6 @@ async function dispatch(command, options) {
       const explanation = explainPermission(config.data.permissions, await readStdin());
       return { exitCode: EXIT.OK, body: { ok: true, project_root: projectRoot, ...explanation } };
     }
-    case "worktree-preview":
-    case "worktree-inspect": {
-      const report = inspectGroups(await readStdin());
-      return { exitCode: report.ok ? EXIT.OK : EXIT.CHECK_FAILED, body: report };
-    }
-    case "worktree-prepare": {
-      const report = prepareGroups(await readStdin());
-      return { exitCode: report.ok ? EXIT.OK : EXIT.CHECK_FAILED, body: report };
-    }
-    case "worktree-cleanup-guidance":
-      return { exitCode: EXIT.OK, body: groupCleanupGuidance(await readStdin()) };
     case "render-managed": {
       // Renders the managed container into a target directory without touching
       // project configuration. Used by build and security tests.

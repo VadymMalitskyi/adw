@@ -89,8 +89,10 @@ person's goal + explicit confirmation
 2. **A plan is a proposal, not a lock.** Confirming it in conversation permits
    local execution; there is no approval file, digest, or registry.
 3. **Git is ADW's memory.** If you stop halfway through, `adw:status` rebuilds
-   the picture from branches, worktrees, marker commits, and providers—not from
-   chat history or a hidden database.
+   the picture from branches, worktrees, commits, and providers—not from chat
+   history or a hidden database. An ordinary branch cannot prove it was
+   prepared for the same earlier task, so status reports what Git can actually
+   show and asks before resuming it.
 
 ## The normal routes: choose one
 
@@ -186,7 +188,6 @@ adw: 1
 
 git:
   base_branch: main
-  branch_template: "adw/{change_id}/{group_id}"
 
 execution:
   isolation: provider-sandbox
@@ -220,7 +221,6 @@ permissions:
 |---|---|---|
 | `adw: 1` | The contract version | Prevents silent changes in meaning |
 | `git.base_branch` | Optional override for the branch new work starts from | Git normally supplies this |
-| `git.branch_template` | Optional naming convention for execution-group branches | Default: `adw/{change_id}/{group_id}`; both placeholders are required |
 | `execution` | Isolation mode and, for a managed container, web-access policy | Tells ADW what safety boundary must be active |
 | `development.runtime_versions` | Optional unpinned runtime versions | Fills only gaps the repository does not pin itself |
 | `components` | Optional component and validation overrides | Use only when discovery is ambiguous |
@@ -378,20 +378,29 @@ or any other external write.
 
 ### 3. Prepare worktrees
 
-The coordinator turns each group into a machine-checkable packet:
+The coordinator turns each group into a bounded packet — task instructions,
+write paths, validation commands, and a proposed branch and worktree:
 
 ```json
 {
   "group_id": "api",
   "tasks": ["Implement the endpoint and its tests"],
   "affected_paths": ["src/api", "test/api"],
+  "branch": "adw/<change-id>/api",
+  "worktree": "worktrees/<change-id>/api",
   "validation": ["npm test"]
 }
 ```
 
-`worktree-preview` checks all packets before making anything. If parallel groups
-overlap in their paths, it refuses the request. `worktree-prepare` then creates
-one local branch and one worktree for each group:
+The branch and worktree here are ordinary execution-time choices, not
+configuration: `adw/<change-id>/<group-id>` is a readable default the
+coordinator proposes, but a plan or the user may hand it any valid Git branch
+name and it is used unchanged.
+
+Before creating anything, the coordinator inspects native Git state —
+`git worktree list --porcelain` and `git show-ref` for every group's proposed
+branch and target path — and refuses the request if paths overlap or a target
+is already occupied by something else:
 
 ```text
 base branch at an exact commit
@@ -401,15 +410,18 @@ base branch at an exact commit
      +--> adw/<change-id>/<group-b> --> worktrees/<change-id>/<group-b>
 ```
 
-Each branch begins with an empty **marker commit**. Its trailers record the
-change ID, group ID, base branch, base commit, and digest of the interpreted
-packet. This marker makes resume safe: the same request can reuse a matching
-prepared branch; a changed task or base is reported as a mismatch rather than
-quietly reusing the wrong work.
+A genuinely new group is created with `git worktree add -b <branch>
+<worktree-path> <base-commit>`. Nothing writes an empty marker commit anymore:
+the group's own commits are the record of what happened. If a proposed
+branch already exists with a worktree attached, the coordinator treats it as a
+resumed attempt — it reports what Git can establish (merge base, commits since
+that base, dirty files) and confirms with the user before continuing, since an
+ordinary branch carries no digest proving it still matches an earlier task.
 
-Preparation is all-or-nothing. If one group cannot be prepared, the CLI tears
-down the partial preparation. ADW never automatically deletes worktrees or
-branches later; it only prints exact cleanup commands for a person to run.
+If one group cannot be prepared, the coordinator reports the failure to the
+user rather than silently working around it. ADW never automatically deletes
+worktrees or branches later; it only prints exact cleanup commands for a
+person to run.
 
 ### 4. Implement, review, validate, commit
 
@@ -448,8 +460,9 @@ You can close the session at any point. `adw:status` reads, but does not modify:
 
 - the validated project config;
 - uncommitted Git state;
-- `adw/*` branches and worktree attachments;
-- each branch's marker commit and commits since the base;
+- local branches and worktree attachments, relative to the configured base
+  branch — nothing filters this to an `adw/*` naming convention;
+- each branch's commits since the base;
 - read-only configured provider state such as open PRs.
 
 It ends with the most useful next action. There is intentionally no “run
@@ -481,7 +494,6 @@ cleanup commands for a person when cleanup is appropriate.
 | **Phase** | One dependency-ordered slice of a larger plan that you can approve independently |
 | **Group** | A bounded piece of a phase assigned to one isolated worker; parallel groups cannot write the same paths |
 | **Worktree** | Another local folder attached to its own Git branch, so separate changes do not step on each other |
-| **Marker commit** | An initial, empty commit that records what a prepared group means, making resume checks reliable |
 | **Validation** | The project-sourced commands that check the final change, such as tests, type checks, or a build |
 | **Provider** | An external service integration, such as GitHub, Notion, or Datadog |
 | **Managed file** | A generated ADW policy file; change it through init/doctor's reviewed flow rather than hand-editing it |
@@ -810,7 +822,6 @@ plugin/
     managed-environment.mjs      repository evidence + managed-container render
     project-setup.mjs            init/refresh preview and apply orchestration
     doctor.mjs                   deterministic on-disk readiness checks
-    worktrees.mjs                parallel packet checks and resumable worktrees
     vendor/yaml.mjs              bundled pinned YAML parser
   templates/                     adw.yaml, plan, and managed-container sources
   integrations/                  provider-neutral contract and provider guides
@@ -835,8 +846,6 @@ failure. Code callers use this stable shape instead of scraping prose.
 | `init-preview` / `init-apply` | Safely preview and initialize ADW-managed files |
 | `refresh-preview` / `refresh-apply` | Safely preview and repair generated files |
 | `doctor` | Run read-only deterministic readiness checks |
-| `worktree-preview` / `worktree-inspect` / `worktree-prepare` | Describe, inspect, and prepare isolated execution groups |
-| `worktree-cleanup-guidance` | Print—not execute—the exact cleanup commands |
 | `render-managed` | Render a managed `.devcontainer/` for tests/build tooling without changing project config |
 
 Exit codes are stable too: `0` success, `2` bad input, `3` invalid contract,
@@ -852,13 +861,16 @@ each target still contains the exact previewed “before” bytes, and rolls the
 whole set back if any write fails. This is why init and doctor do not just have
 an agent edit several settings files directly.
 
-### Why `worktrees.mjs` exists
+### Why branch and worktree preparation stays in the skill, not the CLI
 
-Parallelism is useful only when it is honest. This module checks project paths,
-overlapping packets, branch state, worktree locations, base commits, and marker
-trailers. It creates/reattaches the correct isolated workspace or refuses. It
+Parallelism is useful only when it is honest, but deciding whether a proposed
+branch name or worktree path is fine is a judgment call informed by the plan
+and the user, not a fixed contract. `adw:execute` checks project paths for
+overlap, inspects `git worktree list` and `git show-ref` for existing branch
+and worktree state, and creates or asks about the correct isolated workspace
+using ordinary Git — no dedicated CLI command or marker commit is involved. It
 does not decide tasks, spawn agents, edit code, commit implementation, push, or
-delete anything; those actions need judgment or consent outside the module.
+delete anything; those actions need judgment or consent outside this step.
 
 ## A practical first week
 
@@ -893,7 +905,7 @@ safe to run, and gives you a reliable handoff to your future self or a teammate.
 | `adw.yaml` is invalid | Make a deliberate maintainer edit; doctor will not guess or rewrite it |
 | A generated permission/container file drifted | Run `adw:doctor`, inspect its refresh preview, approve only the listed repair if correct |
 | A plan's groups touch the same file | Put them in one group or sequential phases; do not claim they are parallel |
-| An execution was interrupted | Run `adw:status`; marker commits and worktrees reconstruct the state |
+| An execution was interrupted | Run `adw:status`; branches, commits, and worktrees reconstruct the state |
 | Provider auth is absent | Authenticate through the intended provider flow; do not add secrets to config |
 | A review comment changes the design | Return to plan/re-plan; `adw:address-review` is for in-scope corrections |
 | You are unsure whether an action is allowed | Treat it as yellow: describe its exact effect and ask the person first |

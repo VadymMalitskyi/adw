@@ -50,9 +50,26 @@ dangerous. Everything that benefits from judgment is a raw skill again.
 
 - Pushing, tag creation, branch deletion, worktree removal, rebase, and merge now
   ask the user in both providers instead of being auto-allowed.
+- `git worktree add` is now allowed automatically once execution is confirmed,
+  matching native Git preparation instead of a dedicated CLI command.
 - A managed container always carries both Codex and Claude, so the per-agent
   `agent_tools` profile is gone and the marker is schema 3.
 - The generated managed file set no longer includes `project-requirements.md`.
+
+### Execution mechanics simplified to native Git
+
+- `git.branch_template` is removed from `adw.yaml`; `git` now supports only
+  `base_branch`. Branch and worktree names for execution groups are ordinary
+  execution-time choices proposed and confirmed in conversation, not shared
+  configuration.
+- Removed `plugin/lib/worktrees.mjs` and the `worktree-preview`,
+  `worktree-prepare`, `worktree-inspect`, and `worktree-cleanup-guidance` CLI
+  commands. `adw:execute` now inspects `git worktree list` and `git show-ref`
+  directly and prepares groups with `git worktree add`.
+- Prepared branches no longer carry an empty marker commit or a packet digest.
+  `adw:status` and a resumed `adw:execute` report only what Git can actually
+  establish about a branch — its commits, merge base, and worktree attachment —
+  and no longer claim a branch can be proven to match an earlier task packet.
 
 ## 1.0.0 - 2026-08-14
 

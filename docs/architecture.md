@@ -21,7 +21,6 @@ Code exists only where interpretation, duplication, or partial failure creates a
 | `plugin/lib/managed-environment.mjs` | Reading repository evidence — manifests, lockfiles, pinned version files, CI workflows, Dockerfiles — and rendering the managed devcontainer from it. Reports what it could not settle instead of guessing. |
 | `plugin/lib/project-setup.mjs` | Confined multi-file initialization and managed-file refresh, both as preview/apply pairs. |
 | `plugin/lib/doctor.mjs` | Read-only readiness checks answerable from bytes on disk: manifests agree, an explicit policy matches the contract, the permission policy is present and current, the managed container still matches the digests in its own marker. |
-| `plugin/lib/worktrees.mjs` | Validating parallel execution-group packets and preparing resumable branch/worktree state. Enforces disjoint write paths between concurrent groups and writes a durable marker commit. |
 | `plugin/lib/vendor/yaml.mjs` | The only generated file in the plugin: the pinned YAML parser, bundled so an installed plugin needs no `node_modules`. |
 
 `plugin/bin/adw.mjs` is a dispatcher and nothing else. It parses arguments, reads JSON from stdin when a command takes structured input, calls the owning library module, and prints one JSON object.
@@ -41,9 +40,6 @@ Every command prints exactly one JSON object on stdout, including on failure (`{
 | `refresh-preview` | `--project-root` | Which ADW-managed files doctor can repair from the installed release |
 | `refresh-apply` | `--project-root`, `--fingerprint` | Repairs exactly the file set approved through doctor |
 | `doctor` | `--project-root`, optional `--checks all\|permissions`, optional `--details` | Read-only check list with pass/fail/info |
-| `worktree-preview` / `worktree-inspect` | group request JSON on stdin | Per-group state, planned action, and blockers |
-| `worktree-prepare` | group request JSON on stdin | Creates or attaches each group's branch and worktree |
-| `worktree-cleanup-guidance` | group request JSON on stdin | The exact commands a person may run to remove them |
 | `render-managed` | `--into` or `--project-root`, options JSON on stdin | Renders `.devcontainer/` without touching project configuration; used by build and security tests |
 
 Exit codes come from `EXIT` in `safe-files.mjs`:
@@ -53,7 +49,7 @@ Exit codes come from `EXIT` in `safe-files.mjs`:
 | 0 | Success |
 | 2 | Bad input or arguments |
 | 3 | Contract invalid — `adw.yaml`, answers, or a managed file failed validation |
-| 5 | A check failed — doctor found a failure, or a worktree group is blocked |
+| 5 | A check failed — doctor found a failure |
 | 7 | Path violation |
 | 8 | Write failed, and the transaction was rolled back |
 | 9 | Internal error |
@@ -73,11 +69,11 @@ Apply then writes through `applyAtomicWrites`, which additionally requires each 
 
 ## Parallel execution
 
-The plan alone decides how much runs at once. A phase's groups may run concurrently when their write paths are disjoint; `worktrees.mjs` refuses to prepare a set that overlaps, unless every overlapping path is declared shared.
+The plan alone decides how much runs at once. A phase's groups may run concurrently when their write paths are disjoint; the `adw:execute` skill refuses to prepare a set of groups whose write paths overlap.
 
-Each prepared group gets its own branch and its own worktree under `worktrees/<change-id>/<group-id>`, created from an explicit base commit and opened with an empty marker commit whose trailers record the change id, group id, base branch, base commit, and a digest of the interpreted task packet. A later session reconstructs execution state from Git alone: a branch is reused only when every trailer still matches and the marker commit still sits directly on the same base. Preparation is all-or-nothing — a failed group is torn back down so the coordinator can retry deterministically.
+Branch and worktree preparation is ordinary Git, run by the coordinating skill rather than a dedicated CLI protocol. Before creating anything, the skill inspects `git worktree list --porcelain` and `git show-ref` for each group's proposed branch and worktree path, and refuses to proceed past an occupied or ambiguous target without asking the user. A genuinely new group is created with `git worktree add -b <branch> <worktree-path> <base-commit>`; nothing writes an empty marker commit. A later session reconstructs execution state from Git alone — a branch's commits, its merge base with the configured base branch, and its worktree attachment — but an ordinary branch cannot prove by itself that it was prepared for the same prior task packet, since there is no digest or trailer recording that intent. The skill reports what Git can establish and asks before resuming a branch that already exists.
 
-The module never spawns agents, implements tasks, commits implementation work, pushes, opens pull requests, or mutates trackers. It also never removes a branch or worktree; `worktree-cleanup-guidance` prints the commands and a person runs them.
+Preparing a group is the coordinator's own action, not a library invariant enforced by rollback: if one group's preparation fails partway, the coordinator reports it and works with the user to resolve it, rather than a module tearing the whole set back down. Nothing spawns agents, implements tasks, commits implementation work, pushes, opens pull requests, mutates trackers, or removes a branch or worktree; cleanup commands are printed for a person to run.
 
 ## Trust model
 

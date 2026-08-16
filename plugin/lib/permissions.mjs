@@ -17,6 +17,7 @@ prefix_rule(pattern = ["git", ["status", "diff", "log", "show", "blame", "grep",
 prefix_rule(pattern = ["git", "config", ["--get", "--get-all", "--list"]], decision = "allow")
 prefix_rule(pattern = ["git", "remote", ["-v", "get-url"]], decision = "allow")
 prefix_rule(pattern = ["git", "worktree", "list"], decision = "allow")
+prefix_rule(pattern = ["git", "worktree", "add"], decision = "allow")
 prefix_rule(pattern = ["git", ["add", "commit"]], decision = "allow")
 prefix_rule(pattern = ["git", "switch", ["-c", "--create"]], decision = "allow")
 
