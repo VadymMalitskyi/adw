@@ -10,6 +10,7 @@ All notable changes to this private plugin are documented here.
 - Greenfield initialization now preview-binds creation of the Git repository, `PROJECT.md`, the stable `make check` validation contract, the first main commit, and the docs branch without generating speculative application code.
 - Brownfield initialization retains repository-derived discovery and byte-preserving adoption, and never commits the established code branch.
 - Moved deterministic initialization mechanics under `plugin/initialization/` so the two skills share one implementation without exposing a third routing command.
+- Documented the brownfield onboarding answers payload in `adw:init-brownfield` so the skill no longer relies on reading the normalizer to learn the schema-1 shape.
 
 ## 1.0.0 - 2026-08-14
 

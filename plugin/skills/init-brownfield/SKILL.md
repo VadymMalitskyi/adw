@@ -17,7 +17,20 @@ Adopt ADW without redesigning or scaffolding the project. Write only after an ex
    - optional provider capabilities, non-secret settings, access, transport preference, and exact network domains;
    - concise branch, pull-request, and work-item conventions;
    - optional local non-secret identity hints and collaboration preferences.
-6. Never accept credentials. Serialize normalized schema-1 answers to a secure temporary JSON file outside the repository. Do not include a `greenfield` object.
+6. Never accept credentials. Serialize normalized schema-1 answers to a secure temporary JSON file outside the repository using:
+
+   ```json
+   {
+     "schema": 1,
+     "execution": { "mode": "orchestrated" },
+     "development": { "runtime_versions": {} },
+     "providers": {},
+     "conventions": {},
+     "local": {}
+   }
+   ```
+
+   Do not include a `greenfield` object. Add `execution.isolation` only for an explicit choice that repository evidence did not settle, and `web_access` only when a managed container requires an explicit `public-pages` or `hosted-only` policy. Each configured `providers.<capability>` entry carries `provider` plus optional `required`, `transport`, `access`, `settings`, and `network_domains`.
 7. Run `node <plugin-root>/initialization/init.mjs preview --kind brownfield --project-root <project-root> --onboarding <answers>`. Review every proposed `adw.yaml`, `.adw/`, root `/worktrees/`, routing, permission, component and validation, docs, isolation, and managed-container action. Preserve every byte outside bounded ADW blocks and preserve an existing project devcontainer byte-for-byte.
 8. Present “What will change / What will not happen yet / What you need to do next.” Ask for plain `approve` or `cancel`. Keep the preview digest internal.
 9. After `approve`, run the same command with `apply --confirmed --preview-digest <digest>`. Any repository, answer, or target change invalidates approval and requires a new preview.
