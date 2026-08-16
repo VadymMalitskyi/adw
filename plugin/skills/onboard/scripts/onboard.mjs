@@ -84,7 +84,7 @@ async function parseProjectConfiguration(root) {
   }
 
   const providers = Object.fromEntries(CAPABILITIES.filter((capability) => project.providers?.[capability]).map((capability) => [capability, project.providers[capability]]));
-  return { source, execution: project.execution, docs: { branch, worktree, target: worktreeTarget }, providers };
+  return { source, execution: project.execution, docs: { branch, worktree, target: worktreeTarget }, providers, planning: project.planning };
 }
 
 function worktreeRecords(root) {
@@ -200,7 +200,7 @@ try {
   const args = parseArguments(process.argv.slice(2));
   const root = projectRoot(args.projectRoot);
   const project = await parseProjectConfiguration(root);
-  const local = loadLocalAnswers(args.answersPath, project.providers, pluginRoot);
+  const local = loadLocalAnswers(args.answersPath, project.providers, pluginRoot, project.planning);
   const docs = docsPlan(root, project.docs);
   const localFile = localPlan(root, local);
   const digest = previewDigest(root, project, docs, localFile);

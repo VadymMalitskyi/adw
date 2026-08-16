@@ -16,12 +16,13 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { discoverDevelopmentEnvironment, discoverProjectUnderstanding, managedDevelopmentFiles } from "./development-environment.mjs";
 import {
+  DEFAULT_PLANNING,
   loadOnboarding,
   onboardingDigest,
   onboardingSummary,
 } from "./onboarding.mjs";
 import { renderLocalConfiguration } from "../lib/local-configuration.mjs";
-import { applyAtomicWrites, parseYaml, validateProjectConfig } from "../lib/adw-helper.mjs";
+import { applyAtomicWrites, parseYaml, validatePlanTemplate, validateProjectConfig } from "../lib/adw-helper.mjs";
 import { permissionProjectFiles } from "../execution/managed-development.mjs";
 
 const ROUTING_START = "<!-- ADW:START -->";
@@ -300,6 +301,11 @@ function projectConfiguration(projectRoot, isolation, onboarding, { baseBranch =
     "  worktree: worktrees/docs",
     "  sync_marker: SYNC.yaml",
     "",
+    "planning:",
+    `  default_template: ${DEFAULT_PLANNING.default_template}`,
+    "  templates:",
+    `    standard: ${DEFAULT_PLANNING.templates.standard}`,
+    "",
     "execution:",
     `  mode: ${onboarding.execution.mode}`,
     `  isolation: ${isolation}`,
@@ -342,7 +348,11 @@ function assertWritableProjectPath(projectRoot, relativePath) {
   let current = projectRoot;
   for (const part of relativePath.split("/")) {
     current = join(current, part);
-    if (existsSync(current) && lstatSync(current).isSymbolicLink()) throw new Error(`${relativePath} cannot be managed through a symbolic link`);
+    try {
+      if (lstatSync(current).isSymbolicLink()) throw new Error(`${relativePath} cannot be managed through a symbolic link`);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
   }
 }
 
@@ -435,7 +445,9 @@ function plannedFiles(projectRoot, execution, onboarding, { kind, baseBranch }) 
   files.push({ path: ".gitignore", before: ignoreBefore, after: ignoreAfter, action: existsSync(ignorePath) ? "update-managed-block" : "create" });
   const localPath = join(projectRoot, ".adw/local.yaml");
   const localBefore = readOrEmpty(localPath);
-  const hasLocalAnswers = Object.keys(onboarding.local.identity).length > 0 || Object.keys(onboarding.local.providers).length > 0;
+  const hasLocalAnswers = Object.keys(onboarding.local.identity).length > 0
+    || Object.keys(onboarding.local.providers).length > 0
+    || Object.keys(onboarding.local.planning).length > 0;
   if (existsSync(localPath) && hasLocalAnswers) throw new Error("onboarding local settings cannot replace an existing .adw/local.yaml; preserve or update it through a separate reviewed local change");
   const localAfter = existsSync(localPath) ? localBefore : renderLocalConfiguration(onboarding.local);
   files.push({ path: ".adw/local.yaml", before: localBefore, after: localAfter, action: existsSync(localPath) ? "preserve-local" : "create-local" });
@@ -447,6 +459,21 @@ function plannedFiles(projectRoot, execution, onboarding, { kind, baseBranch }) 
   files.push({ path: ".adw/preferences.md", before: preferencesBefore, after: preferencesAfter, action: existsSync(preferencesPath) ? "preserve-preferences" : "create-preferences" });
   const configPath = join(projectRoot, "adw.yaml");
   if (!existsSync(configPath)) {
+    const templateRelativePath = DEFAULT_PLANNING.templates.standard;
+    assertWritableProjectPath(projectRoot, templateRelativePath);
+    const templatePath = join(projectRoot, templateRelativePath);
+    const templateBefore = readOrEmpty(templatePath);
+    const templateAfter = existsSync(templatePath) ? templateBefore : readFileSync(join(pluginRoot, "templates/plan.md"), "utf8");
+    const templateValidation = validatePlanTemplate(templateAfter);
+    if (!templateValidation.valid) {
+      throw new Error(`${templateRelativePath} is not a valid ADW plan template: ${templateValidation.errors.map((item) => `${item.path} ${item.message}`).join("; ")}`);
+    }
+    files.push({
+      path: templateRelativePath,
+      before: templateBefore,
+      after: templateAfter,
+      action: existsSync(templatePath) ? "preserve-plan-template" : "create-plan-template",
+    });
     const greenfieldComponents = [{ name: "app", path: ".", commands: [{ command: "make check", source: "Makefile#target:check", required: true }] }];
     files.push({ path: "adw.yaml", before: "", after: projectConfiguration(projectRoot, execution.isolation, onboarding, {
       baseBranch,
@@ -660,7 +687,7 @@ function commitGreenfieldSeed(projectRoot) {
 
 function rollbackGreenfield(projectRoot, gitPlan, files) {
   for (const file of [...files].reverse()) rmSync(join(projectRoot, file.path), { force: true });
-  for (const directory of [".adw", ".codex", ".claude", ".devcontainer", "worktrees"]) {
+  for (const directory of [".adw", "adw", ".codex", ".claude", ".devcontainer", "worktrees"]) {
     rmSync(join(projectRoot, directory), { recursive: true, force: true });
   }
   if (gitPlan.action === "create") rmSync(join(projectRoot, ".git"), { recursive: true, force: true });

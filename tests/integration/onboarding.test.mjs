@@ -43,7 +43,7 @@ test("missing answers use the lightweight dual-agent default", () => {
     providers: {},
     networkDomains: [],
     conventions: {},
-    local: { identity: {}, providers: {} },
+    local: { identity: {}, providers: {}, planning: {} },
     digest: "<digest>",
   });
   assert.match(first.digest, /^[a-f0-9]{64}$/);
@@ -93,6 +93,7 @@ test("normalizes supported project and local onboarding answers", () => {
         work_tracker: { transport: "cli", account: "ada" },
         code_host: { transport: "native" },
       },
+      planning: { preferred_template: "standard" },
     },
   }));
 
@@ -120,6 +121,9 @@ test("normalizes supported project and local onboarding answers", () => {
     "    account: \"ada\"",
     "  code_host:",
     "    transport: \"native\"",
+    "",
+    "planning:",
+    "  preferred_template: \"standard\"",
     "",
   ].join("\n"));
 });
@@ -183,6 +187,7 @@ test("summary exposes local field names without personal values", () => {
   assert.equal(summary.providers.code_host.required, true);
   assert.deepEqual(summary.local.identity_fields, ["display_name", "email"]);
   assert.deepEqual(summary.local.providers.code_host, ["account", "transport"]);
+  assert.equal(summary.local.preferred_template, null);
   const serialized = JSON.stringify(summary);
   assert.doesNotMatch(serialized, /Private Person|private@example\.test|private-account/);
   assert.doesNotMatch(serialized, /shared-owner|shared-repository/);
@@ -231,4 +236,6 @@ test("local choices require a declared shared capability and conventions stay si
   assert.throws(() => load(base({ conventions: { branches: "first\nsecond" } })), /single-line/);
   assert.throws(() => load(base({ conventions: { "Bad Key": "value" } })), /snake_case/);
   assert.throws(() => load(base({ local: { identity: { email: "first\tsecond" } } })), /single-line/);
+  assert.throws(() => load(base({ local: { planning: { preferred_template: "missing" } } })), /declared by the project/);
+  assert.throws(() => load(base({ local: { planning: { preferred_template: "Bad Name" } } })), /lowercase template name/);
 });

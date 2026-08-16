@@ -18,6 +18,10 @@ const RUNTIMES = new Set(["node", "python", "go", "rust", "java", "ruby", "dotne
 const CONVENTION_KEY = /^[a-z][a-z0-9_]*$/;
 const SECRET_LIKE_KEY = /(?:password|passwd|token|api[_-]?key|secret|credential|authorization|cookie|private[_-]?key)/i;
 const DOMAIN = /^[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,}$/;
+export const DEFAULT_PLANNING = Object.freeze({
+  default_template: "standard",
+  templates: Object.freeze({ standard: "adw/plan-templates/standard.md" }),
+});
 
 function fail(path, message) {
   throw new Error(`${path}: ${message}`);
@@ -234,7 +238,7 @@ function normalizeOnboarding(raw, pluginRoot) {
     providers,
     networkDomains,
     conventions: normalizeConventions(raw.conventions),
-    local: normalizeLocalConfiguration(raw.local, providers, pluginRoot, "onboarding.local"),
+    local: normalizeLocalConfiguration(raw.local, providers, pluginRoot, "onboarding.local", DEFAULT_PLANNING),
   };
   normalized.digest = onboardingDigest(normalized);
   return normalized;
@@ -251,7 +255,7 @@ export function defaultOnboarding() {
     providers: {},
     networkDomains: [],
     conventions: {},
-    local: { identity: {}, providers: {} },
+    local: { identity: {}, providers: {}, planning: {} },
   };
   onboarding.digest = onboardingDigest(onboarding);
   return onboarding;

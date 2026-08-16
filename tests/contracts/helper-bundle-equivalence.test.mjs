@@ -25,6 +25,7 @@ test("the generated helper is self-contained and runnable on Node 20", () => {
 test("the canonical source and generated bundle expose every operational helper", () => {
   const operations = [
     "computeDigest", "parseYaml", "validateProjectConfig", "loadProjectConfig",
+    "validatePlanTemplate", "loadPlanTemplate", "resolvePlanTemplate",
     "createPlanApproval", "validatePlanApproval", "verifyPlanApproval", "supersedePlanApproval",
     "createRunRecord", "validateRunRecord", "updateRunRecord",
     "recordValidation", "resolveValidationCommands", "runValidationCommand",

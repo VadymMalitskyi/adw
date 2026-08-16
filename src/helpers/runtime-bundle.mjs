@@ -3,7 +3,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
 import { link, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, posix, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseDocument } from "yaml";
 
@@ -14,6 +14,7 @@ export const EXECUTION_MODES = Object.freeze(["orchestrated", "sequential"]);
 export const ISOLATION_MODES = Object.freeze(["provider-sandbox", "project-devcontainer", "managed-devcontainer"]);
 export const GROUP_STATUSES = Object.freeze(["prepared", "implementing", "reviewing", "validating", "passed", "failed", "blocked"]);
 export const PHASE_STATUSES = Object.freeze(["running", "passed", "failed", "blocked"]);
+export const REQUIRED_PLAN_SECTIONS = Object.freeze(["feature-overview", "acceptance-criteria", "implementation-plan", "whole-feature-validation"]);
 
 const WEB_ACCESS_MODES = new Set(["public-pages", "hosted-only"]);
 const TRANSPORTS = new Set(["auto", "native", "mcp", "cli", "api"]);
@@ -29,6 +30,7 @@ const DEFAULT_TIMEOUT_MS = 120000;
 const VALIDATION_TERMINATION_GRACE_MS = 250;
 const VALIDATION_PIPE_CLOSE_GRACE_MS = 100;
 const APPROVAL_DOMAIN = Buffer.from("ADW-PLAN-APPROVAL-V1\0", "utf8");
+const PLAN_TEMPLATE_MAX_BYTES = 256 * 1024;
 
 // ---------------------------------------------------------------------------
 // Digests and YAML
@@ -102,8 +104,8 @@ function checkRelativePath(errors, value, path) {
 }
 
 function normalizeRelativePath(value) {
-  const trimmed = value.replace(/^\.\//, "").replace(/\/+$/, "");
-  return trimmed.length === 0 ? "." : trimmed;
+  const normalized = posix.normalize(value).replace(/\/+$/, "");
+  return normalized.length === 0 ? "." : normalized;
 }
 
 function checkBranchName(errors, value, path) {
@@ -139,7 +141,41 @@ function checkIsoTimestamp(errors, value, path) {
 // Project configuration: the handwritten `adw: 1` contract
 // ---------------------------------------------------------------------------
 
-const PROJECT_KEYS = new Set(["adw", "git", "docs", "execution", "development", "components", "providers", "conventions"]);
+const PROJECT_KEYS = new Set(["adw", "git", "docs", "execution", "development", "components", "providers", "planning", "conventions"]);
+
+function validatePlanning(errors, value, normalized) {
+  if (!checkObject(errors, value, "/planning")) return;
+  checkKnownKeys(errors, value, new Set(["default_template", "templates"]), "/planning");
+  const planning = { default_template: null, templates: {} };
+  if (!checkSingleLine(errors, value.default_template, "/planning/default_template", 100)) {
+    // The shared string validator reports the concrete missing/type error.
+  } else if (!IDENTIFIER.test(value.default_template)) {
+    errors.add("/planning/default_template", "must be a lowercase template name with `-` or `_` separators");
+  } else {
+    planning.default_template = value.default_template;
+  }
+  if (!checkObject(errors, value.templates, "/planning/templates")) {
+    normalized.planning = planning;
+    return;
+  }
+  const entries = Object.entries(value.templates);
+  if (entries.length === 0) errors.add("/planning/templates", "must declare at least one project template");
+  const paths = new Map();
+  for (const [name, rawPath] of entries) {
+    const path = `/planning/templates/${name}`;
+    if (!IDENTIFIER.test(name)) { errors.add(path, "template name must be lowercase alphanumeric with `-` or `_` separators"); continue; }
+    if (!checkRelativePath(errors, rawPath, path)) continue;
+    const templatePath = normalizeRelativePath(rawPath);
+    if (templatePath === "." || !templatePath.endsWith(".md")) { errors.add(path, "must be a project-relative Markdown file ending in .md"); continue; }
+    if (paths.has(templatePath)) { errors.add(path, `duplicates the path already used by template ${paths.get(templatePath)}`); continue; }
+    paths.set(templatePath, name);
+    planning.templates[name] = templatePath;
+  }
+  if (planning.default_template !== null && !Object.hasOwn(planning.templates, planning.default_template)) {
+    errors.add("/planning/default_template", "must name one of planning.templates");
+  }
+  normalized.planning = planning;
+}
 
 function validateValidationCommand(errors, item, path, componentPath) {
   if (typeof item === "string") {
@@ -246,6 +282,7 @@ export function validateProjectConfig(data) {
     development: { runtime_versions: {} },
     components: {},
     providers: {},
+    planning: null,
     conventions: {},
   };
 
@@ -298,6 +335,8 @@ export function validateProjectConfig(data) {
 
   if (data.providers !== undefined) validateProviders(errors, data.providers, normalized);
 
+  if (data.planning !== undefined) validatePlanning(errors, data.planning, normalized);
+
   if (data.conventions !== undefined && checkObject(errors, data.conventions, "/conventions")) {
     for (const [key, value] of Object.entries(data.conventions)) {
       const path = `/conventions/${key}`;
@@ -320,6 +359,130 @@ export async function loadProjectConfig({ project_root, path = "adw.yaml" }) {
   const raw = parseYaml(bytes, path);
   const validation = validateProjectConfig(raw);
   return { data: validation.data ?? raw, validation: { valid: validation.valid, errors: validation.errors }, digest: computeDigest(bytes) };
+}
+
+// ---------------------------------------------------------------------------
+// Project-owned plan templates
+// ---------------------------------------------------------------------------
+
+function planTemplateText(content) {
+  if (!(typeof content === "string" || Buffer.isBuffer(content))) throw new InputError("plan template must be a string or buffer");
+  const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content, "utf8");
+  if (bytes.length > PLAN_TEMPLATE_MAX_BYTES) throw new InputError(`plan template must be at most ${PLAN_TEMPLATE_MAX_BYTES} bytes`);
+  try { return Buffer.isBuffer(content) ? new TextDecoder("utf-8", { fatal: true }).decode(content) : content; }
+  catch (error) { throw new InputError(`plan template is not valid UTF-8: ${error.message}`, { cause: error }); }
+}
+
+export function validatePlanTemplate(content, { expected_sections: expectedSections } = {}) {
+  const errors = new Errors();
+  const text = planTemplateText(content);
+  if (text.includes("\0")) errors.add("/template", "must not contain NUL bytes");
+  const sections = [];
+  const seen = new Set();
+  let planMarker = 0;
+  let requiredSections = null;
+  let fence = null;
+  for (const [index, line] of text.split(/\r?\n/).entries()) {
+    const opening = /^\s*(```+|~~~+)/.exec(line);
+    if (fence === null && opening) { fence = opening[1][0]; continue; }
+    if (fence !== null) {
+      if (new RegExp(`^\\s*${fence === "`" ? "```" : "~~~"}+\\s*$`).test(line)) fence = null;
+      continue;
+    }
+    if (/^\s*<!--\s*ADW:PLAN\s+1\s*-->\s*$/.test(line)) { planMarker += 1; continue; }
+    const required = /^\s*<!--\s*ADW:REQUIRED-SECTIONS\s+([a-z0-9_-]+(?:\s+[a-z0-9_-]+)*)\s*-->\s*$/.exec(line);
+    if (required) {
+      if (requiredSections !== null) errors.add(`/template/line/${index + 1}`, "duplicates the ADW required-sections manifest");
+      else requiredSections = required[1].split(/\s+/);
+      continue;
+    }
+    const section = /^\s*<!--\s*ADW:SECTION\s+([a-z0-9](?:[a-z0-9_-]*[a-z0-9])?)\s*-->\s*$/.exec(line);
+    if (section) {
+      if (seen.has(section[1])) errors.add(`/template/line/${index + 1}`, `duplicates ADW section marker ${section[1]}`);
+      else { seen.add(section[1]); sections.push(section[1]); }
+      continue;
+    }
+    if (/<!--\s*ADW:(?:PLAN|REQUIRED-SECTIONS|SECTION)\b/.test(line)) errors.add(`/template/line/${index + 1}`, "contains a malformed ADW plan marker");
+  }
+  if (planMarker !== 1) errors.add("/template", `must contain exactly one <!-- ADW:PLAN 1 --> marker; found ${planMarker}`);
+  if (requiredSections === null) {
+    errors.add("/template", "must contain exactly one ADW required-sections manifest");
+  } else {
+    const requiredSet = new Set(requiredSections);
+    if (requiredSet.size !== requiredSections.length) errors.add("/template", "ADW required-sections manifest must not contain duplicates");
+    if (requiredSections.some((id) => !IDENTIFIER.test(id))) errors.add("/template", "ADW required-sections manifest contains an invalid section id");
+    if (requiredSections.length !== sections.length || requiredSections.some((id, index) => sections[index] !== id)) {
+      errors.add("/template", "ADW required-sections manifest must exactly match the ordered ADW section markers");
+    }
+  }
+  let previous = -1;
+  for (const id of REQUIRED_PLAN_SECTIONS) {
+    const position = sections.indexOf(id);
+    if (position === -1) errors.add("/template", `is missing required ADW section marker ${id}`);
+    else if (position <= previous) errors.add("/template", `required ADW section marker ${id} is out of order`);
+    else previous = position;
+  }
+  if (expectedSections !== undefined) {
+    if (!Array.isArray(expectedSections) || expectedSections.length === 0 || expectedSections.some((id) => typeof id !== "string" || !IDENTIFIER.test(id))) {
+      errors.add("/expected_sections", "must be a non-empty array of safe section ids");
+    } else if (expectedSections.length !== sections.length || expectedSections.some((id, index) => sections[index] !== id)) {
+      errors.add("/template", "ordered ADW section markers differ from the expected template sections");
+    }
+  }
+  return { valid: errors.valid, errors: errors.items, sections, required_sections: requiredSections ?? [] };
+}
+
+export async function loadPlanTemplate({ project_root, path, expected_sections }) {
+  if (typeof project_root !== "string" || typeof path !== "string") throw new InputError("load-plan-template requires project_root and path");
+  const target = await resolveProjectPath(project_root, path);
+  let stat;
+  try { stat = await lstat(target); }
+  catch (error) { if (error.code === "ENOENT") throw new PathError(`plan template does not exist: ${path}`); throw error; }
+  if (stat.isSymbolicLink() || !stat.isFile()) throw new PathError(`plan template must be a regular non-symlink file: ${path}`);
+  const bytes = await readFile(target);
+  const validation = validatePlanTemplate(bytes, { expected_sections });
+  return { path, content: planTemplateText(bytes), digest: computeDigest(bytes), validation };
+}
+
+async function preferredPlanTemplate(projectRoot, path = ".adw/local.yaml") {
+  const target = await resolveProjectPath(projectRoot, path);
+  let stat;
+  try { stat = await lstat(target); }
+  catch (error) { if (error.code === "ENOENT") return null; throw error; }
+  if (stat.isSymbolicLink() || !stat.isFile()) throw new PathError(`${path} must be a regular non-symlink file`);
+  const local = parseYaml(await readFile(target), path);
+  if (local.planning === undefined) return null;
+  if (local.schema !== 1) throw new InputError(`${path} /schema must equal 1 when a planning preference is present`);
+  if (!isObject(local.planning)) throw new InputError(`${path} /planning must be a mapping object`);
+  for (const key of Object.keys(local.planning)) {
+    if (key !== "preferred_template") throw new InputError(`${path} /planning/${key} is not supported`);
+  }
+  const preferred = local.planning.preferred_template;
+  if (typeof preferred !== "string" || !IDENTIFIER.test(preferred)) throw new InputError(`${path} /planning/preferred_template must be a safe template name`);
+  return preferred;
+}
+
+export async function resolvePlanTemplate({ project_root, requested_template }) {
+  if (typeof project_root !== "string") throw new InputError("resolve-plan-template requires project_root");
+  if (requested_template !== undefined && (typeof requested_template !== "string" || !IDENTIFIER.test(requested_template))) {
+    throw new InputError("requested_template must be a safe template name");
+  }
+  const loadedProject = await loadProjectConfig({ project_root, path: "adw.yaml" });
+  if (!loadedProject.validation.valid) return { validation: loadedProject.validation, template: null };
+  const planning = loadedProject.data.planning;
+  if (planning === null) {
+    if (requested_template !== undefined) throw new InputError("the project does not declare named plan templates");
+    return { validation: { valid: true, errors: [] }, template: { source: "bundled", selected_by: "legacy-fallback", name: null, path: null } };
+  }
+  const preferred = requested_template === undefined ? await preferredPlanTemplate(project_root) : null;
+  const name = requested_template ?? preferred ?? planning.default_template;
+  const selectedBy = requested_template !== undefined ? "explicit" : preferred !== null ? "local" : "project-default";
+  if (!Object.hasOwn(planning.templates, name)) throw new InputError(`unknown plan template ${JSON.stringify(name)}; expected one of: ${Object.keys(planning.templates).join(", ")}`);
+  const template = await loadPlanTemplate({ project_root, path: planning.templates[name] });
+  return {
+    validation: template.validation,
+    template: { source: "project", selected_by: selectedBy, name, path: template.path, digest: template.digest, sections: template.validation.sections, content: template.content },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -838,6 +1001,22 @@ export async function dispatch(command, rawInput) {
     case "load-project": {
       const loaded = await loadProjectConfig(input);
       return { exitCode: loaded.validation.valid ? EXIT.OK : EXIT.CONTRACT_INVALID, body: { ok: loaded.validation.valid, data: loaded.data, digest: loaded.digest, errors: loaded.validation.errors } };
+    }
+    case "validate-plan-template": {
+      const loaded = input.content !== undefined
+        ? { validation: validatePlanTemplate(input.content, { expected_sections: input.expected_sections }), content: input.content }
+        : await loadPlanTemplate(input);
+      return {
+        exitCode: loaded.validation.valid ? EXIT.OK : EXIT.CONTRACT_INVALID,
+        body: { ok: loaded.validation.valid, sections: loaded.validation.sections, errors: loaded.validation.errors },
+      };
+    }
+    case "resolve-plan-template": {
+      const resolved = await resolvePlanTemplate(input);
+      return {
+        exitCode: resolved.validation.valid ? EXIT.OK : EXIT.CONTRACT_INVALID,
+        body: { ok: resolved.validation.valid, template: resolved.template, errors: resolved.validation.errors },
+      };
     }
     case "create-approval": {
       const approval = createPlanApproval(input);

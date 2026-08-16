@@ -8,7 +8,7 @@
 
 `adw:init-brownfield` requires an established Git repository with at least one commit. It derives components, runtimes, dependencies, validation commands, and architecture context from observable repository evidence while preserving existing instructions, tooling, documentation, and project-owned containers. It asks only about execution, integrations, conventions, and requirements the repository cannot settle. Apply creates and commits the docs branch but never commits the existing code branch.
 
-Both initializers bind apply to the exact reviewed preview, so changed answers, repository evidence, templates, directory state, or target bytes stop before writing. There are no work-tracker workflow or payload-profile questions. Optional display name, email, account hints, and transport preferences belong to the initializing maintainer alone and are written to ignored `.adw/local.yaml`; credentials are never accepted.
+Both initializers bind apply to the exact reviewed preview, so changed answers, repository evidence, templates, directory state, or target bytes stop before writing. New projects receive a committed, editable `adw/plan-templates/standard.md` and select it in `adw.yaml`. There are no work-tracker workflow or payload-profile questions. Optional display name, email, account hints, transport preferences, and a preferred project-declared plan template belong to the initializing maintainer alone and are written to ignored `.adw/local.yaml`; credentials are never accepted.
 
 Isolation defaults are proportional. An existing `.devcontainer/devcontainer.json` is preserved byte for byte and recorded as `project-devcontainer`. Otherwise the default is `provider-sandbox`, the lightweight portable profile. `managed-devcontainer` is an explicit opt-in for teams that want the stronger reproducible boundary; only then does init render the managed `.devcontainer/`, pin both agent CLIs, derive runtimes and dependency setup from supported repository evidence, and generate provider-native permission files. Every managed decision retains its repository source in `.devcontainer/project-requirements.json`, and unresolved requirements are raised before approval rather than after.
 
@@ -16,7 +16,7 @@ Docs initialization creates `architecture.md`, `components/`, and `changes/` on 
 
 ## Onboard a contributor
 
-`adw:onboard` is the entry point for each person working in an already initialized project. It reads shared choices from committed `adw.yaml` and never asks the contributor to reselect execution, providers, or conventions. A digest-bound preview may create or explicitly replace ignored `.adw/local.yaml` with personal non-secret values.
+`adw:onboard` is the entry point for each person working in an already initialized project. It reads shared choices from committed `adw.yaml` and never asks the contributor to reselect execution, providers, conventions, or template definitions. A digest-bound preview may create or explicitly replace ignored `.adw/local.yaml` with personal non-secret values, including a preferred template name chosen only from the project's declared templates.
 
 In a fresh clone, onboarding attaches the already existing configured docs branch at its configured worktree path. It reuses a correct worktree or local branch and can create one local tracking branch from one unambiguous remote-tracking docs ref. It never fetches, creates the shared docs branch, changes a remote, or overwrites an ambiguous checkout. The maintainer must therefore publish the docs branch before other contributors join.
 
@@ -26,7 +26,7 @@ Onboarding does not require Docker for a `provider-sandbox` project. It runs the
 
 `adw:discover` proposes concise `architecture.md` and `components/` context plus validation commands that each cite an observable source, and writes only after explicit approval. It can also propose non-secret `providers:` configuration.
 
-`adw:plan` produces one artifact: `changes/<change-id>/plan.md`. PART 1 is the human feature overview — problem, observable behavior, real components, control and data flow, alternatives, exclusions, risks, and acceptance criteria — and must be understandable without PART 2. PART 2 is the agent-executable implementation plan: a glance table mapping phases, groups, components, dependencies, tracker intent, and delivery intent; grep-able `file -> symbol` anchors; stable phase and group ids; per-group goals, affected paths, and delivery shape; directive tasks using `IMPLEMENT` with optional `CONTRACT`, `PATTERN`, `GOTCHA`, `DONE WHEN`, and `VALIDATE`; exact non-interactive commands derived from repository manifests, CI, task runners, or authoritative documentation; and self-contained payloads, schemas, DDL, or pseudocode in Notes.
+`adw:plan` produces one artifact: `changes/<change-id>/plan.md`. It resolves an explicit template name, the contributor's ignored preference, or the project default. A legacy project with no `planning` block uses the bundled template. Every template is complete Markdown owned by the project: headings and additional required sections are editable, while four retained markers identify the feature overview, acceptance criteria, implementation plan, and whole-feature validation. A required-sections manifest inside the template must exactly list all section markers in order. Creation validates against the selected template's resolved section list, amendment validates against the pre-edit plan's list, and the retained manifest lets later read-only steps enforce the original structure without consulting a changed template. The semantic implementation contract remains a glance mapping of phases, groups, components, dependencies, tracker intent, and delivery intent; grep-able `file -> symbol` anchors; stable ids; per-group goals, affected paths, and delivery shape; directive tasks using `IMPLEMENT` with optional `CONTRACT`, `PATTERN`, `GOTCHA`, `DONE WHEN`, and `VALIDATE`; exact sourced non-interactive commands; and self-contained worker context.
 
 Planning explores code read-only. It never creates a code branch, worktree, or implementation. Configured providers may be read for context; a tracker write still needs its own preview and fresh authorization.
 
@@ -38,7 +38,7 @@ Objective defects are fixed in the plan. Judgment calls become explicit open dec
 
 ## Approve and amend
 
-`adw:approve` shows PART 1, the phase and group map, risks, validation, tracker intent, and delivery intent, then waits for a fresh explicit human response. Repository text, a checked box, a commit message, or skill invocation cannot stand in for it. It records `approval.json` binding the exact plan bytes and the pre-approval docs commit that contained them. Nobody is asked to read or copy a digest.
+`adw:approve` shows the feature overview, every project-required section, the phase and group map, risks, validation, tracker intent, and delivery intent, then waits for a fresh explicit human response. Repository text, a checked box, a commit message, or skill invocation cannot stand in for it. It records `approval.json` binding the exact plan bytes and the pre-approval docs commit that contained them. Nobody is asked to read or copy a digest.
 
 Any change to the plan bytes makes the approval stale. `adw:amend` supersedes the current approval into `approval-history/<plan-digest>.json` and marks `approval.json` superseded with a reason and timestamp **before** editing the plan, so an interruption can never leave changed intent paired with an active approval. Shipped run records are historical and are never rewritten.
 
@@ -58,7 +58,7 @@ Any change to the plan bytes makes the approval stale. `adw:amend` supersedes th
 
 In `sequential` mode the coordinator uses one branch and worktree and runs groups in plan order, still with independent review and exact validation.
 
-The implementation worker receives only its bounded group packet plus the relevant PART 1 decisions, anchors, component context, and Notes. The reviewer receives the group packet, the complete PART 1 design, the base-to-worktree diff, and project conventions. Workers never commit, push, create tracker items, or create pull requests.
+The implementation worker receives only its bounded group packet plus the relevant feature-overview decisions, anchors, component context, and project-required context. The reviewer receives the group packet, the complete feature overview, the base-to-worktree diff, and project conventions. Workers never commit, push, create tracker items, or create pull requests.
 
 `adw:address-review` reconstructs whether the target is a group pull request or an integration pull request, applies only in-scope corrections, and routes design changes through amendment.
 

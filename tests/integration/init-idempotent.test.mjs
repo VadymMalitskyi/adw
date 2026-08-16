@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -94,9 +94,14 @@ test("init previews without writes and applies idempotent bounded changes", () =
   assert.match(config, /command: "npm run lint"\n(?:\s+\S+: .*\n)*?\s+source: "package\.json#scripts\.lint"/);
   assert.match(config, /command: "npm run test"\n(?:\s+\S+: .*\n)*?\s+source: "package\.json#scripts\.test"/);
   assert.doesNotMatch(config, /release/);
+  assert.match(config, /planning:\n  default_template: standard/);
+  assert.deepEqual(
+    readFileSync(join(root, "adw/plan-templates/standard.md")),
+    readFileSync(join(repositoryRoot, "plugin/templates/plan.md")),
+  );
   assert.deepEqual(readFileSync(join(root, ".devcontainer/devcontainer.json")), devcontainerBefore);
 
-  const stablePaths = ["AGENTS.md", "CLAUDE.md", ".gitignore", "adw.yaml", ".adw/local.yaml", ".adw/preferences.md", "worktrees/docs/README.md", "worktrees/docs/architecture.md", "worktrees/docs/SYNC.yaml"];
+  const stablePaths = ["AGENTS.md", "CLAUDE.md", ".gitignore", "adw.yaml", "adw/plan-templates/standard.md", ".adw/local.yaml", ".adw/preferences.md", "worktrees/docs/README.md", "worktrees/docs/architecture.md", "worktrees/docs/SYNC.yaml"];
   const stableBytes = new Map(stablePaths.map((path) => [path, readFileSync(join(root, path))]));
   const docsHead = git(root, "-C", join(root, "worktrees/docs"), "rev-parse", "HEAD");
   const repeated = run(root, "apply", true);
@@ -113,4 +118,13 @@ test("init attaches an existing docs branch instead of creating another", () => 
   run(root, "apply", true);
   assert.equal(git(root, "-C", join(root, "worktrees/docs"), "branch", "--show-current"), "docs");
   assert.equal((git(root, "worktree", "list", "--porcelain").match(/branch refs\/heads\/docs/g) ?? []).length, 1);
+});
+
+test("init refuses a symlink where the project-owned plan template would be created", () => {
+  const root = fixture();
+  mkdirSync(join(root, "adw/plan-templates"), { recursive: true });
+  symlinkSync(join(root, "missing-template.md"), join(root, "adw/plan-templates/standard.md"));
+  const result = spawnSync(process.execPath, [initScript, "--kind", "brownfield", "preview", "--project-root", root], { encoding: "utf8" });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /plan-templates\/standard\.md cannot be managed through a symbolic link/);
 });

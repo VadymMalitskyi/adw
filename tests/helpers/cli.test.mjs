@@ -48,3 +48,24 @@ test("record-validation cannot be told that a required failure passed", () => {
   assert.equal(failed.status, 5);
   assert.equal(failed.output.evidence.status, "failed");
 });
+
+test("plan-template validation uses the project-contract exit code", () => {
+  const invalid = invoke("validate-plan-template", { content: "# Arbitrary Markdown without ADW markers\n" });
+  assert.equal(invalid.status, 3);
+  assert.equal(invalid.output.ok, false);
+  assert.match(JSON.stringify(invalid.output.errors), /ADW:PLAN|feature-overview/);
+
+  const coherentButUnexpected = invoke("validate-plan-template", {
+    content: [
+      "<!-- ADW:PLAN 1 -->",
+      "<!-- ADW:REQUIRED-SECTIONS feature-overview acceptance-criteria implementation-plan whole-feature-validation -->",
+      "<!-- ADW:SECTION feature-overview -->",
+      "<!-- ADW:SECTION acceptance-criteria -->",
+      "<!-- ADW:SECTION implementation-plan -->",
+      "<!-- ADW:SECTION whole-feature-validation -->",
+    ].join("\n"),
+    expected_sections: ["feature-overview", "security-review", "acceptance-criteria", "implementation-plan", "whole-feature-validation"],
+  });
+  assert.equal(coherentButUnexpected.status, 3);
+  assert.match(JSON.stringify(coherentButUnexpected.output.errors), /expected template sections/);
+});

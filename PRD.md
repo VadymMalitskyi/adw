@@ -45,13 +45,13 @@ No developer needs to understand JSON Schema, policy digests, profile digests, o
 
 ### Project configuration
 
-A handwritten `adw: 1` contract declares the base branch, docs branch and worktree, execution mode, isolation mode, components with their validation commands, optional provider capabilities, and optional plain-language conventions. Validation enforces only operationally important invariants: the contract version; safe non-empty relative branch and worktree values; supported execution mode and isolation; unique component ids with project-relative paths and non-empty validation commands; known capability names with non-empty provider names; rejection of credential-like settings; and unknown provider-specific keys permitted only inside `settings`.
+A handwritten `adw: 1` contract declares the base branch, docs branch and worktree, optional named project-owned plan templates, execution mode, isolation mode, components with their validation commands, optional provider capabilities, and optional plain-language conventions. Validation enforces only operationally important invariants: the contract version; safe non-empty relative branch, worktree, and template paths; a declared default template; supported execution mode and isolation; unique component ids with project-relative paths and non-empty validation commands; known capability names with non-empty provider names; rejection of credential-like settings; and unknown provider-specific keys permitted only inside `settings`.
 
 The contract must not require command-source fields, component policy digests, enforcement profiles, payload profiles, or schema validation.
 
 ### Canonical plan
 
-Every substantial change has exactly one file, `changes/<change-id>/plan.md`, in the mandatory PART 1 / PART 2 shape. PART 1 is written for engineers and must be understandable without PART 2. PART 2 is written for coordinator and worker agents and carries a phase/group glance table, grep-able `file -> symbol` anchors, stable ids, per-group goal, component, dependencies, affected paths and delivery shape, directive tasks, exact non-interactive commands derived from real repository sources, and self-contained artifacts in Notes.
+Every substantial change has exactly one file, `changes/<change-id>/plan.md`. A complete project-owned Markdown template may change headings, add required sections, and remove or combine non-core presentation sections. Four retained semantic markers identify the feature overview, acceptance criteria, implementation plan, and whole-feature validation. The feature overview is written for engineers and stands alone. The implementation region carries phase/group glance data, grep-able `file -> symbol` anchors, stable ids, per-group goal, component, dependencies, affected paths and delivery shape, directive tasks, exact non-interactive commands derived from real repository sources, and self-contained worker context.
 
 The plan is immutable after approval. Ticket ids, pull-request URLs, progress markers, and validation results live in run records. A design or scope change uses `adw:amend`, changes the plan bytes, and requires reapproval.
 

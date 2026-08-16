@@ -24,6 +24,7 @@ Ask only for optional contributor-local values:
 
 - display name, email, and work-tracker account hint;
 - for each capability `adw.yaml` declares, a supported `auto|native|mcp|cli|api` transport preference and account hint.
+- when the project declares more than one plan template, an optional preferred template name chosen only from that committed list.
 
 Do not ask for or accept credentials, tokens, cookies, private keys, or secret-like fields. Credentials stay in provider clients or credential stores. Do not ask the contributor to choose isolation, execution mode, shared providers, network domains, or conventions; those are already committed project decisions.
 
@@ -44,7 +45,8 @@ Serialize the complete desired local state to a secure temporary JSON file outsi
       "transport": "cli",
       "account": "optional-account"
     }
-  }
+  },
+  "planning": { "preferred_template": "migration" }
 }
 ```
 

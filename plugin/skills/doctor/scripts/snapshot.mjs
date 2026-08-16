@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadProjectConfig, parseYaml } from "../../../lib/adw-helper.mjs";
+import { loadProjectConfig, parseYaml, validatePlanTemplate } from "../../../lib/adw-helper.mjs";
 import { CODEX_RULES, PERMISSION_PROFILE, managedClaudeSettings, mergeClaudeSettings, mergeCodexConfig, permissionAgentsFromProject } from "../../../execution/managed-development.mjs";
 
 const skillDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -285,6 +285,28 @@ async function projectChecks(projectRoot) {
     const componentPaths = Object.values(project.components ?? {}).map(({ path }) => path).filter(Boolean);
     const uniqueComponents = new Set(componentPaths).size === componentPaths.length;
     checks.push(check("components", uniqueComponents ? "pass" : "fail", uniqueComponents ? `${componentPaths.length} component path(s) have unambiguous ownership` : "duplicate component paths create ambiguous ownership"));
+    if (project.planning === null) {
+      checks.push(check("planning-templates", "info", "no project templates configured; planning uses the bundled compatibility fallback"));
+    } else {
+      for (const [name, path] of Object.entries(project.planning.templates)) {
+        const target = resolve(projectRoot, path);
+        const tracked = git(projectRoot, ["ls-files", "--error-unmatch", "--", path]).status === 0;
+        let validation = { valid: false, errors: [{ path: "/template", message: "file is missing, unsafe, or not a regular file" }] };
+        if (regularFile(target, projectRoot)) {
+          try { validation = validatePlanTemplate(readFileSync(target)); }
+          catch (error) { validation = { valid: false, errors: [{ path: "/template", message: error.message }] }; }
+        }
+        const status = !validation.valid ? "fail" : tracked ? "pass" : "warn";
+        checks.push(check(
+          `planning-template:${name}`,
+          status,
+          !validation.valid
+            ? `${path} must contain the required ADW plan markers`
+            : tracked ? `${path} is a tracked valid ADW plan template` : `${path} is valid but not yet tracked; commit initialization before planning`,
+          status === "pass" ? {} : { tracked, errors: validation.errors },
+        ));
+      }
+    }
     checks.push(...executionChecks(projectRoot, project.execution ?? {}));
     const providers = Object.entries(project.providers ?? {});
     if (providers.length === 0) {

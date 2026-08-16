@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const onboardScript = join(repositoryRoot, "plugin/skills/onboard/scripts/onboard.mjs");
+const bundledPlanTemplate = readFileSync(join(repositoryRoot, "plugin/templates/plan.md"), "utf8");
 
 function git(root, ...args) {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
@@ -22,6 +23,11 @@ function projectConfiguration() {
     "  branch: docs",
     "  worktree: worktrees/docs",
     "  sync_marker: SYNC.yaml",
+    "planning:",
+    "  default_template: standard",
+    "  templates:",
+    "    standard: adw/plan-templates/standard.md",
+    "    migration: adw/plan-templates/migration.md",
     "execution:",
     "  mode: orchestrated",
     "  isolation: provider-sandbox",
@@ -53,7 +59,10 @@ function fixture({ docs = true } = {}) {
   writeFileSync(join(seed, "README.md"), "# Fixture\n");
   writeFileSync(join(seed, ".gitignore"), ".adw/\n/worktrees/\n");
   writeFileSync(join(seed, "adw.yaml"), projectConfiguration());
-  git(seed, "add", "README.md", ".gitignore", "adw.yaml");
+  mkdirSync(join(seed, "adw/plan-templates"), { recursive: true });
+  writeFileSync(join(seed, "adw/plan-templates/standard.md"), bundledPlanTemplate);
+  writeFileSync(join(seed, "adw/plan-templates/migration.md"), bundledPlanTemplate.replace("Feature Overview", "Migration Overview"));
+  git(seed, "add", "README.md", ".gitignore", "adw.yaml", "adw/plan-templates");
   git(seed, "commit", "-q", "-m", "Initialize project");
   git(seed, "remote", "add", "origin", remote);
   git(seed, "push", "-q", "-u", "origin", "main");
@@ -88,6 +97,7 @@ test("fresh-clone onboarding attaches remote docs and writes redacted local stat
     schema: 1,
     identity: { display_name: values[0], email: values[1] },
     providers: { code_host: { transport: "cli", account: values[2] } },
+    planning: { preferred_template: "migration" },
   });
   const before = git(checkout, "status", "--porcelain=v1", "--untracked-files=all");
   const previewResult = run(checkout, "preview", "--answers", answers);
@@ -99,6 +109,7 @@ test("fresh-clone onboarding attaches remote docs and writes redacted local stat
   assert.equal(preview.local.action, "create-local");
   assert.deepEqual(preview.local.identity_fields, ["display_name", "email"]);
   assert.deepEqual(preview.local.providers.code_host, ["account", "transport"]);
+  assert.equal(preview.local.preferred_template, "migration");
   assert.equal(preview.providers.code_host.required, true);
   assert.match(preview.preview_digest, /^[a-f0-9]{64}$/);
   for (const value of values) assert.equal(previewResult.stdout.includes(value), false);
@@ -111,6 +122,7 @@ test("fresh-clone onboarding attaches remote docs and writes redacted local stat
   assert.equal(applied.status, 0, applied.stderr);
   const local = readFileSync(join(checkout, ".adw/local.yaml"), "utf8");
   for (const value of values) assert.equal(local.includes(value), true);
+  assert.match(local, /preferred_template: "migration"/);
   const worktrees = git(checkout, "worktree", "list", "--porcelain");
   assert.match(worktrees, /branch refs\/heads\/docs/);
   assert.equal(git(checkout, "config", "branch.docs.remote"), "origin");
@@ -181,6 +193,14 @@ test("onboarding refuses missing docs branches and secret-like answers", () => {
   const disabledResult = run(configured.checkout, "preview", "--answers", disabled);
   assert.equal(disabledResult.status, 2);
   assert.match(disabledResult.stderr, /requires a configured observability provider/);
+
+  const unknownTemplate = writeAnswers(configured.parent, "unknown-template.json", {
+    schema: 1,
+    planning: { preferred_template: "unknown" },
+  });
+  const unknownTemplateResult = run(configured.checkout, "preview", "--answers", unknownTemplate);
+  assert.equal(unknownTemplateResult.status, 2);
+  assert.match(unknownTemplateResult.stderr, /must name a template declared by the project/);
 });
 
 test("onboarding refuses tracked personal state and an unignored docs worktree", () => {

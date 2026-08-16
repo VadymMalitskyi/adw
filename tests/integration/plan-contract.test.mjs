@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { computeDigest, dispatch, EXIT } from "../../plugin/lib/adw-helper.mjs";
+import { computeDigest, dispatch, EXIT, validatePlanTemplate } from "../../plugin/lib/adw-helper.mjs";
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(testDirectory, "../..");
@@ -15,117 +15,36 @@ function readSkill(name) {
 const templatePath = resolve(repositoryRoot, "plugin/templates/plan.md");
 const template = readFileSync(templatePath, "utf8");
 
-// The canonical plan is structured Markdown, so its contract is the heading
-// sequence. Extract headings the way a coordinating agent must: ignoring HTML
-// comment guidance and fenced examples.
-function planHeadings(source) {
-  const headings = [];
-  let inComment = false;
-  let fence = null;
-  for (const line of source.split("\n")) {
-    if (fence === null) {
-      const opening = /^\s*(```+|~~~+)/.exec(line);
-      if (opening) {
-        fence = opening[1][0];
-        continue;
-      }
-    } else {
-      if (new RegExp(`^\\s*${fence === "`" ? "```" : "~~~"}+\\s*$`).test(line)) fence = null;
-      continue;
-    }
-    if (inComment) {
-      if (line.includes("-->")) inComment = false;
-      continue;
-    }
-    if (line.includes("<!--")) {
-      if (!line.includes("-->")) inComment = true;
-      continue;
-    }
-    const heading = /^(#{1,3})\s+(.*\S)\s*$/.exec(line);
-    if (heading) headings.push({ level: heading[1].length, text: heading[2] });
-  }
-  return headings;
-}
-
-// The mandatory sequence. `Phase` and `Group` headings repeat, so they are
-// matched by shape rather than by literal text.
-const MANDATORY = [
-  { level: 1, match: /^PART 1 . Feature Overview$/ },
-  { level: 2, match: /^Summary$/ },
-  { level: 2, match: /^Design & Architecture$/ },
-  { level: 2, match: /^Key Decisions & Trade-offs$/ },
-  { level: 2, match: /^Risks and Open Questions$/ },
-  { level: 2, match: /^Acceptance Criteria$/ },
-  { level: 1, match: /^PART 2 . Implementation Plan$/ },
-  { level: 2, match: /^Plan at a glance$/ },
-  { level: 2, match: /^Affected Components$/ },
-  { level: 2, match: /^Context and Anchors$/ },
-  { level: 2, match: /^Phase 1 . \S/, repeatable: false },
-  { level: 3, match: /^Group: [a-z0-9]+(?:-[a-z0-9]+)*$/, repeatable: true },
-  { level: 2, match: /^Phase 2 . \S/ },
-  { level: 3, match: /^Group: [a-z0-9]+(?:-[a-z0-9]+)*$/, repeatable: true },
-  { level: 2, match: /^Whole-feature validation$/ },
-  { level: 2, match: /^Notes$/ },
-];
-
-// Real structural verification: walk the required sequence against the actual
-// headings and report the first requirement the document fails to satisfy.
-function checkPlanStructure(source) {
-  const headings = planHeadings(source);
-  let cursor = 0;
-  for (const requirement of MANDATORY) {
-    let matched = false;
-    while (cursor < headings.length) {
-      const candidate = headings[cursor];
-      if (candidate.level === requirement.level && requirement.match.test(candidate.text)) {
-        matched = true;
-        cursor += 1;
-        if (requirement.repeatable) {
-          while (
-            cursor < headings.length &&
-            headings[cursor].level === requirement.level &&
-            requirement.match.test(headings[cursor].text)
-          ) cursor += 1;
-        }
-        break;
-      }
-      if (candidate.level <= requirement.level) break;
-      cursor += 1;
-    }
-    if (!matched) return { ok: false, missing: requirement.match.source };
-  }
-  return { ok: true, missing: null };
-}
-
-test("the bundled plan template carries every mandatory heading in order", () => {
-  const result = checkPlanStructure(template);
-  assert.equal(result.missing, null);
-  assert.equal(result.ok, true);
-
-  const headings = planHeadings(template);
-  assert.equal(headings.filter(({ level }) => level === 1).length, 2, "exactly two parts");
-  assert.ok(
-    headings.filter(({ level, text }) => level === 3 && text.startsWith("Group: ")).length >= 3,
-    "the template must demonstrate more than one group per plan",
-  );
+test("the bundled plan template carries the stable semantic marker contract", () => {
+  const result = validatePlanTemplate(template);
+  assert.equal(result.valid, true, JSON.stringify(result.errors));
+  assert.deepEqual(result.sections, [
+    "feature-overview",
+    "acceptance-criteria",
+    "implementation-plan",
+    "whole-feature-validation",
+  ]);
+  assert.ok((template.match(/^### Group: /gm) ?? []).length >= 3, "the standard template demonstrates more than one group");
 });
 
-test("the structural check actually fails on a plan that drops or reorders a mandatory section", () => {
-  const withoutCriteria = template.replace("## Acceptance Criteria\n", "");
-  assert.equal(checkPlanStructure(withoutCriteria).ok, false);
-  assert.match(checkPlanStructure(withoutCriteria).missing, /Acceptance Criteria/);
+test("headings are project-owned while missing or reordered semantic markers fail", () => {
+  const renamed = template
+    .replace("# PART 1 — Feature Overview", "# Why this matters")
+    .replace("## Summary", "## User-visible outcome")
+    .replace("# PART 2 — Implementation Plan", "# How we will deliver it")
+    .replace("## Whole-feature validation", "## Proof after integration");
+  assert.equal(validatePlanTemplate(renamed).valid, true);
 
-  const withoutNotes = template.replace(/\n## Notes\n/, "\n");
-  assert.equal(checkPlanStructure(withoutNotes).ok, false);
+  const missing = validatePlanTemplate(template.replace("<!-- ADW:SECTION acceptance-criteria -->\n", ""));
+  assert.equal(missing.valid, false);
+  assert.match(JSON.stringify(missing.errors), /acceptance-criteria/);
 
-  const partsSwapped = [
-    template.slice(template.indexOf("# PART 2")),
-    template.slice(0, template.indexOf("# PART 2")),
-  ].join("\n");
-  assert.equal(checkPlanStructure(partsSwapped).ok, false);
-
-  const groupsBeforePhases = template.replace(/^## Context and Anchors$/m, "## Later");
-  assert.equal(checkPlanStructure(groupsBeforePhases).ok, false);
+  const reordered = validatePlanTemplate(template
+    .replace("<!-- ADW:SECTION acceptance-criteria -->", "<!-- swap -->")
+    .replace("<!-- ADW:SECTION implementation-plan -->", "<!-- ADW:SECTION acceptance-criteria -->")
+    .replace("<!-- swap -->", "<!-- ADW:SECTION implementation-plan -->"));
+  assert.equal(reordered.valid, false);
+  assert.match(JSON.stringify(reordered.errors), /out of order/);
 });
 
 test("the template demonstrates the glance table, anchor style, and directive task block", () => {
@@ -190,7 +109,8 @@ test("plan skill produces one canonical plan.md and stops before approval or imp
 
   assert.match(skill, /changes\/<change-id>\/plan\.md/);
   assert.match(skill, /templates\/plan\.md/);
-  assert.match(skill, /PART 1[\s\S]*PART 2/);
+  assert.match(skill, /resolve-plan-template/);
+  assert.match(skill, /ADW:SECTION feature-overview[\s\S]*ADW:SECTION whole-feature-validation/);
   assert.match(skill, /load-project/);
   assert.match(skill, /Never implement a task/);
   assert.match(skill, /Never create or switch a code branch/);
@@ -203,7 +123,7 @@ test("plan skill restores phases, groups, anchors, directives, and validation so
   const skill = readSkill("plan");
 
   assert.match(skill, /\^\[a-z0-9\]/);
-  assert.match(skill, /Plan at a glance/);
+  assert.match(skill, /glance table/i);
   assert.match(skill, /`Phase`, `Group`, `Component`, `Primary paths`, `Depends on`, `Tracker`, `Delivery`/);
   assert.match(skill, /stable lowercase id/i);
   assert.match(skill, /file -> symbol/);

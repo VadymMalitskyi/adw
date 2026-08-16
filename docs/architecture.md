@@ -14,9 +14,9 @@ Claude manifest ┘                    |
                   optional capability/provider adapters
 ```
 
-The plugin owns workflow instructions, deterministic mechanics, execution contracts, and the optional managed-container template. A target project owns `adw.yaml`, its selected isolation infrastructure, bounded routing blocks, local ignored state, authoritative code documentation, and docs-branch context and change records.
+The plugin owns workflow instructions, deterministic mechanics, execution contracts, the bundled fallback plan template, and the optional managed-container template. A target project owns `adw.yaml`, its complete Markdown plan templates, its selected isolation infrastructure, bounded routing blocks, local ignored state, authoritative code documentation, and docs-branch context and change records.
 
-Complexity is deliberately spent on execution safety and resumability, not on authoring bureaucracy. There is one handwritten project contract, one canonical plan, and two small machine records — no artifact registry, schema-version dispatch, policy digest, or payload profile.
+Complexity is deliberately spent on execution safety and resumability, not on authoring bureaucracy. There is one handwritten project contract, a small stable marker kernel inside editable project templates, one canonical rendered plan per change, and two small machine records — no template inheritance, rendering language, artifact registry, schema-version dispatch, policy digest, or payload profile.
 
 ## Boundaries
 

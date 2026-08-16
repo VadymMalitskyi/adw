@@ -1,9 +1,16 @@
+<!-- ADW:PLAN 1 -->
+<!-- ADW:REQUIRED-SECTIONS feature-overview acceptance-criteria implementation-plan whole-feature-validation -->
+<!-- ADW:SECTION feature-overview -->
+
 # PART 1 — Feature Overview
 
 <!--
 PART 1 is written for engineers and must stand alone. A reader who never opens
 PART 2 should still understand the problem, the shape of the solution, and how
-success is judged. Replace every placeholder; delete every comment block.
+success is judged. Replace every placeholder and delete every instructional
+comment block. Preserve the `ADW:PLAN` marker, required-sections manifest, and
+every `ADW:SECTION` marker: they let the project change headings and layout
+without breaking ADW.
 -->
 
 ## Summary
@@ -51,6 +58,8 @@ retire it. Open questions must name who answers them.
 - **Risk.** Replace with the risk, its blast radius, and the mitigation.
 - **Open question.** Replace with the unresolved question and who decides.
 
+<!-- ADW:SECTION acceptance-criteria -->
+
 ## Acceptance Criteria
 
 <!--
@@ -61,6 +70,8 @@ be judged by reading the diff.
 
 1. Replace with an observable, testable criterion.
 2. Replace with an observable, testable criterion.
+
+<!-- ADW:SECTION implementation-plan -->
 
 # PART 2 — Implementation Plan
 
@@ -207,6 +218,8 @@ Replace with what this phase adds once Phase 1 has landed.
 - **GOTCHA:** Replace with the trap specific to this integration point.
 - **DONE WHEN:** Replace with the observable finish condition.
 - **VALIDATE:** `replace with an exact non-interactive command`
+
+<!-- ADW:SECTION whole-feature-validation -->
 
 ## Whole-feature validation
 

@@ -18,7 +18,7 @@ plugin/
   integrations/providers.json      capability/transport registry
   integrations/providers/*.md      concrete provider references
   templates/adw.yaml               the small `adw: 1` project template
-  templates/plan.md                the canonical PART 1/PART 2 plan template
+  templates/plan.md                the bundled marker-based fallback and initialization seed
   templates/preferences.md         ignored personal profile template
   templates/architecture.md        docs-branch context template
   templates/devcontainer/*         optional managed container, opt-in only
@@ -36,11 +36,11 @@ tests/fixtures/                    empty-repo, existing-project, monorepo
 
 ### Helper runtime
 
-`src/helpers/runtime-bundle.mjs` exposes exactly the operations that genuinely need conventional code: YAML 1.2 parsing with duplicate-key rejection, handwritten `adw: 1` project validation, byte digests, plan approval creation/verification/supersession, phase run-record creation/validation/monotonic update, validation-command resolution and truthful execution, confined path resolution, and atomic managed-file writes.
+`src/helpers/runtime-bundle.mjs` exposes exactly the operations that genuinely need conventional code: YAML 1.2 parsing with duplicate-key rejection, handwritten `adw: 1` project validation, project plan-template marker validation and safe selection, byte digests, plan approval creation/verification/supersession, phase run-record creation/validation/monotonic update, validation-command resolution and truthful execution, confined path resolution, and atomic managed-file writes.
 
 Removed and never reintroduced: general JSON Schema loading and validation, artifact registries and schema-version dispatch, effective project policy and policy digests, work-item payload profile validation, requirements digests, authorization digests, external-action receipt construction, and approval bundles containing multiple ordered author inputs. AJV is no longer a dependency; the YAML 1.2 parser is the single intentional bundled dependency.
 
-The CLI surface is `digest`, `validate-project`, `load-project`, `create-approval`, `validate-approval`, `verify-approval`, `supersede-approval`, `create-run-record`, `validate-run-record`, `update-run-record`, `resolve-validation`, `record-validation`, `run-validation`, and `apply-atomic-writes`, each taking one JSON object on stdin and returning one JSON object with a stable exit code.
+The CLI surface also includes `validate-plan-template` and `resolve-plan-template`; every operation takes one JSON object on stdin and returns one JSON object with a stable exit code.
 
 ### Orchestrator
 
@@ -63,7 +63,7 @@ Foundation `init`, `onboard`, `doctor`, `status`, `discover`; change loop `plan`
 | Atomic writes confine paths, reject symlinks, and roll back completely | `tests/helpers/atomic-writes.test.mjs` |
 | Two disjoint groups prepare concurrently; overlap is refused; interrupted runs resume | `tests/integration/orchestrated-execution.test.mjs` |
 | Status stays read-only and reconstructs state from Git and artifacts | `tests/integration/status-readonly.test.mjs` |
-| Plan template carries every mandatory heading in order | `tests/integration/plan-contract.test.mjs` |
+| Project plan templates can change headings while stable semantic markers remain valid | `tests/helpers/plan-templates.test.mjs`, `tests/integration/plan-contract.test.mjs` |
 | Cold review detects stale anchors, unsafe overlap, and backwards dependencies | `tests/integration/review-plan-contract.test.mjs` |
 | Init/onboard/update stay digest-bound, idempotent, and confined | `tests/integration/fixture-init.test.mjs` and neighbors |
 | Managed container invariants and egress policy hold | `tests/integration/managed-devcontainer.test.mjs`, `tests/integration/egress-proxy.test.mjs`, `npm run test:security` |

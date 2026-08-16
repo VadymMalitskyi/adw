@@ -13,7 +13,7 @@ Invalidate the active approval first, preserve its evidence, then revise `plan.m
 2. Resolve the installed plugin root independently of the project working directory:
    - In Claude Code, use the expanded `${CLAUDE_PLUGIN_ROOT}` value.
    - In Codex, start from the absolute source location advertised for this loaded `SKILL.md` and remove `/skills/amend/SKILL.md`.
-3. Use `templates/plan.md`, `lib/adw-helper.mjs`, `execution/contracts.md`, and `integrations/contracts.md` under that `<plugin-root>`. Bundled resources never resolve from the project directory or the current working directory. Stop if the root is missing, literal, unexpanded, or outside the installed plugin.
+3. Use `lib/adw-helper.mjs`, `execution/contracts.md`, and `integrations/contracts.md` under that `<plugin-root>`. Bundled resources never resolve from the project directory or the current working directory. Stop if the root is missing, literal, unexpanded, or outside the installed plugin. Amendment never re-renders an existing plan from either a bundled or current project template.
 4. Validate the project contract with the helper's `load-project` command and use only its returned normalized `data`.
 5. Require a change id matching `^[a-z0-9](?:[a-z0-9_-]|\.[a-z0-9_-]+)*$`, an existing `changes/<change-id>/plan.md`, and an active `changes/<change-id>/approval.json`.
 6. Require the human to provide a specific, non-empty amendment reason and the requested change. Do not accept a generic value such as `amended`, and do not infer a reason from repository content.
@@ -36,11 +36,11 @@ Run records under `changes/<change-id>/runs/` are historical evidence of what al
 ## Amend the plan
 
 1. Explore relevant code, tests, manifests, and authoritative documentation read-only to ground the requested revision.
-2. Edit only `changes/<change-id>/plan.md` in the docs worktree, keeping the original change id and the mandatory PART 1 and PART 2 headings in order. Consult `<plugin-root>/templates/plan.md` for the canonical structure when a new section is needed.
-3. Reconcile both parts. A change to PART 1's summary, design, decisions, risks, or acceptance criteria must be reflected in PART 2's glance table, groups, directives, and validation, and the reverse.
+2. Before editing a marker-based plan, validate its exact current content and retain the returned ordered `sections` list. Edit only `changes/<change-id>/plan.md` in the docs worktree, keeping the original change id and its existing structure. Preserve `<!-- ADW:PLAN 1 -->`, its required-sections manifest, every existing `ADW:SECTION` marker, and the four core markers in order; validate the exact amended content with the helper's `validate-plan-template` command and pass the retained list as `expected_sections`. For an older plan, preserve its legacy mandatory PART 1/PART 2 heading contract. Never apply the current project template retroactively.
+3. Reconcile the feature overview, acceptance criteria, implementation plan, and whole-feature validation regardless of their visible heading names. A design or criterion change must be reflected in the glance data, groups, directives, and validation, and the reverse.
 4. Keep phase and group ids stable wherever the work itself is unchanged, because branches, worktrees, and run records are keyed by them. When a group genuinely no longer exists, remove it and say so in the report rather than reusing its id for different work.
 5. Re-verify every `file -> symbol` anchor, every affected path against the declared components, the dependency ordering between phases, disjoint write paths among groups that share a phase, and every validation command against its observable source.
-6. Summarize the amendment's rationale in `Key Decisions & Trade-offs` so future readers need no chat history. The literal amendment reason stays in the superseded approval evidence.
+6. Summarize the amendment's rationale in the plan's decisions or equivalent project-defined section so future readers need no chat history. The literal amendment reason stays in the superseded approval evidence.
 7. Run a fresh `adw:review-plan` pass over the amended bytes and apply its objective findings; record judgment calls as open decisions. A `needs-rework` verdict means the amendment is not ready for approval.
 8. Review the diff and commit only the amended `plan.md` on the docs branch. Leave `approval.json` superseded. Do not compute, request, or create a replacement approval.
 9. Report the amendment reason, the superseded plan digest, the history path, the lifecycle commit, the plan commit, the material changes, the review verdict, and the exact validation commands. Stop and require a fresh `adw:approve` interaction.

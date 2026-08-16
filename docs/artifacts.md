@@ -1,11 +1,12 @@
 # Artifact contracts
 
-ADW 1.0 has two handwritten contracts a human ever reads (`adw.yaml` and `plan.md`) and two small machine records a human never authors (`approval.json` and `runs/<phase-id>.json`).
+ADW keeps its human surfaces small: one project configuration (`adw.yaml`), complete project-owned Markdown plan templates, and one rendered `plan.md` per substantial change. Two small machine records remain non-author-authored: `approval.json` and `runs/<phase-id>.json`.
 
 ## Code branch
 
-- `adw.yaml`: the committed `adw: 1` project contract — base branch, docs branch and worktree, execution mode/parallelism/isolation, components with their validation commands, optional provider capabilities, optional plain-language conventions.
-- `.adw/local.yaml`: optional ignored machine-local values created during initialization or a contributor's digest-bound `adw:onboard` preview.
+- `adw.yaml`: the committed `adw: 1` project contract — base branch, docs branch and worktree, named project-owned plan templates, execution mode/isolation, components with their validation commands, optional provider capabilities, optional plain-language conventions.
+- `adw/plan-templates/*.md`: complete, committed project-owned Markdown templates. Four stable markers preserve ADW's semantic core, and a retained required-sections manifest binds every additional mandatory section while headings remain editable.
+- `.adw/local.yaml`: optional ignored machine-local values created during initialization or a contributor's digest-bound `adw:onboard` preview, including a preferred project-declared template name.
 - `.adw/preferences.md`: ignored personal collaboration guidance; never shared policy, authorization, credentials, or an approval input.
 - `.adw/cache/`: ignored local scratch space reserved for ADW tooling; never durable workflow evidence.
 - `AGENTS.md` and `CLAUDE.md`: existing content plus one bounded routing block.
@@ -17,7 +18,7 @@ ADW 1.0 has two handwritten contracts a human ever reads (`adw.yaml` and `plan.m
 ## Docs branch
 
 - `architecture.md` and `components/*.md`: concise agent context linking to authoritative project docs.
-- `changes/<change-id>/plan.md`: the one canonical plan. PART 1 is the human feature overview; PART 2 is the agent-executable implementation plan with phases, groups, anchors, directive tasks, and validation.
+- `changes/<change-id>/plan.md`: the one canonical rendered plan. Stable markers identify its human feature overview, acceptance criteria, agent-executable implementation plan, and whole-feature validation independent of project-owned headings.
 - `changes/<change-id>/approval.json`: version, change id, plan path, plan digest, plan commit, approver, timestamp, and status.
 - `changes/<change-id>/approval-history/<plan-digest>.json`: immutable superseded approvals, named by the plan digest they were filed under.
 - `changes/<change-id>/runs/<phase-id>.json`: the machine-written phase run record.

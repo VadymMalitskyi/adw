@@ -104,6 +104,11 @@ test("an explicitly selected managed devcontainer generates its full managed fil
     ".devcontainer/project-setup.sh",
   ]);
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /^adw: 1$/m);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /planning:\n  default_template: standard\n  templates:\n    standard: adw\/plan-templates\/standard\.md/);
+  assert.deepEqual(
+    readFileSync(join(root, "adw/plan-templates/standard.md")),
+    readFileSync(join(repositoryRoot, "plugin/templates/plan.md")),
+  );
   assert.match(readFileSync(join(root, ".adw/preferences.md"), "utf8"), /private ADW profile/);
   assert.equal(existsSync(join(root, ".codex/config.toml")), true);
   assert.equal(existsSync(join(root, ".codex/rules/adw.rules")), true);
@@ -125,10 +130,12 @@ test("an explicitly selected managed devcontainer generates its full managed fil
   ]);
 
   const configBefore = readFileSync(join(root, "adw.yaml"));
+  const templateBefore = readFileSync(join(root, "adw/plan-templates/standard.md"));
   const docsHeadBefore = git(join(root, "worktrees/docs"), "rev-parse", "HEAD");
   const repeated = runInit(root, "apply", true);
   assert.equal(repeated.docs.action, "reuse");
   assert.deepEqual(readFileSync(join(root, "adw.yaml")), configBefore);
+  assert.deepEqual(readFileSync(join(root, "adw/plan-templates/standard.md")), templateBefore);
   assert.equal(git(join(root, "worktrees/docs"), "rev-parse", "HEAD"), docsHeadBefore);
 });
 

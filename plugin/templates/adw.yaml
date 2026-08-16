@@ -10,6 +10,13 @@ docs:
   worktree: worktrees/docs
   # sync_marker: SYNC.yaml
 
+# Complete, project-owned Markdown templates. Each retains the small set of
+# stable ADW semantic markers documented in the bundled standard template.
+planning:
+  default_template: standard
+  templates:
+    standard: adw/plan-templates/standard.md
+
 execution:
   # orchestrated  runs the independent groups of one phase in parallel worktrees
   # sequential    runs one branch and worktree at a time

@@ -4,6 +4,13 @@ All notable changes to this private plugin are documented here.
 
 ## Unreleased
 
+### Planning templates
+
+- New initializations copy the standard plan template to committed `adw/plan-templates/standard.md` and register it in the optional `planning` block of `adw.yaml`.
+- Projects may register multiple complete Markdown templates, edit headings and project-required sections directly, and select a default without changing the ADW plugin.
+- Four retained `ADW:SECTION` markers preserve the execution-critical semantic core, while an in-plan required-sections manifest durably binds every project-required section. Existing projects without `planning` keep the bundled fallback, and existing plans and approvals are never re-rendered.
+- Contributors may select a preferred project-declared template in ignored `.adw/local.yaml`; explicit per-change selection still wins, and arbitrary personal template paths are not supported.
+
 ### Initialization
 
 - Replaced the mixed initializer with two explicit workflows: `adw:init-greenfield` for a genuinely empty project and `adw:init-brownfield` for an established Git repository.

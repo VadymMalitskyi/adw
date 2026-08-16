@@ -23,20 +23,35 @@ You do not need to learn JSON Schema, policy digests, profile digests, approval 
 
 ## One plan per change
 
-A substantial change has exactly one artifact: `changes/<change-id>/plan.md`.
+A substantial change still has exactly one artifact: `changes/<change-id>/plan.md`. New projects also keep a complete, editable standard template at `adw/plan-templates/standard.md`. A project may rename headings, add required sections, remove unneeded presentation sections, or register additional complete templates. Four invisible markers preserve the semantic core ADW needs:
 
 ```markdown
-# PART 1 — Feature Overview      <- written for engineers; stands alone
-## Summary / Design & Architecture / Key Decisions & Trade-offs
-## Risks and Open Questions / Acceptance Criteria
+<!-- ADW:PLAN 1 -->
+<!-- ADW:REQUIRED-SECTIONS feature-overview acceptance-criteria implementation-plan whole-feature-validation -->
+<!-- ADW:SECTION feature-overview -->
+# Feature overview                <- headings and project sections are editable
 
-# PART 2 — Implementation Plan   <- written for coordinator and worker agents
-## Plan at a glance              <- phase, group, component, dependencies, tracker, delivery
-## Affected Components / Context and Anchors
-## Phase 1 — <name>
-### Group: <stable-group-id>     <- goal, paths, IMPLEMENT / DONE WHEN / VALIDATE
-## Whole-feature validation / Notes
+<!-- ADW:SECTION acceptance-criteria -->
+## Acceptance criteria
+
+<!-- ADW:SECTION implementation-plan -->
+# Implementation plan             <- phases, groups, paths, directives, commands
+
+<!-- ADW:SECTION whole-feature-validation -->
+## Whole-feature validation
 ```
+
+To make a project-specific section mandatory, add it to the durable manifest and give it its own stable marker in the project template:
+
+```markdown
+<!-- ADW:REQUIRED-SECTIONS feature-overview security-review acceptance-criteria implementation-plan whole-feature-validation -->
+<!-- ADW:SECTION security-review -->
+## Security and privacy
+
+Describe sensitive data, trust boundaries, threats, and mitigations.
+```
+
+The manifest must exactly match the template's ordered section markers. During creation, the planner also validates the rendered plan against the section list returned when it resolved the selected template; amendment validates against the pre-edit plan's list. The retained manifest then gives later read-only steps the durable contract without consulting a newer template revision. Adding or removing the manifest entry and marker in the committed template changes the requirement for future plans; it never re-renders an existing plan.
 
 Anchors are grep-able `file -> symbol` references, never line numbers. The plan is immutable after approval: ticket ids, pull-request URLs, progress, and validation results live in machine-written run records, never in the plan. Changing the design means `adw:amend`, new plan bytes, and fresh approval.
 
@@ -74,6 +89,12 @@ docs:
   branch: docs
   worktree: worktrees/docs
 
+planning:
+  default_template: standard
+  templates:
+    standard: adw/plan-templates/standard.md
+    migration: adw/plan-templates/migration.md
+
 execution:
   mode: orchestrated          # orchestrated | sequential
   isolation: provider-sandbox # provider-sandbox | project-devcontainer | managed-devcontainer
@@ -93,6 +114,8 @@ providers:                    # optional; omit what the project does not use
   code_host:
     provider: github
 ```
+
+An explicit choice such as `adw:plan template=migration` wins over the ignored per-user `planning.preferred_template` in `.adw/local.yaml`, which wins over the project default. A user can select only a template declared by the project. Projects initialized before this feature remain valid and use the bundled standard template until they opt in.
 
 A project with no providers and no devcontainer keeps the lightweight path: `provider-sandbox` isolation is the default, and nothing probes an external system.
 

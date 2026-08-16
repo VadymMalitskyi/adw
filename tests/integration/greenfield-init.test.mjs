@@ -67,6 +67,11 @@ test("greenfield initialization creates Git, a seed contract, first main commit,
   assert.match(readFileSync(join(root, "PROJECT.md"), "utf8"), /## MVP outcome/);
   assert.equal(readFileSync(join(root, "Makefile"), "utf8"), ".PHONY: check\n\ncheck:\n\t@test -s PROJECT.md\n");
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /command: "make check"[\s\S]*source: "Makefile#target:check"/);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /planning:\n  default_template: standard/);
+  assert.deepEqual(
+    readFileSync(join(root, "adw/plan-templates/standard.md")),
+    readFileSync(join(repositoryRoot, "plugin/templates/plan.md")),
+  );
   assert.equal(git(join(root, "worktrees/docs"), "branch", "--show-current"), "docs");
   assert.match(readFileSync(join(root, "worktrees/docs/architecture.md"), "utf8"), /explicitly reviewed project contract/);
   assert.equal(git(join(root, "worktrees/docs"), "diff-tree", "--check", "--root", "--no-commit-id", "HEAD"), "");

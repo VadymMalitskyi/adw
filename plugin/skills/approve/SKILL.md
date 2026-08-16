@@ -23,8 +23,8 @@ Summarize one exact `plan.md`, request a fresh explicit human decision, then rec
 
 1. Require a clean docs worktree and a fast-forward relationship with its configured upstream. Do not pull, switch branches, or repair history during approval.
 2. Read `plan.md` as exact bytes. Do not trim whitespace, normalize line endings, reflow Markdown, or substitute content from chat. Compute its digest with the helper's `digest` command over those exact bytes.
-3. Check the plan's structure: both mandatory parts and every mandatory heading in order, no unresolved placeholders or leftover template comments, stable unique phase and group ids, a glance table row per group, `file -> symbol` anchors rather than line numbers, directive tasks with observable done-when conditions, and exact non-interactive validation commands with cited sources.
-4. Require every acceptance criterion in PART 1 to map to a group and a command in PART 2.
+3. Check the plan's structure. For a marker-based plan, invoke the helper's `validate-plan-template` command on the exact content, require its durable manifest to match every ordered section marker, require every marked project section to be substantive, and preserve the four core markers in order. For an older plan with no marker, use the legacy mandatory PART 1/PART 2 heading contract. In either form require no unresolved placeholders or leftover instructional comments, stable unique phase and group ids, a glance row per group, `file -> symbol` anchors rather than line numbers, directive tasks with observable done-when conditions, and exact non-interactive validation commands with cited sources.
+4. Require every acceptance criterion to map to an implementation group and a whole-feature validation command.
 5. Require the plan to name only components declared in `adw.yaml`, and confirm no affected path is unowned.
 6. Require a recorded `adw:review-plan` verdict for these exact plan bytes. A `needs-rework` verdict blocks approval: stop and route the change back to `adw:plan` or `adw:amend`. Present a `revise-recommended` verdict and its findings in full before asking for a decision. Rerun the review when the recorded verdict describes different bytes.
 7. Require `HEAD` of the docs branch to be a 40-hex commit containing the exact current bytes of `plan.md`, with no uncommitted edit to it. This commit is `plan_commit`: the pre-approval plan commit, not the later approval commit and not a future docs-branch head.
@@ -32,8 +32,8 @@ Summarize one exact `plan.md`, request a fresh explicit human decision, then rec
 
 ## Request explicit approval
 
-1. Present a concise review of PART 1 in the human's terms: summary, design, key decisions and rejected alternatives, exclusions, risks, the load-bearing assumption, open decisions from plan review, and the numbered acceptance criteria.
-2. Present the execution shape from PART 2: the phase and group map with dependencies and affected paths, which groups are expected to run concurrently, the tracker intent, the delivery intent, and the exact validation commands.
+1. Present a concise review of the feature overview in the human's terms: summary, design, key decisions and rejected alternatives, exclusions, risks, the load-bearing assumption, open decisions from plan review, project-required sections, and the numbered acceptance criteria.
+2. Present the implementation shape: the phase and group map with dependencies and affected paths, which groups are expected to run concurrently, the tracker intent, the delivery intent, and the exact validation commands.
 3. State the review verdict, the change id, the plan path, and the full `plan_commit`.
 4. Ask the human to approve or reject this exact plan and commit, and to provide the approver name to record. End the interaction and wait for a fresh response.
 

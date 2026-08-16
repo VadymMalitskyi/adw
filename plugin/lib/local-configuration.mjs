@@ -5,6 +5,7 @@ export const CAPABILITIES = ["work_tracker", "code_host", "observability", "know
 
 const CAPABILITY_SET = new Set(CAPABILITIES);
 const TRANSPORTS = new Set(["auto", "native", "mcp", "cli", "api"]);
+const TEMPLATE_NAME = /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/;
 const SECRET_LIKE_KEY = /(?:password|passwd|token|api[_-]?key|secret|credential|authorization|cookie|private[_-]?key)/i;
 
 function fail(path, message) {
@@ -78,12 +79,12 @@ function readProviderRegistry(pluginRoot) {
 // `sharedProviders` is the project's `providers:` block: one entry per
 // configured capability, each with a provider name and an optional `required`
 // flag. A capability the project did not configure has no entry at all.
-export function normalizeLocalConfiguration(value, sharedProviders, pluginRoot, path = "local") {
-  const normalized = { identity: {}, providers: {} };
+export function normalizeLocalConfiguration(value, sharedProviders, pluginRoot, path = "local", sharedPlanning = null) {
+  const normalized = { identity: {}, providers: {}, planning: {} };
   if (value === undefined) return normalized;
   value = object(value, path);
   rejectSecretLikeKeys(value, path);
-  rejectUnknown(value, new Set(["identity", "providers"]), path);
+  rejectUnknown(value, new Set(["identity", "providers", "planning"]), path);
   const configured = isObject(sharedProviders) ? sharedProviders : {};
   const registry = readProviderRegistry(pluginRoot);
 
@@ -119,10 +120,21 @@ export function normalizeLocalConfiguration(value, sharedProviders, pluginRoot, 
     }
     normalized.providers = sortedObject(normalized.providers);
   }
+  if (value.planning !== undefined) {
+    const planning = object(value.planning, `${path}.planning`);
+    rejectUnknown(planning, new Set(["preferred_template"]), `${path}.planning`);
+    const preferred = singleLine(planning.preferred_template, `${path}.planning.preferred_template`, 100);
+    if (!TEMPLATE_NAME.test(preferred)) fail(`${path}.planning.preferred_template`, "must be a lowercase template name with `-` or `_` separators");
+    const templates = sharedPlanning?.templates;
+    if (!isObject(templates) || !Object.hasOwn(templates, preferred)) {
+      fail(`${path}.planning.preferred_template`, "must name a template declared by the project");
+    }
+    normalized.planning.preferred_template = preferred;
+  }
   return normalized;
 }
 
-export function loadLocalAnswers(path, sharedProviders, pluginRoot) {
+export function loadLocalAnswers(path, sharedProviders, pluginRoot, sharedPlanning = null) {
   if (typeof path !== "string" || path.length === 0) throw new Error("--answers is required");
   let raw;
   try {
@@ -132,9 +144,9 @@ export function loadLocalAnswers(path, sharedProviders, pluginRoot) {
   }
   raw = object(raw, "onboarding");
   rejectSecretLikeKeys(raw, "onboarding");
-  rejectUnknown(raw, new Set(["schema", "identity", "providers"]), "onboarding");
+  rejectUnknown(raw, new Set(["schema", "identity", "providers", "planning"]), "onboarding");
   if (raw.schema !== 1) fail("onboarding.schema", "must equal 1");
-  return normalizeLocalConfiguration({ identity: raw.identity, providers: raw.providers }, sharedProviders, pluginRoot, "onboarding");
+  return normalizeLocalConfiguration({ identity: raw.identity, providers: raw.providers, planning: raw.planning }, sharedProviders, pluginRoot, "onboarding", sharedPlanning);
 }
 
 function yamlScalar(value) {
@@ -144,6 +156,7 @@ function yamlScalar(value) {
 export function renderLocalConfiguration(local) {
   const identity = local?.identity ?? {};
   const providers = local?.providers ?? {};
+  const planning = local?.planning ?? {};
   const lines = [
     "# Machine-local ADW settings. This file is ignored by Git.",
     "# Credentials belong in provider clients or credential stores, never here.",
@@ -163,6 +176,9 @@ export function renderLocalConfiguration(local) {
       if (providers[capability].account !== undefined) lines.push(`    account: ${yamlScalar(providers[capability].account)}`);
     }
   }
+  if (planning.preferred_template !== undefined) {
+    lines.push("", "planning:", `  preferred_template: ${yamlScalar(planning.preferred_template)}`);
+  }
   return `${lines.join("\n")}\n`;
 }
 
@@ -174,5 +190,6 @@ export function localConfigurationSummary(local) {
   return {
     identity_fields: Object.keys(local?.identity ?? {}).sort(),
     providers,
+    preferred_template: local?.planning?.preferred_template ?? null,
   };
 }

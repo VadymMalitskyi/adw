@@ -21,6 +21,7 @@ Perform every check read-only. Do not repair files, create caches, refresh provi
    - ignored `.adw/` and root-level `/worktrees/` paths;
    - the attached docs worktree and sync-marker freshness;
    - declared components, their paths, and whether each has a validation command;
+   - every declared project plan template, whether it is a valid regular Markdown file with the required markers, and whether it is tracked;
    - optional origin and project-owned devcontainer state.
 5. If `adw.yaml` cannot be read against the `adw: 1` contract, report the exact validation errors and stop before every check that assumes a readable configuration. Change nothing, and never translate, rewrite, or reinterpret the file — offer the appropriate greenfield or brownfield initializer as a separate reviewed follow-up instead.
 6. Follow the execution contract for the configured isolation, and only that one:
