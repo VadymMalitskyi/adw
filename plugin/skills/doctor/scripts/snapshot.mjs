@@ -16,7 +16,13 @@ function parseArguments(argv) {
   if (index === -1 || !argv[index + 1]) throw new Error("--project-root is required");
   // `--details` is a diagnosis switch. Ordinary contributors see only concise
   // pass/fail summaries; marker digests and container internals stay hidden.
-  return { projectRoot: realpathSync(argv[index + 1]), details: argv.includes("--details") };
+  // `--checks permissions` is the cheap pre-execution gate: it inspects only the
+  // project permission policy so a workflow can fail closed on drift without
+  // paying for Git, docs, container, and manifest inspection.
+  const selection = argv.indexOf("--checks");
+  const checks = selection === -1 ? "all" : argv[selection + 1];
+  if (!["all", "permissions"].includes(checks)) throw new Error("--checks must be all or permissions");
+  return { projectRoot: realpathSync(argv[index + 1]), details: argv.includes("--details"), checks };
 }
 
 function git(projectRoot, args) {
@@ -346,8 +352,10 @@ try {
   const args = parseArguments(process.argv.slice(2));
   const projectRoot = args.projectRoot;
   detailedOutput = args.details;
-  const project = await projectChecks(projectRoot);
-  const checks = [manifestChecks(), ...project.checks];
+  const project = args.checks === "permissions"
+    ? { checks: permissionChecks(projectRoot), isolation: null }
+    : await projectChecks(projectRoot);
+  const checks = args.checks === "permissions" ? project.checks : [manifestChecks(), ...project.checks];
   const failed = checks.some(({ status }) => status === "fail");
   process.stdout.write(`${JSON.stringify({ ok: !failed, read_only: true, project_root: projectRoot, isolation: project.isolation, checks }, null, 2)}\n`);
   process.exitCode = failed ? 1 : 0;

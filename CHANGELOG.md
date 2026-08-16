@@ -12,6 +12,12 @@ All notable changes to this private plugin are documented here.
 - Moved deterministic initialization mechanics under `plugin/initialization/` so the two skills share one implementation without exposing a third routing command.
 - Documented the brownfield onboarding answers payload in `adw:init-brownfield` so the skill no longer relies on reading the normalizer to learn the schema-1 shape.
 
+### Security
+
+- The permission profile now protects the files that carry it: `.claude/settings.json`, `.codex/config.toml`, `.codex/rules/adw.rules`, `adw.yaml`, and `.devcontainer/**` require explicit review before an Edit or Write, which `acceptEdits` previously auto-accepted.
+- `adw:execute` verifies permission-policy integrity before its first project command and stops on drift. `plugin/skills/doctor/scripts/snapshot.mjs --checks permissions` exposes that check on its own, so the gate costs nothing beyond reading the policy files.
+- Existing projects report `permissions:claude` drift until `adw:update` re-renders the policy; managed devcontainers also need a rebuild to refresh the recorded payload digests.
+
 ## 1.0.0 - 2026-08-14
 
 First release. ADW gives Codex and Claude Code one opinionated, Git-native development workflow from a single shared skill tree.

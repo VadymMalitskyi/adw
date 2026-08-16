@@ -146,6 +146,15 @@ export const CLAUDE_ASK = [
   "Bash(docker push *)", "Bash(ssh *)", "Bash(scp *)", "Bash(sftp *)",
   "Bash(curl * -X POST *)", "Bash(curl * -X PUT *)", "Bash(curl * -X PATCH *)", "Bash(curl * -X DELETE *)",
   "Bash(curl * --data *)", "Bash(curl * --upload-file *)", "Bash(wget * --post-data *)", "Bash(wget * --post-file *)",
+  // `acceptEdits` auto-accepts ordinary file edits, so the policy files that carry
+  // this profile would otherwise be rewritable without review. Ask instead of deny:
+  // a maintainer still edits them deliberately, and `adw:update` re-renders them
+  // through its own reviewed preview rather than the Edit tool.
+  "Edit(./.claude/settings.json)", "Write(./.claude/settings.json)",
+  "Edit(./.codex/config.toml)", "Write(./.codex/config.toml)",
+  "Edit(./.codex/rules/adw.rules)", "Write(./.codex/rules/adw.rules)",
+  "Edit(./adw.yaml)", "Write(./adw.yaml)",
+  "Edit(./.devcontainer/**)", "Write(./.devcontainer/**)",
 ];
 
 export const CLAUDE_DENY = [

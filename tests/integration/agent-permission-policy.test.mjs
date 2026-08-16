@@ -14,6 +14,7 @@ import {
   mergeClaudeSettings,
   mergeCodexConfig,
   permissionAgentsFromProject,
+  permissionProjectFiles,
 } from "../../plugin/execution/managed-development.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -169,4 +170,49 @@ test("permission agent detection requires explicit ADW policy evidence", () => {
   mkdirSync(join(root, ".claude"), { recursive: true });
   writeFileSync(join(root, ".claude/settings.json"), mergeClaudeSettings());
   assert.equal(permissionAgentsFromProject(root, dependencies), "both");
+});
+
+test("the files carrying the permission profile cannot be rewritten without review", () => {
+  const merged = JSON.parse(mergeClaudeSettings());
+  for (const path of [".claude/settings.json", ".codex/config.toml", ".codex/rules/adw.rules", "adw.yaml"]) {
+    assert.ok(merged.permissions.ask.includes(`Edit(./${path})`), `${path} is editable without review`);
+    assert.ok(merged.permissions.ask.includes(`Write(./${path})`), `${path} is writable without review`);
+  }
+  assert.ok(merged.permissions.ask.includes("Edit(./.devcontainer/**)"));
+  assert.ok(merged.permissions.ask.includes("Write(./.devcontainer/**)"));
+  // The drift check compares a project's bytes against a fresh merge, so the
+  // self-protection rules must survive re-merging unchanged.
+  assert.equal(JSON.stringify(JSON.parse(mergeClaudeSettings(JSON.stringify(merged)))), JSON.stringify(merged));
+  assert.ok(JSON.parse(managedClaudeSettings()).permissions.ask.includes("Edit(./adw.yaml)"));
+});
+
+test("the permissions-only snapshot fails closed on drifted policy without inspecting the rest of the project", () => {
+  const root = mkdtempSync(join(tmpdir(), "adw-permission-gate-"));
+  const snapshot = join(repositoryRoot, "plugin/skills/doctor/scripts/snapshot.mjs");
+  const run = () => spawnSync(process.execPath, [snapshot, "--project-root", root, "--checks", "permissions"], { encoding: "utf8" });
+  for (const file of permissionProjectFiles("both")) {
+    mkdirSync(join(root, dirname(file.path)), { recursive: true });
+    writeFileSync(join(root, file.path), file.content);
+  }
+
+  const clean = run();
+  assert.equal(clean.status, 0, clean.stdout);
+  const report = JSON.parse(clean.stdout);
+  assert.equal(report.ok, true);
+  assert.equal(report.read_only, true);
+  // The gate runs before Git, docs, container, and manifest inspection, so it
+  // must reach a verdict in a directory that carries nothing but policy files.
+  assert.deepEqual(report.checks.map(({ id }) => id), ["permissions:configuration", "permissions:codex", "permissions:claude"]);
+
+  const settings = JSON.parse(readFileSync(join(root, ".claude/settings.json"), "utf8"));
+  settings.permissions.deny = settings.permissions.deny.filter((rule) => !rule.includes("git push --force"));
+  writeFileSync(join(root, ".claude/settings.json"), `${JSON.stringify(settings, null, 2)}\n`);
+  const drifted = run();
+  assert.equal(drifted.status, 1);
+  assert.equal(JSON.parse(drifted.stdout).ok, false);
+  assert.match(JSON.parse(drifted.stdout).checks.find(({ id }) => id === "permissions:claude").summary, /drifted/);
+
+  const rejected = spawnSync(process.execPath, [snapshot, "--project-root", root, "--checks", "everything"], { encoding: "utf8" });
+  assert.equal(rejected.status, 2);
+  assert.match(JSON.parse(rejected.stdout).error, /--checks must be all or permissions/);
 });
