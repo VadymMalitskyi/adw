@@ -22,7 +22,8 @@ of:
 - `established` — at least one commit.
 
 If the target already has `adw.yaml`, stop: this project is initialized. Point
-at `adw:update` for managed-file refresh, or a deliberate `adw.yaml` edit.
+at `adw:doctor` for diagnosis and managed-file repair, or a deliberate
+`adw.yaml` edit.
 
 Read enough of the repository to answer the questions below honestly: the
 manifests, lockfiles, `README`, and existing `.devcontainer/`. Do not write
@@ -46,12 +47,9 @@ Ask these, and nothing else. Each has a default you should state.
 4. **Providers** — optional work tracker, code host, observability, and
    knowledge integrations, with the exact hostnames each needs so the managed
    container can reach them. Never ask for or accept a credential.
-5. **Conventions** — optional single-line notes about branch naming, pull
-   requests, or work items. They shape formatting; they never authorize
-   anything.
-
 Do not ask about execution mode, plan templates, documentation branches, or
-personal preferences. None of those exist.
+personal preferences or project conventions. Repository instruction files own
+project conventions; ADW does not duplicate them in `adw.yaml`.
 
 `<plugin-root>/templates/adw.yaml` documents every field the generated
 configuration may contain, if you need to explain one.
@@ -72,8 +70,7 @@ with the answers as JSON on stdin:
   "web_access": "public-pages",
   "base_branch": "main",
   "runtime_versions": { "dotnet": "8" },
-  "providers": { "code_host": { "provider": "github", "required": false, "domains": ["api.github.com"] } },
-  "conventions": { "branches": "Use adw/<change>/<group>." }
+  "providers": { "code_host": { "provider": "github", "required": false, "domains": ["api.github.com"] } }
 }
 ```
 

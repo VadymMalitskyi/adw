@@ -152,7 +152,7 @@ function yamlScalar(value) {
   return JSON.stringify(String(value));
 }
 
-function renderProjectConfig({ baseBranch, isolation, webAccess, runtimeVersions, components, providers, conventions }) {
+function renderProjectConfig({ baseBranch, isolation, webAccess, runtimeVersions, components, providers }) {
   const lines = [
     "# ADW project configuration. Every generated command cites an observable source.",
     "adw: 1",
@@ -207,11 +207,6 @@ function renderProjectConfig({ baseBranch, isolation, webAccess, runtimeVersions
       }
     }
   }
-  const conventionEntries = Object.entries(conventions);
-  if (conventionEntries.length > 0) {
-    lines.push("", "# Plain-language conventions. They never authorize an external write.", "conventions:");
-    for (const [key, value] of conventionEntries) lines.push(`  ${key}: ${yamlScalar(value)}`);
-  }
   return `${lines.join("\n")}\n`;
 }
 
@@ -249,7 +244,7 @@ function replaceManagedBlock(original, start, end, body) {
 function checkAnswers(answers) {
   if (!isObject(answers)) throw new InputError("answers must be a JSON object");
   for (const key of Object.keys(answers)) {
-    if (!["isolation", "web_access", "base_branch", "runtime_versions", "components", "providers", "conventions"].includes(key)) {
+    if (!["isolation", "web_access", "base_branch", "runtime_versions", "components", "providers"].includes(key)) {
       throw new InputError(`unsupported answer field: ${key}`);
     }
   }
@@ -273,8 +268,6 @@ function checkAnswers(answers) {
       if (!isValidDomain(domain)) throw new ContractError(`provider ${capability} declares an invalid domain: ${String(domain)}`);
     }
   }
-  const conventions = answers.conventions ?? {};
-  if (!isObject(conventions)) throw new ContractError("conventions must be a mapping object");
   let components = answers.components;
   if (components !== undefined) {
     if (!Array.isArray(components) || components.length === 0) throw new ContractError("components must be a non-empty array");
@@ -284,7 +277,7 @@ function checkAnswers(answers) {
       return { name: component.name, path: component.path, validate: (component.validate ?? []).map((item) => (typeof item === "string" ? { command: item } : item)) };
     });
   }
-  return { isolation, webAccess, runtimeVersions, providers, conventions, components, baseBranch: answers.base_branch };
+  return { isolation, webAccess, runtimeVersions, providers, components, baseBranch: answers.base_branch };
 }
 
 // Preserve an existing project-owned container; never silently convert it.
@@ -337,7 +330,7 @@ export function planInitialization(directory, rawAnswers = {}) {
     throw new ContractError(`initializing an unversioned directory requires it to be empty; found: ${repository.entries.join(", ")}`);
   }
   if (existsSync(join(projectRoot, "adw.yaml"))) {
-    throw new ContractError("adw.yaml already exists; run adw:update to refresh managed files, or edit adw.yaml deliberately");
+    throw new ContractError("adw.yaml already exists; run adw:doctor to diagnose and repair managed files, or edit adw.yaml deliberately");
   }
   const execution = checkIsolation(projectRoot, answers.isolation);
   const baseBranch = answers.baseBranch ?? detectedBaseBranch(projectRoot, repository.state);
@@ -356,7 +349,6 @@ export function planInitialization(directory, rawAnswers = {}) {
     runtimeVersions: answers.runtimeVersions,
     components,
     providers: answers.providers,
-    conventions: answers.conventions,
   }), "create");
 
   for (const file of permissionProjectFiles((path) => readOrEmpty(projectRoot, path))) {
@@ -420,7 +412,7 @@ export async function applyInitialization(directory, rawAnswers, expectedFingerp
 export function planRefresh(directory, config) {
   const projectRoot = realpathSync(directory);
   const files = [];
-  for (const file of permissionProjectFiles((path) => readOrEmpty(projectRoot, path))) {
+  for (const file of permissionProjectFiles((path) => readOrEmpty(projectRoot, path), { repairManagedRules: true })) {
     const before = readOrEmpty(projectRoot, file.path);
     files.push({ path: file.path, before, after: file.content, action: before ? "repair-permission-policy" : "create-permission-policy" });
   }
@@ -435,6 +427,9 @@ export function planRefresh(directory, config) {
       files.push({ path: file.path, before, after: file.content, action: before ? "repair-managed-file" : "create-managed-file" });
     }
   }
+  const ignoreBefore = readOrEmpty(projectRoot, ".gitignore");
+  const ignoreAfter = replaceManagedBlock(ignoreBefore, IGNORE_START, IGNORE_END, ignoreBlock(ignoreBefore));
+  files.push({ path: ".gitignore", before: ignoreBefore, after: ignoreAfter, action: ignoreBefore ? "repair-managed-ignore" : "create-managed-ignore" });
   const writes = files.filter((file) => file.before !== file.after);
   return {
     project_root: projectRoot,

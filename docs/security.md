@@ -18,7 +18,7 @@ The same semantic categories apply in every isolation mode, and to both agents.
 | Push, tag creation or push, branch deletion, worktree removal or pruning | Ask |
 | Rebase, local merge, discarding tracked changes | Ask |
 | Creating or changing a pull request, issue, tracker item, or knowledge page | Ask |
-| Editing `adw.yaml`, the managed permission files, or `.devcontainer/` outside `adw:init` or an approved `adw:update` preview | Ask |
+| Editing `adw.yaml`, the managed permission files, the ADW `.gitignore` block, or `.devcontainer/` outside `adw:init` or an approved `adw:doctor` repair preview | Ask |
 | Any command whose effect classification is ambiguous | Ask |
 | Force push, destructive history reset | Deny |
 | Forced Git clean, bulk destructive deletion | Deny |
@@ -41,7 +41,7 @@ Contract tests prove the renderings stay in step; a divergence is a test failure
 
 These are ergonomic guardrails and defense in depth, not perfect effect classification. Aliases, shell scripts, generic HTTP clients, and provider-specific tool names can obscure behavior. Branch protection, least-privilege credentials, provider-side authorization, the container firewall, and ADW's own external-write authorization remain the real boundaries.
 
-The permission files are themselves protected: because `acceptEdits` would otherwise let an agent rewrite the policy that constrains it, `adw.yaml`, `.codex/config.toml`, `.codex/rules/adw.rules`, `.claude/settings.json`, and `.devcontainer/**` are on Claude's `ask` list. `adw:update` re-renders them through its own reviewed preview rather than through the Edit tool. `adw doctor --checks permissions` is the cheap read-only gate a workflow runs before it starts, and it fails closed on drift.
+The permission files are themselves protected: because `acceptEdits` would otherwise let an agent rewrite the policy that constrains it, `adw.yaml`, `.codex/config.toml`, `.codex/rules/adw.rules`, `.claude/settings.json`, and `.devcontainer/**` are on Claude's `ask` list. `adw:doctor` re-renders ADW-managed files through its reviewed repair preview rather than through the Edit tool. `adw doctor --checks permissions` is the cheap read-only CLI gate a workflow runs before it starts, and it fails closed on drift.
 
 ## Isolation modes
 

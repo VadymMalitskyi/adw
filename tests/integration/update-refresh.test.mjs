@@ -1,7 +1,7 @@
-// `adw:update` re-renders ADW-owned files and nothing else. Every assertion
-// here is made against the real CLI and against the whole project tree, so a
-// refresh that touched an unrelated file would be caught even if its own
-// report never mentioned it.
+// Doctor's refresh primitives re-render ADW-owned files and nothing else.
+// Every assertion here is made against the real CLI and against the whole
+// project tree, so a refresh that touched an unrelated file would be caught
+// even if its own report never mentioned it.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -166,17 +166,56 @@ test("refresh never rewrites adw.yaml or unrelated project files", () => {
   assert.deepEqual(failures, ["execution:runtime"], "a repaired project is healthy apart from not running inside the container");
 });
 
-test("a provider-sandbox project refreshes only the three permission files", () => {
+test("a provider-sandbox project refreshes only permission and managed-ignore files", () => {
   const root = initialize({ isolation: "provider-sandbox" }, { prefix: "adw-refresh-sandbox-" });
   const before = snapshot(root);
   writeFileSync(join(root, ".codex/rules/adw.rules"), "");
 
   const report = body(adw("refresh-preview", ["--project-root", root]));
-  assert.deepEqual([...report.writes.map(({ path }) => path), ...report.unchanged].sort(), [...PERMISSION_FILES].sort());
+  assert.deepEqual([...report.writes.map(({ path }) => path), ...report.unchanged].sort(), [...PERMISSION_FILES, ".gitignore"].sort());
   assert.deepEqual(report.writes.map(({ path }) => path), [".codex/rules/adw.rules"]);
 
   const applied = adw("refresh-apply", ["--project-root", root, "--fingerprint", report.fingerprint]);
   assert.equal(applied.status, 0, applied.stdout);
+  assert.deepEqual(snapshot(root), before);
+});
+
+test("doctor repair restores nonempty generated Codex rule drift", () => {
+  const root = initialize({ isolation: "provider-sandbox" }, { prefix: "adw-refresh-rules-" });
+  const rulesPath = join(root, ".codex/rules/adw.rules");
+  const expected = readFileSync(rulesPath, "utf8");
+  writeFileSync(rulesPath, 'prefix_rule(pattern = ["git"], decision = "allow")\n');
+
+  const report = body(adw("refresh-preview", ["--project-root", root]));
+  assert.deepEqual(report.writes, [{ path: ".codex/rules/adw.rules", action: "repair-permission-policy" }]);
+
+  const applied = adw("refresh-apply", ["--project-root", root, "--fingerprint", report.fingerprint]);
+  assert.equal(applied.status, 0, applied.stdout);
+  assert.equal(readFileSync(rulesPath, "utf8"), expected);
+});
+
+test("doctor repair restores the managed worktree ignore block without clobbering project rules", () => {
+  const root = initialize({ isolation: "provider-sandbox" }, { prefix: "adw-refresh-ignore-" });
+  writeFileSync(join(root, ".gitignore"), "node_modules/\n");
+
+  const report = body(adw("refresh-preview", ["--project-root", root]));
+  assert.deepEqual(report.writes, [{ path: ".gitignore", action: "repair-managed-ignore" }]);
+
+  const applied = adw("refresh-apply", ["--project-root", root, "--fingerprint", report.fingerprint]);
+  assert.equal(applied.status, 0, applied.stdout);
+  const ignore = readFileSync(join(root, ".gitignore"), "utf8");
+  assert.match(ignore, /^node_modules\//m);
+  assert.match(ignore, /^\/worktrees\/$/m);
+});
+
+test("a malformed managed ignore block is refused as a maintainer decision", () => {
+  const root = initialize({ isolation: "provider-sandbox" }, { prefix: "adw-refresh-ignore-conflict-" });
+  writeFileSync(join(root, ".gitignore"), "node_modules/\n# ADW:START\n/worktrees/\n");
+  const before = snapshot(root);
+
+  const preview = adw("refresh-preview", ["--project-root", root]);
+  assert.equal(preview.status, 3, preview.stdout);
+  assert.match(body(preview).error.message, /incomplete ADW block/);
   assert.deepEqual(snapshot(root), before);
 });
 

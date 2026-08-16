@@ -4,22 +4,22 @@
 
 Provider plugin managers distribute skill, template, and runtime changes. Pin private installations to a semantic-version tag for reproducibility. After updating the marketplace snapshot, reinstall or update the plugin in each provider and start a new session so skill metadata reloads.
 
-Run `adw:doctor` before resuming work. Roll back through the provider manager to the last known-good tag when needed; a plugin-only rollback does not need `adw:update`.
+Run `adw:doctor` before resuming work. It diagnoses the installed release and offers an exact managed-file repair when one is needed. Roll back through the provider manager to the last known-good tag when needed; a plugin-only rollback needs no repair unless doctor reports drift.
 
 ## Refreshing managed files
 
-`adw:update` repairs only the files ADW itself generates. It never rewrites application code, project-owned documentation, a project-owned `.devcontainer/`, or `adw.yaml`.
+`adw:doctor` repairs only the files ADW itself generates: the permission policy, the managed `worktrees/` ignore block, and, when selected, the managed devcontainer. It never rewrites application code, project-owned documentation, a project-owned `.devcontainer/`, or `adw.yaml`.
 
 ```text
 refresh-preview  ->  changed paths shown  ->  you say yes  ->  refresh-apply --fingerprint
 ```
 
-1. It reads the installed plugin version and parses `adw.yaml` through the bundled YAML 1.2 parser and the `adw: 1` contract check, without rewriting the file. Invalid configuration stops the update with no writes; ADW never reinterprets or repairs configuration on your behalf.
-2. It re-renders the current release's permission files — `.codex/config.toml`, `.codex/rules/adw.rules`, `.claude/settings.json` — and, when `execution.isolation` is `managed-devcontainer`, the whole generated `.devcontainer/`, using the project's own `development.runtime_versions` and provider `domains`.
+1. Doctor runs its deterministic checks read-only, reads the installed plugin version, and parses `adw.yaml` through the bundled YAML 1.2 parser and the `adw: 1` contract check. Invalid configuration stops repair with no writes; ADW never reinterprets or repairs configuration on your behalf.
+2. For repairable drift it re-renders the current release's permission files — `.codex/config.toml`, `.codex/rules/adw.rules`, `.claude/settings.json` — restores the managed `.gitignore` block, and, when `execution.isolation` is `managed-devcontainer`, re-renders the whole generated `.devcontainer/` using the project's own `development.runtime_versions` and provider `domains`.
 3. It shows exactly which paths would change. For `provider-sandbox` and `project-devcontainer` projects with a current policy, the write set is normally empty.
-4. After your plain yes, the skill hands its internally retained preview fingerprint to apply, which atomically writes exactly the reviewed files and refuses if anything moved in between. Nobody reads or copies the fingerprint.
+4. After your plain yes, doctor hands its internally retained preview fingerprint to apply, which atomically writes exactly the reviewed files and refuses if anything moved in between. Nobody reads or copies the fingerprint.
 
-This is what fixes marker drift after an ordinary plugin upgrade — a bumped plugin version, a new Codex or Claude Code pin, changed permission rules, a changed egress proxy. If configuration from an older release no longer validates, fix `adw.yaml` deliberately or re-initialize in a clean directory; `adw:update` will not migrate it for you.
+This is what fixes marker drift after an ordinary plugin upgrade — a bumped plugin version, a new Codex or Claude Code pin, changed permission rules, a changed egress proxy. If configuration from an older release no longer validates, fix `adw.yaml` deliberately or re-initialize in a clean directory; doctor will not migrate it for you.
 
 After a managed-container refresh, rebuild the image and reopen the container, then rerun `adw:doctor`.
 
@@ -62,3 +62,5 @@ Earlier releases carried a second workflow database beside Git. If you remember 
 | `adw:discover` | Folded into `adw:init`, `adw:plan`, and `adw:doctor` |
 | `adw:sync-docs` | Removed with the docs branch |
 | `adw:init-greenfield`, `adw:init-brownfield` | One `adw:init` that detects the repository state |
+| `conventions:` in `adw.yaml` | Keep project conventions in repository-owned instruction and contributor documentation |
+| `adw:update` | Invoke `adw:doctor`; it diagnoses first and offers the same preview-bound managed-file repair when needed |

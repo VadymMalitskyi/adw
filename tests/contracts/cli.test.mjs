@@ -99,6 +99,10 @@ test("exit codes are stable and distinguish input, contract, and check failures"
   const unknownField = invoke(["init-preview", "--project-root", root], JSON.stringify({ nonsense: true }));
   assert.equal(unknownField.status, EXIT.INPUT);
   assert.match(JSON.parse(unknownField.stdout).error.message, /unsupported answer field/);
+
+  const removedConventions = invoke(["init-preview", "--project-root", root], JSON.stringify({ conventions: { branches: "feature/*" } }));
+  assert.equal(removedConventions.status, EXIT.INPUT);
+  assert.match(JSON.parse(removedConventions.stdout).error.message, /unsupported answer field: conventions/);
 });
 
 test("doctor exits 5 when a check fails and 0 when every check passes", () => {

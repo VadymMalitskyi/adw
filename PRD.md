@@ -45,7 +45,7 @@ No developer needs to understand JSON Schema, policy digests, profile digests, o
 
 ### Project configuration
 
-A handwritten `adw: 1` contract declares the base branch, docs branch and worktree, optional named project-owned plan templates, execution mode, isolation mode, components with their validation commands, optional provider capabilities, and optional plain-language conventions. Validation enforces only operationally important invariants: the contract version; safe non-empty relative branch, worktree, and template paths; a declared default template; supported execution mode and isolation; unique component ids with project-relative paths and non-empty validation commands; known capability names with non-empty provider names; rejection of credential-like settings; and unknown provider-specific keys permitted only inside `settings`.
+A handwritten `adw: 1` contract declares the base branch, docs branch and worktree, optional named project-owned plan templates, execution mode, isolation mode, components with their validation commands, and optional provider capabilities. Validation enforces only operationally important invariants: the contract version; safe non-empty relative branch, worktree, and template paths; a declared default template; supported execution mode and isolation; unique component ids with project-relative paths and non-empty validation commands; known capability names with non-empty provider names; rejection of credential-like settings; and unknown provider-specific keys permitted only inside `settings`.
 
 The contract must not require command-source fields, component policy digests, enforcement profiles, payload profiles, or schema validation.
 

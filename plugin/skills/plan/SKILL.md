@@ -12,7 +12,8 @@ execution later.
 
 Read `<plugin-root>/authorization.md` and resolve the plugin root as described
 there. Run `adw config` to learn the base branch, components, validation
-commands, providers, and conventions.
+commands, and providers. Read repository-owned instruction files for project
+conventions; `adw.yaml` does not duplicate them.
 
 ## 1. Ground the plan in the repository
 

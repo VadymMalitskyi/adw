@@ -31,7 +31,6 @@ test("the contract accepts a small handwritten configuration and normalizes its 
     development: { runtime_versions: {} },
     components: { app: { path: ".", validate: [] } },
     providers: {},
-    conventions: {},
   });
 });
 
@@ -77,6 +76,8 @@ planning:
 execution:
   mode: orchestrated
   isolation: provider-sandbox
+conventions:
+  branches: Use adw/<change>/<group>.
 components:
   app:
     path: "."
@@ -87,6 +88,7 @@ components:
   assert.ok(paths.includes("/docs"), paths.join(", "));
   assert.ok(paths.includes("/planning"), paths.join(", "));
   assert.ok(paths.includes("/execution/mode"), paths.join(", "));
+  assert.ok(paths.includes("/conventions"), paths.join(", "));
 });
 
 test("the contract rejects only operationally important defects", () => {
@@ -153,13 +155,10 @@ providers:
     provider: github
     settings:
       api_token: "ghp_example"
-conventions:
-  password: never
 `));
   assert.equal(result.valid, false);
   const paths = errorPaths(result);
   assert.ok(paths.some((path) => path.endsWith("/api_token")), paths.join(", "));
-  assert.ok(paths.some((path) => path.endsWith("/password")), paths.join(", "));
 });
 
 test("provider domains are validated because they widen the managed container's egress", () => {

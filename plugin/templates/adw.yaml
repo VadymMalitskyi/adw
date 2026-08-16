@@ -46,9 +46,3 @@ components:
 #     settings:
 #       organization: "example-org"
 #       project: "example-project"
-
-# Optional plain-language conventions. They guide naming and formatting, and
-# never authorize an external write, a merge, a deployment, or a release.
-# conventions:
-#   branches: Use adw/<change>/<group> for execution branches.
-#   pull_requests: Keep group pull requests small and draft until reviewed.

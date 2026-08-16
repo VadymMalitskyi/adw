@@ -4,7 +4,7 @@
 // base branch, the isolation and web-access choices that shape the managed
 // container, runtime versions the repository cannot pin itself, component
 // paths with their project-owned validation commands, optional provider
-// declarations, and free-form conventions. Anything else is rejected rather
+// declarations. Anything else is rejected rather
 // than ignored, so a stale field is a loud error instead of a silent no-op.
 import { parseDocument } from "./vendor/yaml.mjs";
 import { InputError, PathError, isObject, isSafeRelativePath, normalizeRelativePath, readProjectFile } from "./safe-files.mjs";
@@ -21,7 +21,7 @@ const ACCESS_MODES = new Set(["read-only", "read-write"]);
 const SECRET_LIKE_KEY = /(?:password|passwd|token|api[_-]?key|secret|credential|authorization|cookie|private[_-]?key)/i;
 const IDENTIFIER = /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/;
 const PLACEHOLDER = /^\s*<[^>]+>\s*$/;
-const PROJECT_KEYS = new Set(["adw", "git", "execution", "development", "components", "providers", "conventions"]);
+const PROJECT_KEYS = new Set(["adw", "git", "execution", "development", "components", "providers"]);
 
 export function parseYaml(source, label = "YAML document") {
   if (typeof source !== "string" && !Buffer.isBuffer(source)) throw new InputError(`${label} must be UTF-8 text`);
@@ -230,7 +230,6 @@ export function validateProjectConfig(data) {
     development: { runtime_versions: {} },
     components: {},
     providers: {},
-    conventions: {},
   };
 
   if (data.git === undefined) errors.add("/git", "is required");
@@ -266,14 +265,6 @@ export function validateProjectConfig(data) {
   else validateComponents(errors, data.components, normalized);
 
   if (data.providers !== undefined) validateProviders(errors, data.providers, normalized);
-
-  if (data.conventions !== undefined && checkObject(errors, data.conventions, "/conventions")) {
-    for (const [key, value] of Object.entries(data.conventions)) {
-      const path = `/conventions/${key}`;
-      if (!/^[a-z][a-z0-9_]*$/.test(key)) { errors.add(path, "must be a snake_case convention name"); continue; }
-      if (checkSingleLine(errors, value, path)) normalized.conventions[key] = value;
-    }
-  }
 
   return errors.valid ? { valid: true, errors: [], data: normalized } : { valid: false, errors: errors.items };
 }

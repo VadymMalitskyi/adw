@@ -23,13 +23,16 @@ and their validation commands, and any configured providers.
 
 ## 2. Diagnose readiness
 
-Run `adw doctor --project-root <project-root>` and walk through the results in
-plain language. Distinguish clearly:
+Invoke `adw:doctor` and walk through its verified result in plain language. It
+owns every readiness check and every repair of ADW-managed files; onboarding
+must not maintain a second readiness definition. Distinguish clearly:
 
 - what a contributor can fix themselves (entering the container, authenticating a
   tool);
-- what only a maintainer should fix (permission policy drift, managed container
-  drift — those go through `adw:update`).
+- what doctor can repair after approval (permission policy or managed-container
+  drift);
+- what only a maintainer should decide (`adw.yaml` changes or project-owned
+  container changes).
 
 ## 3. Enter the configured environment
 

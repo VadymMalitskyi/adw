@@ -271,7 +271,6 @@ test("the generated configuration always satisfies the contract it is written ag
   for (const answers of [
     { isolation: "provider-sandbox" },
     { isolation: "managed-devcontainer", web_access: "hosted-only", runtime_versions: { dotnet: "8" } },
-    { isolation: "provider-sandbox", conventions: { branches: "Use adw/<change>/<group>." } },
   ]) {
     const root = commitRepository(scratch("contract"));
     initialize(root, answers);

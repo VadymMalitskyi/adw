@@ -153,8 +153,8 @@ export const CLAUDE_ASK = [
   "Bash(curl * --data *)", "Bash(curl * --upload-file *)", "Bash(wget * --post-data *)", "Bash(wget * --post-file *)",
   // `acceptEdits` auto-accepts ordinary file edits, so the policy files that carry
   // this profile would otherwise be rewritable without review. Ask instead of deny:
-  // a maintainer still edits them deliberately, and `adw:update` re-renders them
-  // through its own reviewed preview rather than the Edit tool.
+  // a maintainer still edits them deliberately, and `adw:doctor` repairs them
+  // through its reviewed preview rather than the Edit tool.
   "Edit(./.claude/settings.json)", "Write(./.claude/settings.json)",
   "Edit(./.codex/config.toml)", "Write(./.codex/config.toml)",
   "Edit(./.codex/rules/adw.rules)", "Write(./.codex/rules/adw.rules)",
@@ -230,9 +230,9 @@ export function managedClaudeSettings({ allowedDomains = [], webAccess = "public
 export const PERMISSION_FILES = Object.freeze([".codex/config.toml", ".codex/rules/adw.rules", ".claude/settings.json"]);
 
 // Both providers share one skill tree, so every project gets both policies.
-export function permissionProjectFiles(readExisting = () => "") {
+export function permissionProjectFiles(readExisting = () => "", { repairManagedRules = false } = {}) {
   const existingRules = readExisting(".codex/rules/adw.rules");
-  if (existingRules && existingRules !== CODEX_RULES) throw new ContractError(".codex/rules/adw.rules differs from the ADW managed-development policy");
+  if (!repairManagedRules && existingRules && existingRules !== CODEX_RULES) throw new ContractError(".codex/rules/adw.rules differs from the ADW managed-development policy");
   return [
     { path: ".codex/config.toml", content: mergeCodexConfig(readExisting(".codex/config.toml")) },
     { path: ".codex/rules/adw.rules", content: CODEX_RULES },

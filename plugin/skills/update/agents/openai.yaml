@@ -1,4 +1,0 @@
-interface:
-  display_name: "ADW Update"
-  short_description: "Refresh ADW-managed files"
-  default_prompt: "Use $update to preview and refresh the ADW-managed permission and container files."

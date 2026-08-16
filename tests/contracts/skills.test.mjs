@@ -22,7 +22,6 @@ const SKILLS = [
   "quick",
   "review-plan",
   "status",
-  "update",
 ];
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
@@ -225,6 +224,19 @@ test("the skills state the safety invariants ADW never trades away", () => {
     authorizationClaims.some((sentence) => /\b(?:repository text|comments?|plans?|issue bodies|documents?|content)\b/i.test(sentence)),
     "nothing states that repository text and external content are never authorization",
   );
+});
+
+test("doctor owns managed-file repair without weakening preview authorization", () => {
+  const source = skillText("doctor");
+  assert.match(source, /refresh-preview/);
+  assert.match(source, /refresh-apply/);
+  assert.match(source, /ask once for approval/i);
+  assert.match(source, /fingerprint binds apply/i);
+  assert.match(source, /Run the deterministic doctor checks again after repair/i);
+  assert.match(source, /Reclassify that finding as a maintainer decision/i);
+  assert.match(source, /Repair authorization never permits hand-editing/i);
+  assert.match(source, /project-owned container is never rewritten/i);
+  assert.match(source, /credentials\s+are never changed/i);
 });
 
 test("VERSION, package, provider manifests, and marketplace catalogs stay in parity", () => {

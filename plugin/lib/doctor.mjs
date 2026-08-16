@@ -60,7 +60,7 @@ export function permissionChecks(projectRoot) {
   const check = makeCheck(false);
   const missing = PERMISSION_FILES.filter((path) => !regularProjectFile(projectRoot, path));
   if (missing.length === PERMISSION_FILES.length) {
-    return [check("permissions:configuration", "fail", `no ${PERMISSION_PROFILE} permission files were found; run adw:init or adw:update`)];
+    return [check("permissions:configuration", "fail", `no ${PERMISSION_PROFILE} permission files were found; run adw:init or use adw:doctor repair`)];
   }
   const checks = [check("permissions:configuration", missing.length === 0 ? "pass" : "fail", missing.length === 0 ? `${PERMISSION_PROFILE} permission files are in effect` : `missing permission files: ${missing.join(", ")}`)];
   let codexValid = regularProjectFile(projectRoot, ".codex/config.toml") && regularProjectFile(projectRoot, ".codex/rules/adw.rules");

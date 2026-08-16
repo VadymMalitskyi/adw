@@ -27,13 +27,24 @@ dangerous. Everything that benefits from judgment is a raw skill again.
 
 ### Project contract
 
-- `adw.yaml` keeps only `git`, `execution`, `development`, `components`, `providers`,
-  and `conventions`. `docs`, `planning`, and `execution.mode` are removed; a stale
+- `adw.yaml` keeps only `git`, `execution`, `development`, `components`, and
+  `providers`. Project conventions remain in repository-owned instructions
+  instead of being duplicated in ADW configuration. `docs`, `planning`,
+  `execution.mode`, and `conventions` are removed; a stale
   field is now a loud validation error rather than a silent no-op.
 - Provider declarations gained a validated `domains` list, which feeds the managed
   container's egress allowlist directly.
 - Future versions may add optional fields and commands; removing a field or
   reinterpreting one requires a major migration.
+
+### Doctor owns setup repair
+
+- `adw:doctor` now classifies setup findings, previews exact repairs for
+  ADW-managed permission, ignore, and devcontainer files, applies them only after
+  approval, and reruns its checks.
+- Removed the separate `adw:update` skill. Its deterministic
+  `refresh-preview`/`refresh-apply` commands remain as doctor's byte-bound repair
+  mechanism.
 
 ### Permissions and the managed container
 

@@ -37,8 +37,8 @@ Every command prints exactly one JSON object on stdout, including on failure (`{
 | `config` | `--project-root` | Validated `adw.yaml` plus the resolved validation-command list |
 | `init-preview` | `--project-root`, answers JSON on stdin | Which files would change, what is unresolved, and a fingerprint |
 | `init-apply` | `--project-root`, `--fingerprint`, answers JSON on stdin | Applies exactly the previewed file set |
-| `refresh-preview` | `--project-root` | Which ADW-managed files have drifted from the installed release |
-| `refresh-apply` | `--project-root`, `--fingerprint` | Repairs exactly the previewed file set |
+| `refresh-preview` | `--project-root` | Which ADW-managed files doctor can repair from the installed release |
+| `refresh-apply` | `--project-root`, `--fingerprint` | Repairs exactly the file set approved through doctor |
 | `doctor` | `--project-root`, optional `--checks all\|permissions`, optional `--details` | Read-only check list with pass/fail/info |
 | `worktree-preview` / `worktree-inspect` | group request JSON on stdin | Per-group state, planned action, and blockers |
 | `worktree-prepare` | group request JSON on stdin | Creates or attaches each group's branch and worktree |
@@ -59,7 +59,7 @@ Exit codes come from `EXIT` in `safe-files.mjs`:
 
 ## Preview and apply
 
-Only two operations write more than one managed file at a time, and both are split:
+Only two operations write more than one managed file at a time, and both are split. Doctor owns the refresh pair's user-facing repair workflow:
 
 ```text
 init-preview   ─┐                    ┌─> the user reads the summary and says yes

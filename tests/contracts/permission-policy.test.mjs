@@ -302,7 +302,12 @@ test("both providers always get the full policy file set", () => {
   // when it has been edited underneath ADW.
   const current = new Map(files.map(({ path, content }) => [path, content]));
   assert.deepEqual(permissionProjectFiles((path) => current.get(path) ?? ""), files);
-  assert.throws(() => permissionProjectFiles((path) => (path === ".codex/rules/adw.rules" ? "prefix_rule(pattern = [\"git\"], decision = \"allow\")\n" : "")), /adw\.rules differs/);
+  const drifted = (path) => (path === ".codex/rules/adw.rules" ? "prefix_rule(pattern = [\"git\"], decision = \"allow\")\n" : "");
+  assert.throws(() => permissionProjectFiles(drifted), /adw\.rules differs/);
+  assert.equal(
+    permissionProjectFiles(drifted, { repairManagedRules: true }).find(({ path }) => path === ".codex/rules/adw.rules").content,
+    CODEX_RULES,
+  );
 });
 
 test("the permissions gate fails closed on drifted policy without inspecting the rest of the project", () => {

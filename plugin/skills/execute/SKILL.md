@@ -17,8 +17,8 @@ plugin root as described there.
 
 1. Run `adw config` and require exit 0.
 2. Run `adw doctor --checks permissions`. If the permission policy has drifted,
-   stop and point at `adw:update` — execution must not proceed on a weakened
-   policy.
+   stop and invoke `adw:doctor` to preview and repair it — execution must not
+   proceed on a weakened policy.
 3. Verify the configured isolation is the active runtime, per the authorization
    contract.
 4. Identify the plan and the specific phase. Restate to the user, in your own

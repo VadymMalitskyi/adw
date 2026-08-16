@@ -26,7 +26,7 @@ External provider tooling is installed and authenticated separately. ADW does no
 
 Push and tag only through the repository owner's normal release process. Users with read access can register the private Git source at a pinned tag or commit using each provider's marketplace command, then install `adw@adw-local`. Provider authentication must use existing Git credential mechanisms; never paste tokens into ADW configuration.
 
-For rollback, point the marketplace at the last-known-good tag, update the marketplace snapshot, reinstall the plugin, and start a new session. Do not run `adw:update` for a plugin-only rollback.
+For rollback, point the marketplace at the last-known-good tag, update the marketplace snapshot, reinstall the plugin, and start a new session. A plugin-only rollback needs no managed-file repair unless `adw:doctor` reports drift.
 
 ## Organization-private distribution
 
@@ -36,7 +36,7 @@ Organization policy and marketplace allowlists override these instructions. ADW 
 
 ## Verification
 
-After install, invoke `adw:doctor`. Without writing anything or starting authentication, it reports:
+After install, invoke `adw:doctor`. Its diagnostic pass writes nothing and starts no authentication. It reports:
 
 - that both provider manifests agree on the namespace `adw` and the plugin version;
 - that the project root is a Git repository and `adw.yaml` matches the `adw: 1` contract;
@@ -47,5 +47,10 @@ After install, invoke `adw:doctor`. Without writing anything or starting authent
 - each configured provider, its requirement mode, and its transport, followed by the live availability and authentication checks the skill performs with real provider commands.
 
 A failing check exits non-zero and carries its details; `adw doctor --checks permissions` runs the cheap policy-only subset.
+
+When generated permission, ignore, or managed-container files have drifted,
+doctor shows the exact repair set and asks before applying it. Configuration,
+credentials, application files, and project-owned containers are never repaired
+implicitly.
 
 Azure DevOps work tracking may use MCP, Azure CLI, or a REST adapter. [Microsoft currently directs](https://learn.microsoft.com/en-us/azure/devops/mcp-server/remote-mcp-server-troubleshooting?view=azure-devops) Codex, Claude Code, and Cursor users to its local MCP server, because the remote server supports only Visual Studio and Visual Studio Code. Do not make remote MCP availability a prerequisite. Keep organization, project, and repository identifiers in `adw.yaml` under the provider's `settings`, and all credentials outside the repository.

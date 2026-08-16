@@ -59,8 +59,6 @@ components:
 
 providers: {}                   # work_tracker | code_host | observability | knowledge
                                 # each: provider, required, transport, access, domains[], settings{}
-
-conventions: {}                 # snake_case key -> single-line string
 ```
 
 - `git` and `components` are required; `components` must declare at least one component with a project-relative path.
@@ -78,7 +76,7 @@ A project with no providers and no devcontainer keeps the lightweight path: `pro
 | Setup | `adw:init`, `adw:onboard`, `adw:doctor` |
 | Change loop | `adw:plan`, `adw:review-plan`, `adw:execute` |
 | Delivery | `adw:quick`, `adw:address-review` |
-| Operations | `adw:status`, `adw:investigate`, `adw:update` |
+| Operations | `adw:status`, `adw:investigate` |
 
 Skills depend on capabilities — `work_tracker`, `code_host`, `observability`, `knowledge` — never on provider tool names. Each capability supports `read`, `create`, `update`, and `link` over a native, MCP, CLI, or API transport. See [integrations](docs/integrations.md).
 
@@ -89,8 +87,8 @@ Skills call `plugin/bin/adw.mjs` for the deterministic steps only:
 ```text
 config                       validated adw.yaml and its resolved validation commands
 init-preview / init-apply    confined first-time setup, bound to the reviewed file set
-refresh-preview / refresh-apply   repair ADW-managed files after a plugin update
-doctor                       read-only readiness checks (--checks all|permissions)
+refresh-preview / refresh-apply   exact repair primitives used by adw:doctor
+doctor                       read-only deterministic checks (--checks all|permissions)
 worktree-preview / worktree-inspect / worktree-prepare / worktree-cleanup-guidance
 render-managed               render .devcontainer/ for build and security tests
 ```
