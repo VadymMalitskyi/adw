@@ -1,0 +1,4 @@
+interface:
+  display_name: "ADW Brainstorm"
+  short_description: "Challenge and refine an early idea"
+  default_prompt: "Use $brainstorm to challenge and shape this early idea before planning."

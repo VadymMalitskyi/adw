@@ -105,10 +105,12 @@ New project / new checkout
 
 Substantial or uncertain change
        |
-       +--> adw:plan --> optional/automatic cold review --> confirm a phase
-       |                                                   |
-       |                                                   v
-       |                                              adw:execute
+       +--> adw:brainstorm (when the idea needs discovery) --> adw:plan
+       |                                                        |
+       |                                           optional/automatic cold review --> confirm a phase
+       |                                                                                |
+       |                                                                                v
+       |                                                                           adw:execute
        |
 Small, isolated, low-risk correction
        |

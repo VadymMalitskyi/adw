@@ -13,6 +13,7 @@ const skillsRoot = resolve(pluginRoot, "skills");
 // this list is a deliberate product decision, not an accident.
 const SKILLS = [
   "address-review",
+  "brainstorm",
   "generate-docs",
   "doctor",
   "execute",

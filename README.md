@@ -3,7 +3,7 @@
 ADW is a private plugin that gives Codex and Claude Code the same Git-native development workflow:
 
 ```text
-install -> adw:init -> adw:plan -> [adw:review-plan] -> adw:execute -> adw:status
+install -> adw:init -> adw:brainstorm -> adw:plan -> [adw:review-plan] -> adw:execute -> adw:status
                     -> adw:quick for a genuinely small change
                     -> adw:generate-docs -> adw:sync-docs as documentation needs arise
 ```
@@ -28,7 +28,8 @@ There is no daemon, server, scheduler, telemetry, or workflow database. Git, you
 ## What to expect
 
 1. `adw:init` handles an empty directory, an unborn repository, or an established one. It previews every file it would write and writes only after you say yes.
-2. Substantial changes use plan → execute; small ones use `adw:quick`.
+2. Uncertain ideas can use `adw:brainstorm` before plan → execute; small,
+   well-understood changes use `adw:quick`.
 3. **Confirming in conversation is what authorizes execution.** There is no approval artifact, plan digest, or approval record.
 4. Groups inside a phase run in parallel, each in its own branch and worktree, only when their write paths are disjoint. The plan decides how much runs at once; there is no mode setting.
 5. **External writes default to separate authorization.** Only an exact, reviewed generated provider-operation policy can pre-authorize a bounded write; confirming a plan alone authorizes local implementation and nothing else.
@@ -88,6 +89,7 @@ During `adw:init`, a project with no existing devcontainer defaults to the harde
 | Group | Skills |
 |---|---|
 | Setup | `adw:init`, `adw:onboard`, `adw:doctor` |
+| Discovery | `adw:brainstorm` (interactive, read-only idea discovery) |
 | Documentation | `adw:generate-docs`, `adw:sync-docs` (both write to the documentation branch) |
 | Change loop | `adw:plan`, `adw:review-plan`, `adw:execute` |
 | Delivery | `adw:quick`, `adw:address-review` |
