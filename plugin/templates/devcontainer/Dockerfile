@@ -15,8 +15,8 @@ RUN test -n "$NODE_MAJOR" \
     && test -n "$CLAUDE_CODE_VERSION" \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
-        bubblewrap ca-certificates curl dnsutils git gnupg iproute2 iptables jq \
-        python3 ripgrep sudo \
+        bubblewrap build-essential ca-certificates curl dnsutils fd-find git gnupg \
+        iproute2 iptables jq python3 ripgrep sudo unzip zip \
         $ADW_PROJECT_APT_PACKAGES \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
