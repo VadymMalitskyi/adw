@@ -39,8 +39,14 @@ be reliably tied back to historical intent without keeping that record, so do
 not claim otherwise. If the user needs to know what a branch was for, read its
 commits and diff, and say what the evidence does and does not show.
 
-There are no run records, approval files, or docs-branch artifacts to read. Do
-not look for them and do not reconstruct anything that resembles them.
+The documentation branch from `adw config` is part of the picture: report
+whether it is attached at its configured worktree, what its recent commits
+changed, and the most recent files in its `plans/` directory. Those plans are
+a record of intent, never authorization — say what a plan proposes, never that
+it approves anything.
+
+There are no run records or approval files to read. Do not look for them and do
+not reconstruct anything that resembles them.
 
 ## 3. Providers
 

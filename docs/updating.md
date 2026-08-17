@@ -48,8 +48,8 @@ Earlier releases carried a second workflow database beside Git. If you remember 
 
 | Removed | What to do instead |
 |---|---|
-| The docs branch, its worktree, `SYNC.yaml`, and doc-sync markers | Keep documentation on the normal code branch; use `adw:generate-docs` for an evidence-based baseline and `adw:sync-docs` to audit and reconcile drift |
-| `changes/<id>/plan.md` as a required canonical location | Plans live in the conversation, or in a file at a path you choose |
+| `SYNC.yaml` and doc-sync markers | The docs branch carries no state file; `adw:generate-docs` builds the documentation set and `adw:sync-docs` audits and reconciles drift against live repository evidence |
+| `changes/<id>/plan.md` as a required canonical location | Plans live in the conversation and in `<docs.worktree>/plans/<date>-<abbreviation>-<description>.md` on the documentation branch |
 | `approval.json`, approval history, plan digests, plan-approval binding | Confirming in conversation authorizes execution |
 | Phase run records and their state machine | Git, the pull request, and the tracker item are the record |
 | The project-owned plan-template registry (`planning:` in `adw.yaml`) | Plans are ordinary Markdown; `plugin/templates/plan.md` is optional guidance |
@@ -60,7 +60,7 @@ Earlier releases carried a second workflow database beside Git. If you remember 
 | `npm run build:helper` / `check:helper` | `npm run build:vendor` / `check:vendor` |
 | `adw:approve`, `adw:amend` | Confirm in conversation; to change the design, edit the plan and confirm again |
 | `adw:discover` | Folded into `adw:init`, `adw:plan`, and `adw:doctor` |
-| The old `adw:sync-docs` branch-maintenance workflow | Use the new `adw:sync-docs` skill, which audits normal-branch documentation against live repository changes |
+| The old `adw:sync-docs` branch-maintenance workflow | Use the new `adw:sync-docs` skill, which audits the documentation branch against live repository changes |
 | `adw:init-greenfield`, `adw:init-brownfield` | One `adw:init` that detects the repository state |
 | `conventions:` in `adw.yaml` | Keep every convention, including branch naming, in repository-owned instruction and contributor documentation |
 | `adw:update` | Invoke `adw:doctor`; it diagnoses first and offers the same preview-bound managed-file repair when needed |

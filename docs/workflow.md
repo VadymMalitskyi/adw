@@ -32,20 +32,34 @@ the private `.adw/user.md`. It writes `adw.yaml` only when you approve a shared
 policy or override; it creates `.devcontainer/` only for
 `managed-devcontainer`.
 
-Init intentionally does not generate project documentation. Use
-`adw:generate-docs` after setup when the project needs an evidence-based
-documentation baseline.
+It also creates the `worktrees/` directory, creates the documentation branch
+(`docs` by default) as an orphan branch with a single README commit, and
+attaches it at `worktrees/docs`. Both the branch name and the worktree path are
+configurable through `docs.branch` and `docs.worktree`; the worktree must stay
+under `worktrees/`, the one path ADW keeps ignored on the base branch. The
+branch is created empty: init generates no documentation prose. Use
+`adw:generate-docs` after setup to fill it.
 
 ## Documentation
 
-`adw:generate-docs` inspects the live repository and proposes the smallest
-useful documentation baseline. Its default entry point is
-`docs/architecture.md`, which explains the project, its major flows, and
-verified setup/validation commands; independently understandable components
-receive focused `docs/components/<component>.md` references. It creates or
-updates files only after the person approves the exact scope.
+Documentation and plans live on the documentation branch, checked out at its
+worktree, not on the code branches. That keeps generated prose out of code
+review and lets docs be rewritten as often as they need to be without touching
+code history. The two branches share no ancestry.
 
-`adw:sync-docs` audits documentation against a supplied change range or recent
+`adw:generate-docs` inspects the live repository and proposes a thorough
+documentation set inside `<docs.worktree>/docs/`. Its entry point is
+`docs/architecture.md`, which explains the project, its major flows, its design
+decisions, and verified setup/validation commands; independently understandable
+components receive focused `docs/components/<component>.md` references, and
+supporting pages cover development setup, integrations, security, operations,
+testing, and terminology where the repository has real material for them. Every
+factual claim traces to source; anything that is the model's reading of the
+code is written in a clearly labeled interpretation section, never mixed into
+plain fact. It creates or updates files only after the person approves the
+exact scope.
+
+`adw:sync-docs` audits that documentation against a supplied change range or recent
 repository work. It classifies documents as current, stale, incomplete, or
 unaffected, then proposes only necessary edits. It does not treat a commit
 count as proof of drift, and audit-only is its default.
@@ -61,11 +75,14 @@ or concrete blockers. Onboarding defines no independent readiness rules.
 
 ## Plan
 
-`adw:plan` explores the repository read-only and returns a plan in conversation. It writes a file only if you ask for a path. There is no canonical plan location, no required template, and no plan registry.
+`adw:plan` explores the repository read-only, returns a plan in conversation, and writes it to `<docs.worktree>/plans/<YYYY-MM-DD>-<abbreviation>-<short-description>.md` — for example `2026-08-17-auth-replace-session-cookies.md`. The date sorts the directory chronologically, the abbreviation is the ticket identifier or a short team-recognizable tag, and the description names what the change does. There is no required template and no plan registry, and a plan file never authorizes anything: confirming in conversation does.
 
 A useful plan states the problem and the observable outcome, maps phases and the groups inside them, gives each group its goal, its affected write paths, and its validation commands, and anchors claims to real code as grep-able `file -> symbol` references rather than line numbers. Configured providers may be read for context; a tracker write still needs its own preview and its own yes.
 
-Planning never creates a branch, a worktree, or an implementation.
+Planning writes one plan file on the documentation branch and nothing else. It
+never creates a code branch, an execution worktree, or an implementation, and
+it never creates the documentation branch itself — that is `adw:init`'s
+reviewed apply step.
 
 ## Review the plan
 

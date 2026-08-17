@@ -88,7 +88,7 @@ test("a freshly initialized managed project passes every check except its runtim
   assert.equal(inside.report.ok, true);
   assert.deepEqual(inside.failures, []);
   assert.equal(inside.statusOf("execution:runtime"), "pass");
-  for (const id of ["plugin", "repository", "project-contract", "execution:managed-files", "execution:managed-marker", "execution:agent-versions", "execution:mounts", "execution:unsafe-mounts", "execution:hardening", "execution:domains", "execution:generated-files", "execution:permission-files", "permissions:configuration", "permissions:codex", "permissions:claude", "ignore:worktrees"]) {
+  for (const id of ["plugin", "repository", "project-contract", "execution:managed-files", "execution:managed-marker", "execution:agent-versions", "execution:mounts", "execution:unsafe-mounts", "execution:hardening", "execution:domains", "execution:generated-files", "execution:permission-files", "permissions:configuration", "permissions:codex", "permissions:claude", "ignore:worktrees", "docs:worktree"]) {
     assert.equal(inside.statusOf(id), "pass", `${id} must pass on a fresh managed project`);
   }
   assert.equal(inside.statusOf("components"), "info");
@@ -216,6 +216,25 @@ test("doctor accepts an absent policy but stops for an invalid present policy", 
     assert.deepEqual(result.ids, ["plugin", "repository"]);
     assert.equal(result.statusOf("repository"), "fail");
   });
+});
+
+test("doctor reports a documentation branch that is not checked out, and never attaches it itself", () => {
+  const root = managedProject("adw-doctor-docs-");
+  assert.equal(doctor(root).statusOf("docs:worktree"), "pass");
+
+  git(root, "worktree", "remove", "worktrees/docs");
+  const detached = doctor(root);
+  assert.equal(detached.statusOf("docs:worktree"), "fail");
+  assert.ok(detached.failures.includes("docs:worktree"), detached.failures.join(", "));
+  // Reporting only: the branch is still there and still not checked out.
+  assert.equal(git(root, "rev-parse", "--verify", "--quiet", "refs/heads/docs").length > 0, true);
+  assert.equal(doctor(root).statusOf("docs:worktree"), "fail");
+
+  // A project that predates the docs branch is diagnosed, not failed.
+  git(root, "branch", "-D", "docs");
+  const missing = doctor(root);
+  assert.equal(missing.statusOf("docs:branch"), "info");
+  assert.equal(missing.failures.includes("docs:branch"), false);
 });
 
 test("doctor never writes", () => {

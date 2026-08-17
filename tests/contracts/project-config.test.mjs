@@ -28,12 +28,45 @@ test("the contract accepts a small handwritten configuration and normalizes its 
   assert.deepEqual(result.data, {
     adw: 1,
     git: { base_branch: "main" },
+    docs: { branch: "docs", worktree: "worktrees/docs" },
     execution: { isolation: "provider-sandbox", web_access: "public-pages" },
     development: { runtime_versions: {} },
     components: { app: { path: ".", validate: [] } },
     providers: {},
     permissions: defaultPermissionPolicy(),
   });
+});
+
+test("the documentation branch and worktree can be overridden, and must stay off the base branch", () => {
+  const withOverride = validateProjectConfig(parseYaml(`
+adw: 1
+git:
+  base_branch: main
+docs:
+  branch: project-docs
+  worktree: worktrees/project-docs
+`));
+  assert.equal(withOverride.valid, true, JSON.stringify(withOverride.errors));
+  assert.deepEqual(withOverride.data.docs, { branch: "project-docs", worktree: "worktrees/project-docs" });
+
+  // A docs checkout outside `worktrees/` is not ignored on the base branch, so
+  // the whole documentation tree would land in the next code commit.
+  const escaping = validateProjectConfig(parseYaml("adw: 1\ndocs:\n  worktree: documentation\n"));
+  assert.equal(escaping.valid, false);
+  assert.ok(errorPaths(escaping).includes("/docs/worktree"), errorPaths(escaping).join(", "));
+
+  const collision = validateProjectConfig(parseYaml("adw: 1\ngit:\n  base_branch: docs\ndocs:\n  branch: docs\n"));
+  assert.equal(collision.valid, false);
+  assert.ok(errorPaths(collision).includes("/docs/branch"), errorPaths(collision).join(", "));
+
+  // The default must not silently collide with a base branch named `docs`.
+  const defaulted = validateProjectConfig(parseYaml("adw: 1\ngit:\n  base_branch: docs\n"));
+  assert.equal(defaulted.valid, true, JSON.stringify(defaulted.errors));
+  assert.notEqual(defaulted.data.docs.branch, "docs");
+
+  const unknown = validateProjectConfig(parseYaml("adw: 1\ndocs:\n  remote: origin\n"));
+  assert.equal(unknown.valid, false);
+  assert.ok(errorPaths(unknown).includes("/docs/remote"), errorPaths(unknown).join(", "));
 });
 
 test("a validation command is normalized whether it is written as a string or an object", () => {
@@ -79,9 +112,6 @@ test("removed 1.0 sections are rejected loudly instead of being silently ignored
 adw: 1
 git:
   base_branch: main
-docs:
-  branch: docs
-  worktree: worktrees/docs
 planning:
   default_template: standard
   templates:
@@ -98,7 +128,6 @@ components:
   assert.equal(result.valid, false);
   const paths = errorPaths(result);
   // A stale field must produce a specific error, never a quiet no-op.
-  assert.ok(paths.includes("/docs"), paths.join(", "));
   assert.ok(paths.includes("/planning"), paths.join(", "));
   assert.ok(paths.includes("/execution/mode"), paths.join(", "));
   assert.ok(paths.includes("/conventions"), paths.join(", "));

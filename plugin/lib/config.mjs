@@ -1,11 +1,12 @@
 // The stable ADW project contract.
 //
 // `adw.yaml` holds only settings that retained behavior actually reads: the
-// base branch, the isolation and web-access choices that shape the managed
-// container, runtime versions the repository cannot pin itself, component
-// paths with their project-owned validation commands, optional provider
-// declarations. Anything else is rejected rather
-// than ignored, so a stale field is a loud error instead of a silent no-op.
+// base branch, the documentation branch and its worktree, the isolation and
+// web-access choices that shape the managed container, runtime versions the
+// repository cannot pin itself, component paths with their project-owned
+// validation commands, optional provider declarations. Anything else is
+// rejected rather than ignored, so a stale field is a loud error instead of a
+// silent no-op.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -25,12 +26,23 @@ const ACCESS_MODES = new Set(["read-only", "read-write"]);
 const SECRET_LIKE_KEY = /(?:password|passwd|token|api[_-]?key|secret|credential|authorization|cookie|private[_-]?key)/i;
 const IDENTIFIER = /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/;
 const PLACEHOLDER = /^\s*<[^>]+>\s*$/;
-const PROJECT_KEYS = new Set(["adw", "git", "execution", "development", "components", "providers", "permissions"]);
+const PROJECT_KEYS = new Set(["adw", "git", "docs", "execution", "development", "components", "providers", "permissions"]);
+
+// Documentation and plans live on their own orphan branch, checked out in a
+// worktree, so generated prose never has to travel through code review on the
+// base branch. The worktree stays under `worktrees/` because that prefix is the
+// one path ADW guarantees is ignored on the base branch; a docs checkout
+// anywhere else would be committed into the code history it exists to avoid.
+export const DEFAULT_DOCS_BRANCH = "docs";
+export const DEFAULT_DOCS_WORKTREE = "worktrees/docs";
 
 export function defaultProjectConfig(baseBranch = "main") {
   return {
     adw: CONTRACT_VERSION,
     git: { base_branch: baseBranch },
+    // A project whose base branch is already named `docs` gets a distinct
+    // default rather than a collision the user has to notice and fix.
+    docs: { branch: baseBranch === DEFAULT_DOCS_BRANCH ? "adw-docs" : DEFAULT_DOCS_BRANCH, worktree: DEFAULT_DOCS_WORKTREE },
     execution: { isolation: "provider-sandbox", web_access: "public-pages" },
     development: { runtime_versions: {} },
     components: {},
@@ -284,6 +296,25 @@ export function validateProjectConfig(data, inferredBase = "main") {
   if (data.git !== undefined && checkObject(errors, data.git, "/git")) {
     checkKnownKeys(errors, data.git, new Set(["base_branch"]), "/git");
     if (data.git.base_branch !== undefined && checkBranchName(errors, data.git.base_branch, "/git/base_branch")) normalized.git.base_branch = data.git.base_branch;
+  }
+
+  // The base branch is resolved above, so the default docs branch is recomputed
+  // against the real one rather than the inferred one.
+  if (normalized.docs.branch === normalized.git.base_branch) normalized.docs.branch = "adw-docs";
+
+  if (data.docs !== undefined && checkObject(errors, data.docs, "/docs")) {
+    checkKnownKeys(errors, data.docs, new Set(["branch", "worktree"]), "/docs");
+    if (data.docs.branch !== undefined && checkBranchName(errors, data.docs.branch, "/docs/branch")) normalized.docs.branch = data.docs.branch;
+    if (data.docs.worktree !== undefined && checkRelativePath(errors, data.docs.worktree, "/docs/worktree")) {
+      const worktree = normalizeRelativePath(data.docs.worktree);
+      if (!worktree.startsWith("worktrees/")) errors.add("/docs/worktree", "must live under `worktrees/`, the path ADW keeps ignored on the base branch");
+      else normalized.docs.worktree = worktree;
+    }
+  }
+  // Checked even when the section is absent: the default docs branch collides
+  // with a project whose base branch happens to be named `docs`.
+  if (normalized.docs.branch === normalized.git.base_branch) {
+    errors.add("/docs/branch", `must differ from git.base_branch; set docs.branch explicitly when the base branch is named ${JSON.stringify(normalized.git.base_branch)}`);
   }
 
   if (data.execution !== undefined && checkObject(errors, data.execution, "/execution")) {

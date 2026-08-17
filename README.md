@@ -12,6 +12,11 @@ One workflow, portable across repositories, languages, build systems, code hosts
 
 There are two things a contributor authors: a plan, and a yes.
 
+Documentation and plans live on their own orphan branch — `docs` by default,
+checked out at `worktrees/docs` — which `adw:init` creates. Code review stays
+about code; documentation is rewritten as often as it needs to be without
+touching code history.
+
 ## How it is built
 
 Skills are raw instructions. They own everything that benefits from judgment and should stay visible in the conversation: reading the repository, planning, reviewing a plan, splitting a phase into groups, spawning implementers and reviewers, running Git and validation commands, summarizing status, and asking for authorization.
@@ -83,7 +88,7 @@ A project with no providers and no devcontainer keeps the lightweight path: `pro
 | Group | Skills |
 |---|---|
 | Setup | `adw:init`, `adw:onboard`, `adw:doctor` |
-| Documentation | `adw:generate-docs`, `adw:sync-docs` |
+| Documentation | `adw:generate-docs`, `adw:sync-docs` (both write to the documentation branch) |
 | Change loop | `adw:plan`, `adw:review-plan`, `adw:execute` |
 | Delivery | `adw:quick`, `adw:address-review` |
 | Operations | `adw:status`, `adw:investigate` |

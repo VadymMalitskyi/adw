@@ -4,6 +4,30 @@ All notable changes to this private plugin are documented here.
 
 ## Unreleased
 
+### Documentation and plans moved to their own branch
+
+- `adw.yaml` gained an optional `docs` section with `branch` and `worktree`.
+  Defaults are branch `docs` at `worktrees/docs`. The worktree must stay under
+  `worktrees/`, the one path ADW keeps ignored on the base branch, and the
+  branch must differ from `git.base_branch`.
+- `adw:init` now creates the `worktrees/` directory, creates the documentation
+  branch as an orphan with a single README commit, and attaches its worktree.
+  Both are part of the reviewed preview and are bound by its fingerprint. An
+  existing branch is reused and an already-attached worktree is left alone; a
+  foreign directory at the worktree path is refused.
+- `adw:plan` now writes every plan to
+  `<docs.worktree>/plans/<YYYY-MM-DD>-<abbreviation>-<short-description>.md`
+  instead of only returning it in conversation. A plan file still authorizes
+  nothing.
+- `adw:generate-docs` produces a full documentation set rather than the
+  smallest useful baseline, and writes it to the documentation branch. Verified
+  claims and interpretation are now both allowed, but must be visibly
+  separated: interpretation carries an explicit label. `adw:sync-docs` audits
+  that branch against code history and keeps those labels intact.
+- `adw:doctor` reports the documentation branch and whether it is checked out
+  at its configured worktree. It never creates or attaches either.
+- Version bumped to 1.1.0.
+
 - The C# extension's runtime redirect now points at `/usr/share/dotnet/dotnet`, the
   `DOTNET_ROOT` the devcontainer .NET feature actually installs into. The previous
   path did not exist, so the extension silently ignored it and fell back to a

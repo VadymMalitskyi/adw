@@ -268,6 +268,66 @@ test("an existing worktrees ignore rule is not duplicated", () => {
   assert.equal(ignore.split("worktrees/").length - 1, 1, ignore);
 });
 
+test("initialization creates the worktrees directory and attaches the documentation branch", () => {
+  const root = commitRepository(scratch("docs-branch"));
+  const { preview, applied } = initialize(root);
+
+  assert.deepEqual(preview.docs, { branch: "docs", worktree: "worktrees/docs", branch_action: "create-orphan", worktree_action: "attach" });
+  assert.deepEqual(applied.docs, preview.docs);
+
+  assert.ok(statSync(join(root, "worktrees")).isDirectory());
+  assert.ok(statSync(join(root, "worktrees/docs/plans")).isDirectory());
+  assert.ok(existsSync(join(root, "worktrees/docs/README.md")));
+  assert.ok(git(root, ["worktree", "list", "--porcelain"]).stdout.includes(join(root, "worktrees/docs")));
+
+  // Orphan: exactly one commit, with no parent reaching the code history.
+  assert.equal(git(root, ["rev-list", "--count", "docs"]).stdout, "1");
+  assert.equal(git(root, ["merge-base", "docs", "main"], { allowFailure: true }).status, 1);
+
+  // The docs worktree is ignored, so it never appears in a base-branch commit.
+  assert.equal(git(root, ["status", "--porcelain", "--untracked-files=all"]).stdout.includes("worktrees/"), false);
+});
+
+test("a second initialization neither recreates the documentation branch nor reattaches its worktree", () => {
+  const root = commitRepository(scratch("docs-idempotent"));
+  initialize(root);
+  const head = git(root, ["rev-parse", "docs"]).stdout;
+
+  const again = initialize(root);
+  assert.deepEqual(again.preview.docs, { branch: "docs", worktree: "worktrees/docs", branch_action: "existing", worktree_action: "already-attached" });
+  assert.equal(git(root, ["rev-parse", "docs"]).stdout, head);
+  assert.equal(git(root, ["rev-list", "--count", "docs"]).stdout, "1");
+});
+
+test("the documentation branch and worktree can be renamed, and a foreign directory in the way is refused", () => {
+  const root = commitRepository(scratch("docs-named"));
+  const { applied } = initialize(root, { docs: { branch: "handbook", worktree: "worktrees/handbook" } });
+  assert.equal(applied.docs.branch, "handbook");
+  assert.ok(existsSync(join(root, "worktrees/handbook/README.md")));
+  // An explicit answer is shared policy, so it is recorded.
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /docs:\n {2}branch: "handbook"\n {2}worktree: "worktrees\/handbook"/);
+
+  const occupied = commitRepository(scratch("docs-occupied"));
+  mkdirSync(join(occupied, "worktrees/docs"), { recursive: true });
+  writeFileSync(join(occupied, "worktrees/docs/notes.md"), "mine\n");
+  const refused = run("init-preview", occupied, {});
+  assert.equal(refused.body.ok, false);
+  assert.match(refused.body.error.message, /already exists and is not an attached worktree/);
+  assert.equal(readFileSync(join(occupied, "worktrees/docs/notes.md"), "utf8"), "mine\n");
+});
+
+test("a docs branch that collides with the base branch is refused before anything is written", () => {
+  const root = commitRepository(scratch("docs-collision"));
+  const refused = run("init-preview", root, { docs: { branch: "main" } });
+  assert.equal(refused.body.ok, false);
+  assert.match(refused.body.error.message, /must differ from the base branch/);
+
+  // A docs checkout outside worktrees/ would be committed onto the base branch.
+  const escaping = run("init-preview", root, { docs: { worktree: "documentation" } });
+  assert.equal(escaping.body.ok, false);
+  assert.match(escaping.body.error.message, /must live under worktrees\//);
+});
+
 test("the generated configuration always satisfies the contract it is written against", () => {
   for (const answers of [
     { isolation: "provider-sandbox" },

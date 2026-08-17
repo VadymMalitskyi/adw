@@ -174,8 +174,6 @@ test("every skill resolves bundled resources from the loaded plugin, never from 
 
 test("no skill references a concept the lean workflow removed", () => {
   const removed = [
-    ["a docs branch", /\bdocs[ -]branch(?:es)?\b|\bdocumentation branch(?:es)?\b/i],
-    ["a docs worktree", /\bdocs worktree\b/i],
     ["the SYNC.yaml marker", /SYNC\.yaml/i],
     ["a canonical plan location", /changes\/[^\s`]*plan\.md/i],
     ["an approval artifact", /approval\.json|\bapproval (?:record|file|histor|bundle)/i],
@@ -196,6 +194,24 @@ test("no skill references a concept the lean workflow removed", () => {
       for (const [label, pattern] of removed) {
         assert.doesNotMatch(paragraph, pattern, `${name}: references ${label}, which no longer exists`);
       }
+    }
+  }
+});
+
+// The docs branch and its worktree are configurable, so a skill that hard-codes
+// `docs` or `worktrees/docs` would quietly write to the wrong place in any
+// project that renamed them.
+test("every skill that touches documentation or plans takes the branch and worktree from configuration", () => {
+  for (const name of ["generate-docs", "sync-docs", "plan"]) {
+    const source = skillText(name);
+    const unwrapped = source.replace(/\s+/g, " ");
+    assert.match(unwrapped, /docs\.branch/, `${name}: must read docs.branch from adw config`);
+    assert.match(unwrapped, /docs\.worktree/, `${name}: must read docs.worktree from adw config`);
+    for (const paragraph of paragraphs(source)) {
+      // Naming the default is allowed only where the paragraph also names the
+      // setting it comes from.
+      if (/docs\.(?:branch|worktree)/.test(paragraph)) continue;
+      assert.doesNotMatch(paragraph, /`worktrees\/docs`/, `${name}: hard-codes the default docs worktree path`);
     }
   }
 });

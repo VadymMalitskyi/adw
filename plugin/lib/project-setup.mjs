@@ -7,11 +7,11 @@
 // skill's two calls — nobody is asked to read or retype it.
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ContractError, InputError, applyAtomicWrites, isObject, isSafeRelativePath } from "./safe-files.mjs";
-import { ISOLATION_MODES, RUNTIMES, WEB_ACCESS_MODES, isValidBranchName, isValidDomain, loadProjectConfig, parseYaml, providerDomains, validateProjectConfig } from "./config.mjs";
+import { ContractError, InputError, applyAtomicWrites, isObject, isSafeRelativePath, normalizeRelativePath } from "./safe-files.mjs";
+import { DEFAULT_DOCS_BRANCH, DEFAULT_DOCS_WORKTREE, ISOLATION_MODES, RUNTIMES, WEB_ACCESS_MODES, isValidBranchName, isValidDomain, loadProjectConfig, parseYaml, providerDomains, validateProjectConfig } from "./config.mjs";
 import { permissionProjectFiles } from "./permissions.mjs";
 import { managedDevelopmentFiles } from "./managed-environment.mjs";
 
@@ -78,6 +78,81 @@ function detectedBaseBranch(projectRoot, state) {
   const current = git(projectRoot, ["branch", "--show-current"], { allowFailure: true });
   if (current.status === 0 && isValidBranchName(current.stdout)) return current.stdout;
   return "main";
+}
+
+const DOCS_README = `# Documentation branch
+
+This orphan branch carries the project's generated documentation and plans. It
+shares no history with the code branches on purpose: documentation and plans
+are rewritten far more often than code, and keeping them here leaves code
+review to code.
+
+- \`docs/\` — the architecture guide, component references, and their supporting
+  pages, written by \`adw:generate-docs\` and reconciled by \`adw:sync-docs\`.
+- \`plans/\` — one file per planned change, named
+  \`<YYYY-MM-DD>-<abbreviation>-<short-description>.md\`.
+
+It is checked out as a worktree so both branches are open at once. Nothing here
+is authorization: a plan on this branch describes intended work, it never
+approves it.
+`;
+
+// The docs branch is planned in preview and created in apply. It is not a file
+// write, so it travels beside `writes` rather than inside it — but it is part
+// of the fingerprint, so apply can never attach a worktree the user did not see.
+function planDocsBranch(projectRoot, repository, docs) {
+  const worktreePath = join(projectRoot, docs.worktree);
+  const branchExists = !repository.needs_git_init
+    && git(projectRoot, ["show-ref", "--verify", "--quiet", `refs/heads/${docs.branch}`], { allowFailure: true }).status === 0;
+  let attached = false;
+  if (!repository.needs_git_init) {
+    const list = git(projectRoot, ["worktree", "list", "--porcelain"], { allowFailure: true });
+    attached = list.status === 0 && list.stdout.split(/\r?\n/).some((line) => line.startsWith("worktree ") && realpathOrSelf(line.slice("worktree ".length)) === realpathOrSelf(worktreePath));
+  }
+  if (!attached && existsSync(worktreePath) && readdirSync(worktreePath).length > 0) {
+    throw new ContractError(`${docs.worktree} already exists and is not an attached worktree; move it aside or choose another docs.worktree`);
+  }
+  return {
+    branch: docs.branch,
+    worktree: docs.worktree,
+    branch_action: branchExists ? "existing" : "create-orphan",
+    worktree_action: attached ? "already-attached" : "attach",
+  };
+}
+
+function realpathOrSelf(path) {
+  try { return realpathSync(path); }
+  catch { return resolve(path); }
+}
+
+// Builds the branch's first commit through Git's object database rather than
+// the index, so creating it never touches the checked-out working tree.
+function createDocsBranch(projectRoot, docs) {
+  const identity = {};
+  for (const [field, fallback] of [["name", "ADW"], ["email", "adw@localhost"]]) {
+    if (git(projectRoot, ["config", "--get", `user.${field}`], { allowFailure: true }).status !== 0) {
+      identity[`GIT_AUTHOR_${field.toUpperCase()}`] = fallback;
+      identity[`GIT_COMMITTER_${field.toUpperCase()}`] = fallback;
+    }
+  }
+  const blob = spawnSync("git", ["hash-object", "-w", "--stdin"], { cwd: projectRoot, encoding: "utf8", input: DOCS_README });
+  if (blob.status !== 0) throw new ContractError(`cannot write the docs branch README: ${(blob.stderr || blob.stdout).trim()}`);
+  const tree = spawnSync("git", ["mktree"], { cwd: projectRoot, encoding: "utf8", input: `100644 blob ${blob.stdout.trim()}\tREADME.md\n` });
+  if (tree.status !== 0) throw new ContractError(`cannot build the docs branch tree: ${(tree.stderr || tree.stdout).trim()}`);
+  const commit = spawnSync("git", ["commit-tree", tree.stdout.trim(), "-m", "Start the ADW documentation branch"], {
+    cwd: projectRoot,
+    encoding: "utf8",
+    env: { ...process.env, ...identity, GIT_OPTIONAL_LOCKS: "0" },
+  });
+  if (commit.status !== 0) throw new ContractError(`cannot commit the docs branch root: ${(commit.stderr || commit.stdout).trim()}`);
+  git(projectRoot, ["branch", docs.branch, commit.stdout.trim()]);
+}
+
+function applyDocsBranch(projectRoot, plan) {
+  mkdirSync(join(projectRoot, "worktrees"), { recursive: true });
+  if (plan.branch_action === "create-orphan") createDocsBranch(projectRoot, plan);
+  if (plan.worktree_action === "attach") git(projectRoot, ["worktree", "add", plan.worktree, plan.branch]);
+  mkdirSync(join(projectRoot, plan.worktree, "plans"), { recursive: true });
 }
 
 function packageRunner(projectRoot, componentRoot) {
@@ -152,13 +227,16 @@ function yamlScalar(value) {
   return JSON.stringify(String(value));
 }
 
-function renderProjectConfig({ baseBranch, isolation, webAccess, runtimeVersions, components, providers, includeGit, includeComponents }) {
+function renderProjectConfig({ baseBranch, docs, isolation, webAccess, runtimeVersions, components, providers, includeGit, includeDocs, includeComponents }) {
   const lines = [
     "# ADW project policy. Omit a setting to use repository discovery or ADW's safe default.",
     "adw: 1",
   ];
   if (includeGit) {
     lines.push("", "git:", `  base_branch: ${yamlScalar(baseBranch)}`);
+  }
+  if (includeDocs) {
+    lines.push("", "docs:", `  branch: ${yamlScalar(docs.branch)}`, `  worktree: ${yamlScalar(docs.worktree)}`);
   }
   // `web_access` bounds the generated container's egress; it means nothing
   // outside the managed devcontainer, so it is recorded only there.
@@ -249,7 +327,7 @@ function replaceManagedBlock(original, start, end, body) {
 function checkAnswers(answers) {
   if (!isObject(answers)) throw new InputError("answers must be a JSON object");
   for (const key of Object.keys(answers)) {
-    if (!["isolation", "web_access", "base_branch", "runtime_versions", "components", "providers"].includes(key)) {
+    if (!["isolation", "web_access", "base_branch", "docs", "runtime_versions", "components", "providers"].includes(key)) {
       throw new InputError(`unsupported answer field: ${key}`);
     }
   }
@@ -258,6 +336,18 @@ function checkAnswers(answers) {
   const webAccess = answers.web_access ?? "public-pages";
   if (!WEB_ACCESS_MODES.includes(webAccess)) throw new ContractError(`web_access must be one of: ${WEB_ACCESS_MODES.join(", ")}`);
   if (answers.base_branch !== undefined && !isValidBranchName(answers.base_branch)) throw new ContractError("base_branch must be a valid Git branch name");
+  const rawDocs = answers.docs ?? {};
+  if (!isObject(rawDocs)) throw new ContractError("docs must be a mapping object with optional branch and worktree");
+  for (const key of Object.keys(rawDocs)) {
+    if (!["branch", "worktree"].includes(key)) throw new ContractError(`unsupported docs field: ${key}`);
+  }
+  if (rawDocs.branch !== undefined && !isValidBranchName(rawDocs.branch)) throw new ContractError("docs.branch must be a valid Git branch name");
+  if (rawDocs.worktree !== undefined && !isSafeRelativePath(rawDocs.worktree)) throw new ContractError("docs.worktree must be a project-relative path");
+  const docs = {
+    branch: rawDocs.branch ?? DEFAULT_DOCS_BRANCH,
+    worktree: rawDocs.worktree === undefined ? DEFAULT_DOCS_WORKTREE : normalizeRelativePath(rawDocs.worktree),
+  };
+  if (!docs.worktree.startsWith("worktrees/")) throw new ContractError("docs.worktree must live under worktrees/, the path ADW keeps ignored on the base branch");
   const runtimeVersions = answers.runtime_versions ?? {};
   if (!isObject(runtimeVersions)) throw new ContractError("runtime_versions must be a mapping object");
   for (const [name, version] of Object.entries(runtimeVersions)) {
@@ -282,7 +372,7 @@ function checkAnswers(answers) {
       return { name: component.name, path: component.path, validate: (component.validate ?? []).map((item) => (typeof item === "string" ? { command: item } : item)) };
     });
   }
-  return { isolation, webAccess, runtimeVersions, providers, components, baseBranch: answers.base_branch };
+  return { isolation, webAccess, runtimeVersions, providers, components, docs, docsExplicit: answers.docs !== undefined, baseBranch: answers.base_branch };
 }
 
 // Preserve an existing project-owned container; never silently convert it.
@@ -337,6 +427,8 @@ export function planInitialization(directory, rawAnswers = {}) {
   }
   const execution = checkIsolation(projectRoot, answers.isolation);
   const baseBranch = answers.baseBranch ?? detectedBaseBranch(projectRoot, repository.state);
+  if (answers.docs.branch === baseBranch) throw new ContractError(`docs.branch must differ from the base branch (${baseBranch})`);
+  const docs = planDocsBranch(projectRoot, repository, answers.docs);
   const components = answers.components ?? detectComponents(projectRoot);
 
   const files = [];
@@ -346,6 +438,7 @@ export function planInitialization(directory, rawAnswers = {}) {
   };
 
   const explicitPolicy = answers.baseBranch !== undefined
+    || answers.docsExplicit
     || answers.components !== undefined
     || answers.isolation !== undefined && answers.isolation !== "provider-sandbox"
     || answers.web_access !== undefined && answers.web_access !== "public-pages"
@@ -357,12 +450,14 @@ export function planInitialization(directory, rawAnswers = {}) {
   if (explicitPolicy) {
     add("adw.yaml", renderProjectConfig({
       baseBranch,
+      docs: answers.docs,
       isolation: execution.isolation,
       webAccess: answers.webAccess,
       runtimeVersions: answers.runtimeVersions,
       components: answers.components ?? components,
       providers: answers.providers,
       includeGit: answers.baseBranch !== undefined,
+      includeDocs: answers.docsExplicit,
       includeComponents: answers.components !== undefined,
     }), "create-project-policy");
   }
@@ -394,6 +489,7 @@ export function planInitialization(directory, rawAnswers = {}) {
   return {
     project_root: projectRoot,
     repository: { state: repository.state, git_init: repository.needs_git_init, base_branch: baseBranch },
+    docs,
     execution,
     components: components.map(({ name, path, validate }) => ({ name, path, commands: validate.length })),
     writes: writes.map(({ path, action }) => ({ path, action })),
@@ -404,6 +500,7 @@ export function planInitialization(directory, rawAnswers = {}) {
       project_root: projectRoot,
       repository: repository.state,
       git_init: repository.needs_git_init,
+      docs,
       files: files.map(({ path, action, before, after }) => ({ path, action, before, after })),
     }),
     files,
@@ -422,6 +519,8 @@ export async function applyInitialization(directory, rawAnswers, expectedFingerp
       expected_content: file.before === "" && !existsSync(join(plan.project_root, file.path)) ? null : file.before,
     })));
   }
+  // Last, so a failure here cannot leave the reviewed file set half-written.
+  applyDocsBranch(plan.project_root, plan.docs);
   const { files, ...summary } = plan;
   return { ...summary, applied: true };
 }

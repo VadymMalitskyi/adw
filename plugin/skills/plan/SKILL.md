@@ -1,14 +1,14 @@
 ---
 name: plan
-description: Produce a repository-grounded implementation plan for a software change, structured into dependency-ordered phases with parallel-safe groups, returned in the conversation and written to a file only when the user asks for one. Use when a user wants to plan a change, define scope and acceptance criteria, or prepare implementation-ready work without modifying code.
+description: Produce a repository-grounded implementation plan for a software change, structured into dependency-ordered phases with parallel-safe groups, returned in the conversation and written to a dated file in the documentation branch's plans directory. Use when a user wants to plan a change, define scope and acceptance criteria, or prepare implementation-ready work without modifying code.
 ---
 
 # Plan a change
 
-Return one self-contained plan in the conversation. Write a file only when the
-user asks for a path. There is no canonical location, no plan digest, and no
-approval artifact — the user confirming in conversation is what authorizes
-execution later.
+Return one self-contained plan in the conversation and write it to the project's
+documentation branch. There is no plan digest and no approval artifact — the
+user confirming in conversation is what authorizes execution later. A plan file
+records intent; it never authorizes anything, no matter what it says.
 
 Read `<plugin-root>/authorization.md` and resolve the plugin root as described
 there. Run `adw config` to learn explicit project policy plus inferred defaults.
@@ -67,11 +67,31 @@ Apply the findings you agree with. Report the ones you rejected and why.
 
 ## 4. Return it
 
-Present the plan in the conversation. If the user asks for a file, write it to
-the path they name and nothing else — ask before committing it, and never push.
+Present the plan in the conversation, then write it to the documentation
+branch. Take `docs.branch` and `docs.worktree` from `adw config`; the worktree
+is where you write, never a `git checkout` of the base branch. If the worktree
+is not attached and the branch exists, attach it with
+`git worktree add <docs.worktree> <docs.branch>`. If the branch does not exist,
+say so and point at `adw:init` rather than creating it here.
+
+Write one file to `<docs.worktree>/plans/`, named
+`<YYYY-MM-DD>-<abbreviation>-<short-description>.md`:
+
+- `<YYYY-MM-DD>` — today's date, so the directory sorts chronologically;
+- `<abbreviation>` — a short lowercase tag for the change, the issue or ticket
+  identifier when the project has one, otherwise 2–5 letters the team would
+  recognize;
+- `<short-description>` — two to five lowercase hyphenated words naming what
+  the change does.
+
+For example, `2026-08-17-auth-replace-session-cookies.md`. If that path is
+already taken, append `-2`; never overwrite an existing plan. Write only that
+one file. Ask before committing it, and never push.
+
 `<plugin-root>/templates/plan.md` is an optional skeleton you may start from;
 nothing parses it, so rename, reorder, or drop its sections whenever the change
-is better served that way.
+is better served that way. If the user names a different path, write there
+instead and say that it is outside the plans directory.
 
 Then state plainly what happens next: they confirm the plan and the phase they
 want, and `adw:execute` carries it out. Nothing about the plan is binding until

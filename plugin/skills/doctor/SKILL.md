@@ -35,7 +35,9 @@ covers:
   hardening, the egress allowlist against its recorded digest, generated
   requirement and setup bytes, permission payload digests, and whether the
   container is the active runtime;
-- `worktrees/` being ignored, and the optional `origin` remote.
+- `worktrees/` being ignored, the configured documentation branch and whether
+  it is checked out at its configured worktree, and the optional `origin`
+  remote.
 
 An absent `adw.yaml` is a valid default-policy project. An invalid present file
 stops checks that depend on its policy. Report exact errors; never translate,
@@ -50,7 +52,8 @@ Put each finding in exactly one category:
   managed `worktrees/` ignore block, or drift in a managed devcontainer. Doctor
   can restore these from the installed plugin and validated project contract.
 - **User action** — rebuild or reopen a container, authenticate an already
-  configured tool, or start a new agent session. Explain the exact action; do
+  configured tool, reattach a documentation worktree doctor has told them the
+  exact command for, or start a new agent session. Explain the exact action; do
   not claim to have performed it.
 - **Maintainer decision** — an invalid `adw.yaml`, a configuration choice ADW
   cannot infer, or an unsafe project-owned container. Never guess or rewrite

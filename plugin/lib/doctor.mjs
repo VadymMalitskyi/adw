@@ -202,6 +202,27 @@ function managedDevcontainerChecks(projectRoot, execution, policy, check) {
   return checks;
 }
 
+// Documentation and plans live on their own branch, checked out in a worktree.
+// Doctor never creates it — `adw:init` does, and re-running that flow is a
+// reviewed decision rather than a silent repair.
+function docsCheck(projectRoot, docs, check) {
+  const details = { branch: docs.branch, worktree: docs.worktree };
+  if (git(projectRoot, ["show-ref", "--verify", "--quiet", `refs/heads/${docs.branch}`]).status !== 0) {
+    return check("docs:branch", "info", `the ${docs.branch} branch does not exist yet; adw:init creates it, and adw:plan and adw:generate-docs need it`, details);
+  }
+  const list = git(projectRoot, ["worktree", "list", "--porcelain"]);
+  const target = resolve(projectRoot, docs.worktree);
+  const attached = list.status === 0 && list.stdout.split(/\r?\n/).some((line) => {
+    if (!line.startsWith("worktree ")) return false;
+    const path = line.slice("worktree ".length);
+    try { return realpathSync(path) === realpathSync(target); }
+    catch { return resolve(path) === target; }
+  });
+  return check("docs:worktree", attached ? "pass" : "fail", attached
+    ? `the ${docs.branch} branch is checked out at ${docs.worktree}`
+    : `the ${docs.branch} branch exists but is not checked out at ${docs.worktree}; attach it with git worktree add ${docs.worktree} ${docs.branch}`, details);
+}
+
 function executionChecks(projectRoot, execution, policy, check) {
   const checks = [check("execution:configuration", "pass", `${execution.isolation} isolation`, { isolation: execution.isolation })];
   checks.push(...permissionChecks(projectRoot, policy));
@@ -269,6 +290,8 @@ export async function runDoctor(directory, { details = false, checks: selection 
 
   const ignored = git(projectRoot, ["check-ignore", "--no-index", "--quiet", "worktrees/probe"]).status === 0;
   checks.push(check("ignore:worktrees", ignored ? "pass" : "fail", ignored ? "worktrees/ is ignored" : "worktrees/ is not ignored; prepared group worktrees would be committed"));
+
+  checks.push(docsCheck(projectRoot, project.docs, check));
 
   const origin = git(projectRoot, ["remote", "get-url", "origin"]);
   checks.push(check("code-host:origin", origin.status === 0 ? "pass" : "info", origin.status === 0 ? "origin remote is configured" : "origin remote is optional and not configured"));

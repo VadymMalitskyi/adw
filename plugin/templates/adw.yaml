@@ -10,6 +10,14 @@ adw: 1
 # git:
 #   base_branch: main
 
+# Optional. Documentation and plans live on their own orphan branch, checked
+# out as a worktree. Defaults are branch `docs` at `worktrees/docs`; the
+# worktree must stay under `worktrees/`, which ADW keeps ignored on the base
+# branch. `adw:init` creates the branch and attaches the worktree.
+# docs:
+#   branch: docs
+#   worktree: worktrees/docs
+
 # Optional. `provider-sandbox` is the default.
 # execution:
 #   # provider-sandbox      lightweight; the agent provider's own sandbox

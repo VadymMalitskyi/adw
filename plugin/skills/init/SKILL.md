@@ -42,32 +42,38 @@ whole questionnaire into one message.
 1. **Base branch** — state the detected branch and ask whether ADW should use
    it. An explicit answer records `git.base_branch`; otherwise it stays Git
    discovery.
-2. **Isolation** — `provider-sandbox` is the default lightweight option.
+2. **Documentation branch** — ADW keeps documentation and plans on their own
+   orphan branch, checked out as a worktree, so generated prose never travels
+   through code review on the base branch. The defaults are branch `docs` at
+   `worktrees/docs`. Ask whether those names suit the project; an explicit
+   answer records `docs.branch` and `docs.worktree`. The worktree path must
+   stay under `worktrees/`, which ADW keeps ignored on the base branch.
+3. **Isolation** — `provider-sandbox` is the default lightweight option.
    Offer `managed-devcontainer` when the project needs a generated, hardened,
    reproducible container with fail-closed egress, and `project-devcontainer`
    when the repository already owns `.devcontainer/devcontainer.json`. Say
    plainly that `provider-sandbox` is the weaker boundary.
-3. **Web access** — managed container only. `public-pages` (default) allows a
+4. **Web access** — managed container only. `public-pages` (default) allows a
    bounded public page-read channel; `hosted-only` restricts egress to exactly
    the allowlisted domains.
-4. **Runtime versions** — review every detected runtime. Keep repository-pinned
+5. **Runtime versions** — review every detected runtime. Keep repository-pinned
    versions as evidence; ask whether each unresolved runtime needs a shared
    numeric version. Never invent a version the repository already pins.
-5. **Components and validation** — review each detected component and its
+6. **Components and validation** — review each detected component and its
    validation commands. Ask whether discovery is sufficient or whether the
    project needs an explicit component or validation override.
-6. **Providers** — ask separately about optional work tracker, code host,
+7. **Providers** — ask separately about optional work tracker, code host,
    observability, and knowledge integrations, with the exact hostnames each
    needs so the managed container can reach them. Never ask for or accept a
    credential.
-7. **Workflow conventions** — ask about commit-message, pull-request, review,
+8. **Workflow conventions** — ask about commit-message, pull-request, review,
    branch-naming, and issue-linking conventions. Explain that ADW treats
    branch and worktree names as ordinary execution-time choices, not
    configuration; keep every convention in existing repository-owned
    instructions or contributor documentation. Do not create or rewrite those
    files during init.
 
-Do not ask about execution mode, plan templates, or documentation branches.
+Do not ask about execution mode or plan templates.
 Repository instruction files own conventions that do not have an ADW setting.
 Personal preferences belong in `~/.config/adw/profile.md` or the Git-ignored
 `.adw/user.md`, never in the shared project policy.
@@ -92,6 +98,7 @@ with the answers as JSON on stdin:
 ```json
 {
   "base_branch": "main",
+  "docs": { "branch": "docs", "worktree": "worktrees/docs" },
   "isolation": "managed-devcontainer",
   "web_access": "public-pages",
   "runtime_versions": { "dotnet": "8" },
@@ -100,7 +107,8 @@ with the answers as JSON on stdin:
 ```
 
 Every field is optional. Omit `base_branch` to use the detected/default Git
-base branch, and omit `components` to use detected components as planning
+base branch, omit `docs` to use the default documentation branch and worktree,
+and omit `components` to use detected components as planning
 evidence. Init writes `adw.yaml` only when the approved answers introduce a
 shared policy or override; it does not persist discovery as configuration.
 
@@ -110,6 +118,11 @@ Present to the user:
 - each recommended choice, the user's selection, and any choice that remains
   repository discovery rather than shared policy;
 - the chosen isolation and what it means for them;
+- the `docs` block: the branch name, whether apply creates it or finds it
+  already there, the worktree path, and whether apply attaches it. Say plainly
+  that the branch is created as an orphan with one commit and that the
+  worktree is ignored on the base branch, so neither shows up in their next
+  commit;
 - every path under `writes`, grouped as configuration, permission policy,
   managed container, and ignore entries;
 - the detected components and how many validation commands each has;
@@ -136,8 +149,10 @@ fresh approval. Never apply a preview the user did not see.
 
 ## 5. Report and hand off
 
-Initialization writes files; it does not commit them, authenticate anything, or
-contact an external service. Say so.
+Initialization writes files, creates the `worktrees/` directory, and creates
+and attaches the documentation branch. It commits nothing on the base branch,
+authenticates nothing, and contacts no external service. Say so, and name the
+documentation branch and worktree it created.
 
 Then give the concrete next steps:
 
@@ -150,7 +165,9 @@ Then give the concrete next steps:
 4. Authenticate Codex, Claude Code, and any configured provider tools when first
    used. Credentials stay in their own credential stores and project-scoped
    volumes — never in `adw.yaml`.
-5. Point at `adw:onboard` for anyone else joining the project.
+5. Run `adw:generate-docs` to fill the documentation branch, and `adw:plan` to
+   write the first plan into its `plans/` directory.
+6. Point at `adw:onboard` for anyone else joining the project.
 
 ## Guarantees to keep
 
@@ -159,4 +176,7 @@ Then give the concrete next steps:
 - Never write credentials into `adw.yaml`, and refuse any answer that contains
   one.
 - Never generate speculative application code, architecture prose, project
-  contracts, plan templates, or documentation branches.
+  contracts, or plan templates. The documentation branch is created empty apart
+  from a README describing what it holds; filling it is `adw:generate-docs`.
+- Never reuse an existing directory at the docs worktree path. If something is
+  already there and is not an attached worktree, apply refuses.

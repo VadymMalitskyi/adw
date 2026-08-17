@@ -4,6 +4,6 @@
   "web_access": "public-pages",
   "codex_version": "0.146.1",
   "claude_code_version": "2.1.222",
-  "plugin_version": "1.0.1",
+  "plugin_version": "1.1.0",
   "permission_profile": "managed-development"
 }
