@@ -246,15 +246,25 @@ export function managedClaudeSettings({ allowedDomains = [], webAccess = "public
   const settings = JSON.parse(mergeClaudeSettings("", policy));
   // Bubblewrap cannot create the Linux user namespace its nested sandbox
   // needs here: the managed image deliberately never grants CAP_SYS_ADMIN or
-  // apparmor=unconfined (see execution:hardening), so unprivileged namespace
-  // creation is always blocked. The outer container -- non-root, dropped
+  // apparmor=unconfined (see execution:hardening), so unshare(CLONE_NEWUSER)
+  // is rejected outright and every bwrap invocation fails before it can do
+  // anything, sandboxed or not. failIfUnavailable/allowUnsandboxedCommands do
+  // not paper over that: they cover a missing sandbox dependency and a
+  // command the sandbox denies, not the sandbox failing to launch, and
+  // Claude Code's own auto-mode classifier treats the resulting
+  // dangerouslyDisableSandbox retry as an escalation that needs approval no
+  // hook here can grant (this profile deliberately disables
+  // bypassPermissions) -- so left at the default, every single Bash call
+  // dead-ends. There is no bwrap workaround for a container hardened this
+  // way (verified directly: even a bare `bwrap --unshare-user` fails the
+  // same way, so enableWeakerNestedSandbox's /proc bind-mount trick, which
+  // addresses a later step, never gets reached either). The nested sandbox
+  // is turned off entirely instead; the outer container -- non-root, dropped
   // capabilities, fail-closed egress, this same ask/deny policy enforced by
-  // the PreToolUse hook below -- is the isolation boundary here, so Bash
-  // falls back to running without the extra nested layer instead of being
-  // permanently disabled. Outside this container (a bare host with no other
-  // boundary), mergeClaudeSettings still fails closed by default.
-  settings.sandbox.failIfUnavailable = false;
-  settings.sandbox.allowUnsandboxedCommands = true;
+  // the PreToolUse hook below -- is the isolation boundary here. Outside this
+  // container (a bare host with no other boundary), mergeClaudeSettings still
+  // fails closed by default.
+  settings.sandbox.enabled = false;
   settings.sandbox.network = {
     allowedDomains: [...new Set(allowedDomains)].sort(),
     strictAllowlist: true,

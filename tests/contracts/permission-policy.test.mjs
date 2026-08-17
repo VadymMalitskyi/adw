@@ -211,13 +211,18 @@ test("Claude policy uses sandbox-first Bash plus explicit external-write review"
   const managed = JSON.parse(managedClaudeSettings());
   // Bubblewrap can never create its user namespace in the managed devcontainer
   // (no CAP_SYS_ADMIN, no apparmor=unconfined -- see execution:hardening), so
-  // Bash must fall back to running unsandboxed-but-permission-gated there
-  // instead of becoming permanently unavailable. This is specific to the
-  // managed devcontainer's own settings; mergeClaudeSettings above still
-  // fails closed by default for a bare host with no other isolation boundary.
-  assert.equal(managed.sandbox.failIfUnavailable, false);
-  assert.equal(managed.sandbox.allowUnsandboxedCommands, true);
-  assert.equal(managed.sandbox.enabled, true);
+  // every bwrap invocation fails outright (verified directly, not just by
+  // inference: even a bare `bwrap --unshare-user` is refused the same way)
+  // and Claude Code's own auto-mode classifier blocks the resulting
+  // dangerouslyDisableSandbox retry as an escalation this profile's
+  // no-bypassPermissions policy cannot grant -- so leaving the nested sandbox
+  // "on" just dead-ends every Bash call instead of degrading gracefully. It
+  // is turned off entirely instead; the outer container is the isolation
+  // boundary here. This is specific to the managed devcontainer's own
+  // settings; mergeClaudeSettings above still fails closed by default for a
+  // bare host with no other isolation boundary, and the throws above confirm
+  // a project's own settings still cannot disable the sandbox this way.
+  assert.equal(managed.sandbox.enabled, false);
   assert.deepEqual(managed.sandbox.network.allowedDomains, []);
   assert.equal(managed.sandbox.network.allowManagedDomainsOnly, undefined);
   assert.equal(managed.sandbox.network.strictAllowlist, true);
