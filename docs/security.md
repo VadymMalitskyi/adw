@@ -47,16 +47,17 @@ The permission files are themselves protected: because `acceptEdits` would other
 
 ## Isolation modes
 
-When present, `adw.yaml` records an isolation mode. Without it, ADW uses the
-provider sandbox by default, except that a managed-container marker continues
-to require the managed runtime. Security is proportional; the hardened
-container is an opt-in, not a prerequisite.
+When present, `adw.yaml` records an isolation mode. `adw:init` defaults to the
+managed container unless the project already owns a devcontainer, in which case
+it preserves that container. An absent policy outside initialization still uses
+the provider sandbox, except that a managed-container marker continues to
+require the managed runtime.
 
 | Mode | What it means |
 |---|---|
 | `provider-sandbox` | The lightweight option and the weaker boundary. The active agent's own sandbox and approval prompts are authoritative; ADW cannot attest host policy, and says so in `doctor`. |
 | `project-devcontainer` | The project already owns `.devcontainer/devcontainer.json`. Init preserves it byte for byte and never converts it. Its runtime must set `ADW_PROJECT_DEVCONTAINER=1` (or run as a Codespace / Remote Containers session) for doctor to confirm it is active. |
-| `managed-devcontainer` | The explicit opt-in to everything in the next section. Init refuses to select it over an existing project-owned `.devcontainer/`. |
+| `managed-devcontainer` | The default for `adw:init` when there is no project-owned container. Init refuses to select it over an existing project-owned `.devcontainer/`. |
 
 The generated permission files are written in every mode, because the guardrails are useful without a container.
 
@@ -70,10 +71,11 @@ The generated permission files are written in every mode, because the guardrails
 | Exact-domain CONNECT | An ordinary tunnel requires port 443, an exact hostname from the root-owned allowlist, and a TLS ClientHello whose SNI matches that hostname exactly. Wildcards and IP literals are not accepted; IPv6 egress is denied. |
 | Git wrapper | `/usr/local/bin/git` is a root-owned `0555` script that rejects `--force`, `--force-with-lease`, `-f`, combined short flags containing `f`, `--mirror`, `--delete`, `-d`, and `+`/`:` push refspecs before exec'ing `/usr/bin/git`. |
 | Credential volumes | Codex, Claude, and `gh` credentials live only in named volumes scoped to this devcontainer (`adw-codex-${devcontainerId}` and friends). At container creation, a read-only staging mount of the host's real `~/.codex` and `~/.claude` (`source=${localEnv:HOME}/.codex` and `.claude`, `readonly`) lets `post-create` — root-owned, narrowly sudo-authorized — copy in just `auth.json`/`.credentials.json` if present, so a host login carries over without sharing session state, sockets, or host-only config. |
+| Agent status lines | Codex gets a container-local default status line with model, directory, branch, context, rate limits, and token totals. Claude Code uses a root-owned local script for context, model, branch, five-hour limit, and token totals. Neither reads host UI configuration. |
 | No host leakage | Nothing else mounts the host home directory, `~/.ssh`, cloud credential directories, provider-wide config, or the Docker socket, and the two staging mounts above are never writable. `doctor` fails the `execution:unsafe-mounts` check if any appear, or if the staging mounts point anywhere other than the exact expected host paths read-only. |
 | Pinned agents | Codex CLI and Claude Code are installed at exact versions recorded in the managed marker; auto-update is disabled. |
 | Startup ordering | `postCreateCommand` runs the firewall first, then post-create, then project setup, so dependency installation never precedes the deny-by-default network. `postStartCommand` re-arms the firewall on every start. |
-| Drift detection | `.devcontainer/adw-managed.json` (schema 3) records SHA-256 digests of the allowlist, canonical permission policy, Codex rules, Git wrapper, Claude settings, Claude hook, egress proxy, generated project requirements, and project setup script, plus the plugin, Codex, and Claude Code versions. `adw:doctor` recomputes all of them. |
+| Drift detection | `.devcontainer/adw-managed.json` (schema 4) records SHA-256 digests of the allowlist, canonical permission policy, Codex status-line config and rules, Git wrapper, Claude settings and status-line script, Claude hook, egress proxy, generated project requirements, and project setup script, plus the plugin, Codex, and Claude Code versions. `adw:doctor` recomputes all of them. |
 
 The allowlist and the proxy are baked root-owned into the image, so adding a domain is a reviewed infrastructure change: edit the committed file, rebuild, re-enter, rerun doctor. Never weaken the firewall or mount a host credential directory to make a transport work.
 

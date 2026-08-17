@@ -143,11 +143,21 @@ test("an explicitly selected managed devcontainer generates its full file set", 
   const { applied } = initialize(root, { isolation: "managed-devcontainer", web_access: "hosted-only" });
   for (const name of MANAGED_FILES) assert.ok(existsSync(join(root, ".devcontainer", name)), `${name} is missing`);
   const marker = JSON.parse(readFileSync(join(root, ".devcontainer/adw-managed.json"), "utf8"));
-  assert.equal(marker.schema, 3);
+  assert.equal(marker.schema, 4);
   assert.equal(marker.web_access, "hosted-only");
   assert.equal(Object.hasOwn(marker, "agent_tools"), false, "the per-agent profile is gone");
   assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /web_access: hosted-only/);
   assert.ok(applied.writes.some(({ path }) => path === ".devcontainer/Dockerfile"));
+});
+
+test("initialization defaults to a managed devcontainer unless the project already owns one", () => {
+  const root = commitRepository(scratch("managed-default"));
+  const { preview, applied } = initialize(root);
+
+  assert.equal(preview.execution.isolation, "managed-devcontainer");
+  assert.equal(applied.execution.reopen_required, true);
+  assert.ok(existsSync(join(root, ".devcontainer", "adw-managed.json")));
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /isolation: managed-devcontainer/);
 });
 
 test("branch_template is no longer a supported init answer; branch naming is an execution-time choice", () => {
@@ -290,10 +300,10 @@ test("initialization creates the worktrees directory and attaches the documentat
 
 test("a second initialization neither recreates the documentation branch nor reattaches its worktree", () => {
   const root = commitRepository(scratch("docs-idempotent"));
-  initialize(root);
+  initialize(root, { isolation: "provider-sandbox" });
   const head = git(root, ["rev-parse", "docs"]).stdout;
 
-  const again = initialize(root);
+  const again = initialize(root, { isolation: "provider-sandbox" });
   assert.deepEqual(again.preview.docs, { branch: "docs", worktree: "worktrees/docs", branch_action: "existing", worktree_action: "already-attached" });
   assert.equal(git(root, ["rev-parse", "docs"]).stdout, head);
   assert.equal(git(root, ["rev-list", "--count", "docs"]).stdout, "1");

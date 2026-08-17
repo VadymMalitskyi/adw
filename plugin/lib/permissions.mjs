@@ -276,6 +276,11 @@ export function managedClaudeSettings({ allowedDomains = [], webAccess = "public
       { matcher: "^mcp__.*$", hooks: [{ type: "command", command: "/usr/local/bin/adw-claude-permission-hook" }] },
     ],
   };
+  settings.statusLine = {
+    type: "command",
+    command: "/usr/local/bin/adw-claude-statusline",
+    refreshInterval: 30,
+  };
   return `${JSON.stringify(settings, null, 2)}\n`;
 }
 

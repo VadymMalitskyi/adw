@@ -19,11 +19,13 @@ const templateRoot = join(repositoryRoot, "plugin/templates/devcontainer");
 // grow a digest that nothing proves.
 const DIGESTED_FILES = {
   allowed_domains_sha256: "allowed-domains.txt",
+  codex_config_sha256: "codex-config.toml",
   codex_rules_sha256: "codex.rules",
   permission_policy_sha256: "permission-policy.json",
   git_wrapper_sha256: "git-wrapper.sh",
   codex_wrapper_sha256: "codex-wrapper.sh",
   claude_settings_sha256: "claude-settings.json",
+  claude_statusline_sha256: "claude-statusline.sh",
   claude_hook_sha256: "claude-permission-hook.mjs",
   egress_proxy_sha256: "egress-proxy.mjs",
   project_requirements_sha256: "project-requirements.json",
@@ -84,6 +86,8 @@ test("the generated managed container pins agents, runs non-root, and drops ever
   assert.match(dockerfile, /chmod 0555 \/usr\/local\/bin\/codex/);
   assert.match(dockerfile, /COPY \.devcontainer\/codex\.rules/);
   assert.match(dockerfile, /managed-settings\.d\/20-adw\.json/);
+  assert.match(dockerfile, /COPY \.devcontainer\/codex-config\.toml \/etc\/adw\/codex-config\.toml/);
+  assert.match(dockerfile, /COPY \.devcontainer\/claude-statusline\.sh \/usr\/local\/bin\/adw-claude-statusline/);
 });
 
 test("Codex, Claude, and gh credentials live in project-scoped named volumes, with only a read-only host staging mount for auth and no other host path mounted", () => {
@@ -128,7 +132,7 @@ test("the generated file set is exactly MANAGED_FILES and every recorded digest 
   const { files, marker } = render();
 
   assert.deepEqual([...files.keys()].sort(), [...MANAGED_FILES].sort());
-  assert.equal(MANAGED_FILES.length, 15);
+  assert.equal(MANAGED_FILES.length, 17);
   assert.equal(files.has("project-requirements.md"), false, "project-requirements.md is no longer generated");
 
   const digestKeys = Object.keys(marker).filter((key) => key.endsWith("_sha256")).sort();
@@ -137,7 +141,7 @@ test("the generated file set is exactly MANAGED_FILES and every recorded digest 
     assert.equal(marker[key], sha256(files.get(name)), `${key} must be the digest of ${name}`);
   }
 
-  assert.equal(marker.schema, 3);
+  assert.equal(marker.schema, 4);
   assert.equal(marker.profile, "managed-devcontainer");
   assert.equal(marker.permission_profile, "managed-development");
   assert.equal(marker.requirements_schema, JSON.parse(files.get("project-requirements.json")).schema);
@@ -156,7 +160,7 @@ test("one custom provider policy renders into both agent adapters and the canoni
 });
 
 test("a managed container always provisions both agents", () => {
-  const { config, allowedDomains, claudeSettings } = render();
+  const { config, files, allowedDomains, claudeSettings } = render();
 
   for (const target of ["/home/vscode/.codex", "/home/vscode/.claude"]) {
     assert.equal(config.mounts.some((mount) => mount.includes(`target=${target},`)), true, `${target} must be mounted`);
@@ -181,6 +185,13 @@ test("a managed container always provisions both agents", () => {
   assert.equal(claudeSettings.sandbox.enabled, false);
   assert.deepEqual(claudeSettings.permissions.allow, ["WebSearch"]);
   assert.equal(claudeSettings.hooks.PreToolUse.length, 2);
+  assert.deepEqual(claudeSettings.statusLine, {
+    type: "command",
+    command: "/usr/local/bin/adw-claude-statusline",
+    refreshInterval: 30,
+  });
+  assert.match(files.get("codex-config.toml"), /"context-used"/);
+  assert.match(files.get("claude-statusline.sh"), /context_window/);
 });
 
 test("a detected .NET SDK also points the C# extension's runtime acquisition at that SDK, so it never falls back to a firewall-blocked download", () => {

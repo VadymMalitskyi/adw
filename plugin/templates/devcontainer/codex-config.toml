@@ -1,0 +1,6 @@
+# Container-local default for the interactive Codex TUI.  This is seeded only
+# when the project's Codex volume has no config yet, so /statusline remains a
+# per-developer choice after first launch.
+[tui]
+status_line = ["model-with-reasoning", "current-dir", "git-branch", "pull-request-number", "context-used", "five-hour-limit", "weekly-limit", "total-input-tokens", "total-output-tokens"]
+status_line_use_colors = true

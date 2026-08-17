@@ -4,6 +4,16 @@ All notable changes to this private plugin are documented here.
 
 ## Unreleased
 
+### Managed development is now the recommended default
+
+- `adw:init` now creates a managed devcontainer by default. It preserves an
+  existing project-owned devcontainer, and provider sandboxing remains an
+  explicit lightweight alternative.
+- Managed containers now provide container-local Codex and Claude Code status
+  lines with context, limits, token usage, and other session details. Host UI
+  settings and session state remain isolated.
+- Version bumped to 1.2.0.
+
 ### Documentation and plans moved to their own branch
 
 - `adw.yaml` gained an optional `docs` section with `branch` and `worktree`.

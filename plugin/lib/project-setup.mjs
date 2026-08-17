@@ -331,8 +331,8 @@ function checkAnswers(answers) {
       throw new InputError(`unsupported answer field: ${key}`);
     }
   }
-  const isolation = answers.isolation ?? "provider-sandbox";
-  if (!ISOLATION_MODES.includes(isolation)) throw new ContractError(`isolation must be one of: ${ISOLATION_MODES.join(", ")}`);
+  const isolation = answers.isolation;
+  if (isolation !== undefined && !ISOLATION_MODES.includes(isolation)) throw new ContractError(`isolation must be one of: ${ISOLATION_MODES.join(", ")}`);
   const webAccess = answers.web_access ?? "public-pages";
   if (!WEB_ACCESS_MODES.includes(webAccess)) throw new ContractError(`web_access must be one of: ${WEB_ACCESS_MODES.join(", ")}`);
   if (answers.base_branch !== undefined && !isValidBranchName(answers.base_branch)) throw new ContractError("base_branch must be a valid Git branch name");
@@ -393,6 +393,15 @@ function checkIsolation(projectRoot, isolation) {
   };
 }
 
+// Init should create the strongest practical boundary by default. A repository
+// that already owns a devcontainer is the exception: preserve it rather than
+// replacing it with ADW's generated one.
+function defaultInitializationIsolation(projectRoot) {
+  return existsSync(join(projectRoot, ".devcontainer", "devcontainer.json"))
+    ? "project-devcontainer"
+    : "managed-devcontainer";
+}
+
 function fingerprint(domain, payload) {
   return createHash("sha256").update(`${domain}\0`).update(JSON.stringify(payload)).digest("hex");
 }
@@ -425,7 +434,7 @@ export function planInitialization(directory, rawAnswers = {}) {
   if (repository.state === "empty-directory" && !repository.clean) {
     throw new ContractError(`initializing an unversioned directory requires it to be empty; found: ${repository.entries.join(", ")}`);
   }
-  const execution = checkIsolation(projectRoot, answers.isolation);
+  const execution = checkIsolation(projectRoot, answers.isolation ?? defaultInitializationIsolation(projectRoot));
   const baseBranch = answers.baseBranch ?? detectedBaseBranch(projectRoot, repository.state);
   if (answers.docs.branch === baseBranch) throw new ContractError(`docs.branch must differ from the base branch (${baseBranch})`);
   const docs = planDocsBranch(projectRoot, repository, answers.docs);
@@ -440,7 +449,7 @@ export function planInitialization(directory, rawAnswers = {}) {
   const explicitPolicy = answers.baseBranch !== undefined
     || answers.docsExplicit
     || answers.components !== undefined
-    || answers.isolation !== undefined && answers.isolation !== "provider-sandbox"
+    || execution.isolation !== "provider-sandbox"
     || answers.web_access !== undefined && answers.web_access !== "public-pages"
     || Object.keys(answers.runtime_versions ?? {}).length > 0
     || Object.keys(answers.providers ?? {}).length > 0;

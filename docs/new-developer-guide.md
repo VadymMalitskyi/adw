@@ -194,7 +194,7 @@ docs:
   worktree: worktrees/docs
 
 execution:
-  isolation: provider-sandbox
+  isolation: managed-devcontainer
 
 components:
   app:
@@ -606,9 +606,11 @@ plugin source):
 .devcontainer/
   devcontainer.json                    starts the managed environment
   Dockerfile                           installs the protected runtime files
+  codex-config.toml                    container-local default Codex status line
   codex.rules                          generated Codex command rules for the image
   permission-policy.json              canonical decisions consumed by the hook
   claude-settings.json                 generated managed Claude settings
+  claude-statusline.sh                 managed context, limit, and token footer
   claude-permission-hook.mjs           Claude's Bash/MCP classifier
   git-wrapper.sh                       rejects force/delete pushes on its normal path
   allowed-domains.txt                  exact network destination allowlist
@@ -773,9 +775,9 @@ printf '%s\n' '{"tool":"mcp__github__add_comment"}' \
 
 | Mode | Meaning | Important reality check |
 |---|---|---|
-| `provider-sandbox` | Use the agent provider's own sandbox; default and lightweight | ADW must inspect and state the real active policy; it cannot infer it from a file |
+| `provider-sandbox` | Use the agent provider's own sandbox; lightweight explicit alternative | ADW must inspect and state the real active policy; it cannot infer it from a file |
 | `project-devcontainer` | Use an existing project container untouched | It needs a runtime marker (`ADW_PROJECT_DEVCONTAINER=1` or equivalent) to prove it is active |
-| `managed-devcontainer` | ADW renders and manages a hardened container | It is opt-in and cannot replace an existing project-owned `.devcontainer/` |
+| `managed-devcontainer` | ADW renders and manages a hardened container; the init default when there is no project-owned container | It cannot replace an existing project-owned `.devcontainer/` |
 
 Managed containers run non-root, drop Linux capabilities except a tiny named
 set, use a fail-closed egress proxy with exact allowlisted HTTPS domains and SNI

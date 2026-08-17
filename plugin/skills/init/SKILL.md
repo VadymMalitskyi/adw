@@ -48,11 +48,12 @@ whole questionnaire into one message.
    `worktrees/docs`. Ask whether those names suit the project; an explicit
    answer records `docs.branch` and `docs.worktree`. The worktree path must
    stay under `worktrees/`, which ADW keeps ignored on the base branch.
-3. **Isolation** — `provider-sandbox` is the default lightweight option.
-   Offer `managed-devcontainer` when the project needs a generated, hardened,
-   reproducible container with fail-closed egress, and `project-devcontainer`
-   when the repository already owns `.devcontainer/devcontainer.json`. Say
-   plainly that `provider-sandbox` is the weaker boundary.
+3. **Isolation** — Recommend `managed-devcontainer` by default: it provides a
+   generated, hardened, reproducible container with fail-closed egress. When
+   the repository already owns `.devcontainer/devcontainer.json`, recommend
+   `project-devcontainer` instead so ADW preserves it. Offer
+   `provider-sandbox` only when the user explicitly wants the lightweight,
+   weaker boundary.
 4. **Web access** — managed container only. `public-pages` (default) allows a
    bounded public page-read channel; `hosted-only` restricts egress to exactly
    the allowlisted domains.

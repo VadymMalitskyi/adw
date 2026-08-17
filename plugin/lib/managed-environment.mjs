@@ -75,7 +75,7 @@ const AGENT_DOMAINS = [
 
 export const MANAGED_FILES = Object.freeze([
   "devcontainer.json", "Dockerfile", "allowed-domains.txt", "egress-proxy.mjs", "init-firewall.sh",
-  "post-create.sh", "codex.rules", "permission-policy.json", "git-wrapper.sh", "codex-wrapper.sh", "claude-settings.json", "claude-permission-hook.mjs",
+  "post-create.sh", "codex-config.toml", "codex.rules", "permission-policy.json", "git-wrapper.sh", "codex-wrapper.sh", "claude-settings.json", "claude-statusline.sh", "claude-permission-hook.mjs",
   "project-requirements.json", "project-setup.sh", "adw-managed.json",
 ]);
 
@@ -667,7 +667,7 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { webAccess =
   const claudeSettings = managedClaudeSettings({ allowedDomains: sandboxDomains, webAccess, policy: permissionPolicy });
 
   const marker = readJson(join(templateRoot, "adw-managed.json"), "managed devcontainer marker");
-  marker.schema = 3;
+  marker.schema = 4;
   marker.web_access = webAccess;
   marker.plugin_version = pluginVersion ?? readJson(resolve(templateRoot, "../../.codex-plugin/plugin.json"), "Codex plugin manifest").version;
   marker.codex_version = config.build.args.CODEX_VERSION;
@@ -675,11 +675,13 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { webAccess =
   marker.permission_profile = PERMISSION_PROFILE;
   marker.integration_domains = configuredIntegrationDomains;
   marker.allowed_domains_sha256 = sha256(allowedDomains);
+  marker.codex_config_sha256 = sha256(readFileSync(join(templateRoot, "codex-config.toml"), "utf8"));
   marker.codex_rules_sha256 = sha256(codexRules);
   marker.permission_policy_sha256 = sha256(policyJson);
   marker.git_wrapper_sha256 = sha256(readFileSync(join(templateRoot, "git-wrapper.sh"), "utf8"));
   marker.codex_wrapper_sha256 = sha256(readFileSync(join(templateRoot, "codex-wrapper.sh"), "utf8"));
   marker.claude_settings_sha256 = sha256(claudeSettings);
+  marker.claude_statusline_sha256 = sha256(readFileSync(join(templateRoot, "claude-statusline.sh"), "utf8"));
   marker.claude_hook_sha256 = sha256(readFileSync(join(templateRoot, "claude-permission-hook.mjs"), "utf8"));
   marker.egress_proxy_sha256 = sha256(readFileSync(join(templateRoot, "egress-proxy.mjs"), "utf8"));
   marker.requirements_schema = requirements.schema;
@@ -694,11 +696,13 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { webAccess =
     ["egress-proxy.mjs", readFileSync(join(templateRoot, "egress-proxy.mjs"), "utf8")],
     ["init-firewall.sh", readFileSync(join(templateRoot, "init-firewall.sh"), "utf8")],
     ["post-create.sh", readFileSync(join(templateRoot, "post-create.sh"), "utf8")],
+    ["codex-config.toml", readFileSync(join(templateRoot, "codex-config.toml"), "utf8")],
     ["codex.rules", codexRules],
     ["permission-policy.json", policyJson],
     ["git-wrapper.sh", readFileSync(join(templateRoot, "git-wrapper.sh"), "utf8")],
     ["codex-wrapper.sh", readFileSync(join(templateRoot, "codex-wrapper.sh"), "utf8")],
     ["claude-settings.json", claudeSettings],
+    ["claude-statusline.sh", readFileSync(join(templateRoot, "claude-statusline.sh"), "utf8")],
     ["claude-permission-hook.mjs", readFileSync(join(templateRoot, "claude-permission-hook.mjs"), "utf8")],
     ["project-requirements.json", requirementsText],
     ["project-setup.sh", projectSetup],

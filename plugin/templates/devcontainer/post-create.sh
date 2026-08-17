@@ -34,6 +34,14 @@ if [[ -f /mnt/host-claude/.credentials.json ]]; then
   chown vscode:vscode /home/vscode/.claude/.credentials.json
 fi
 
+# Keep the UI configuration local to this container volume.  Unlike auth, it
+# is never read from the host: a developer can adjust it with /statusline and
+# the choice survives rebuilds without exposing host state to the container.
+if [[ ! -e /home/vscode/.codex/config.toml ]]; then
+  install -m 0600 /etc/adw/codex-config.toml /home/vscode/.codex/config.toml
+  chown vscode:vscode /home/vscode/.codex/config.toml
+fi
+
 for path in "${credential_paths[@]}"; do
   chown vscode:vscode "$path"
 done

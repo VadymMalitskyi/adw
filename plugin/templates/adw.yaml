@@ -18,12 +18,13 @@ adw: 1
 #   branch: docs
 #   worktree: worktrees/docs
 
-# Optional. `provider-sandbox` is the default.
+# Optional. `adw:init` defaults to `managed-devcontainer`; an absent project
+# policy outside initialization still uses the lightweight provider sandbox.
 # execution:
 #   # provider-sandbox      lightweight; the agent provider's own sandbox
 #   # project-devcontainer  an existing project-owned container, left unchanged
 #   # managed-devcontainer  the generated reproducible hardened container
-#   isolation: provider-sandbox
+#   isolation: managed-devcontainer
 #   # Managed devcontainer only: public-pages | hosted-only
 #   # web_access: public-pages
 

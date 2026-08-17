@@ -50,7 +50,7 @@ git:
   base_branch: main
 
 execution:
-  isolation: provider-sandbox   # provider-sandbox | project-devcontainer | managed-devcontainer
+  isolation: managed-devcontainer # provider-sandbox | project-devcontainer | managed-devcontainer
   web_access: public-pages      # public-pages | hosted-only; managed-devcontainer only
 
 development:
@@ -81,7 +81,7 @@ providers: {}                   # work_tracker | code_host | observability | kno
 - **Credentials are never allowed anywhere in this file.** Any credential-like key is refused, including inside provider `settings`.
 - Compatibility: future versions may add optional fields and optional commands. Removing a field or reinterpreting an existing one requires a major migration.
 
-A project with no providers and no devcontainer keeps the lightweight path: `provider-sandbox` is the default and nothing probes an external system.
+During `adw:init`, a project with no existing devcontainer defaults to the hardened `managed-devcontainer`; an existing project-owned devcontainer is preserved instead. Choose `provider-sandbox` explicitly when its lighter boundary is appropriate.
 
 ## Skills
 
@@ -112,7 +112,7 @@ Exit codes: `0` ok, `2` input, `3` contract invalid, `5` check failed, `7` path 
 
 ## Security is proportional
 
-Provider sandboxing is the default. An existing project devcontainer is preserved as-is. The hardened managed devcontainer — pinned agents, non-root user, dropped capabilities, fail-closed egress proxy with exact-domain and SNI checks, a root-owned Git wrapper, project-scoped credential volumes — is an explicit opt-in, not a prerequisite. Codex and Claude credentials still get a one-time seed from your host's real `~/.codex`/`~/.claude` login on first create, so you don't have to reauthenticate inside every container; nothing else about those directories is shared.
+Initialization recommends the hardened managed devcontainer by default. An existing project devcontainer is preserved as-is, and `provider-sandbox` remains an explicit lightweight alternative. The managed container pins agents, runs non-root, drops capabilities, uses a fail-closed egress proxy with exact-domain and SNI checks, includes a root-owned Git wrapper, and gives each project credential volumes. Codex and Claude credentials still get a one-time seed from your host's real `~/.codex`/`~/.claude` login on first create, so you don't have to reauthenticate inside every container; nothing else about those directories is shared.
 
 The generated `managed-development` permission files are written in every mode, because the guardrails are useful without a container. Both Codex and Claude always receive the same policy: `.codex/config.toml`, `.codex/rules/adw.rules`, and `.claude/settings.json`. See [security](docs/security.md) for the full permission matrix.
 
