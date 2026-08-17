@@ -311,8 +311,10 @@ test("the files carrying the permission profile cannot be rewritten without revi
   const merged = JSON.parse(mergeClaudeSettings());
   for (const path of ["adw.yaml", ".claude/settings.json", ".codex/config.toml", ".codex/rules/adw.rules", ".devcontainer/**"]) {
     assert.ok(merged.permissions.ask.includes(`Edit(./${path})`), `${path} is editable without review`);
-    assert.ok(merged.permissions.ask.includes(`Write(./${path})`), `${path} is writable without review`);
   }
+  // Claude Code's file permission rules only match `Edit(path)`; a `Write(path)`
+  // rule is never matched, so it must not be listed (dead weight the CLI warns about).
+  assert.ok(merged.permissions.ask.every((rule) => !rule.startsWith("Write(")), "no dead Write(path) ask rules");
   // The drift check compares a project's bytes against a fresh merge, so the
   // self-protection rules must survive re-merging unchanged.
   assert.equal(JSON.stringify(JSON.parse(mergeClaudeSettings(JSON.stringify(merged)))), JSON.stringify(merged));

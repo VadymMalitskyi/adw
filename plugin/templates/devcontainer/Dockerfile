@@ -16,7 +16,7 @@ RUN test -n "$NODE_MAJOR" \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         bubblewrap build-essential ca-certificates curl dnsutils fd-find git gnupg \
-        iproute2 iptables jq python3 ripgrep sudo unzip zip \
+        iproute2 iptables jq python3 ripgrep socat sudo unzip zip \
         $ADW_PROJECT_APT_PACKAGES \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
@@ -56,7 +56,10 @@ RUN useradd --system --no-create-home --shell /usr/sbin/nologin adw-egress \
     # Root intentionally has no CAP_DAC_OVERRIDE at runtime. Make the known
     # credential mount paths traversable and root-owned before named volumes
     # are attached, so the narrowly sudo-authorized bootstrap can initialize
-    # them and then hand them to vscode.
+    # them and then hand them to vscode. The host's real Codex/Claude home
+    # directories are staged read-only at /mnt/host-* instead (see
+    # devcontainer.json); only root reads them, to seed a single auth file
+    # each into the isolated volumes below, so they need no bootstrap here.
     && chmod 0751 /home/vscode \
     && install -d -m 0755 -o root -g root /home/vscode/.codex /home/vscode/.claude /home/vscode/.config /home/vscode/.config/gh \
     && (gpasswd -d vscode sudo 2>/dev/null || true) \

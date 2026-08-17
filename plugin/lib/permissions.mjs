@@ -173,12 +173,15 @@ export const CLAUDE_ASK = [
   // `acceptEdits` auto-accepts ordinary file edits, so the policy files that carry
   // this profile would otherwise be rewritable without review. Ask instead of deny:
   // a maintainer still edits them deliberately, and `adw:doctor` repairs them
-  // through its reviewed preview rather than the Edit tool.
-  "Edit(./.claude/settings.json)", "Write(./.claude/settings.json)",
-  "Edit(./.codex/config.toml)", "Write(./.codex/config.toml)",
-  "Edit(./.codex/rules/adw.rules)", "Write(./.codex/rules/adw.rules)",
-  "Edit(./adw.yaml)", "Write(./adw.yaml)",
-  "Edit(./.devcontainer/**)", "Write(./.devcontainer/**)",
+  // through its reviewed preview rather than the Edit tool. Claude Code's file
+  // permission rules only match `Edit(path)` — a `Write(path)` rule is never
+  // matched, so listing both is dead weight (and current Claude Code warns
+  // about it at startup).
+  "Edit(./.claude/settings.json)",
+  "Edit(./.codex/config.toml)",
+  "Edit(./.codex/rules/adw.rules)",
+  "Edit(./adw.yaml)",
+  "Edit(./.devcontainer/**)",
 ];
 
 export const CLAUDE_DENY = [

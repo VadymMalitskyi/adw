@@ -107,7 +107,7 @@ Exit codes: `0` ok, `2` input, `3` contract invalid, `5` check failed, `7` path 
 
 ## Security is proportional
 
-Provider sandboxing is the default. An existing project devcontainer is preserved as-is. The hardened managed devcontainer — pinned agents, non-root user, dropped capabilities, fail-closed egress proxy with exact-domain and SNI checks, a root-owned Git wrapper, project-scoped credential volumes — is an explicit opt-in, not a prerequisite.
+Provider sandboxing is the default. An existing project devcontainer is preserved as-is. The hardened managed devcontainer — pinned agents, non-root user, dropped capabilities, fail-closed egress proxy with exact-domain and SNI checks, a root-owned Git wrapper, project-scoped credential volumes — is an explicit opt-in, not a prerequisite. Codex and Claude credentials still get a one-time seed from your host's real `~/.codex`/`~/.claude` login on first create, so you don't have to reauthenticate inside every container; nothing else about those directories is shared.
 
 The generated `managed-development` permission files are written in every mode, because the guardrails are useful without a container. Both Codex and Claude always receive the same policy: `.codex/config.toml`, `.codex/rules/adw.rules`, and `.claude/settings.json`. See [security](docs/security.md) for the full permission matrix.
 

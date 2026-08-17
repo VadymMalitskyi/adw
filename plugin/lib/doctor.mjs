@@ -119,13 +119,25 @@ function managedDevcontainerChecks(projectRoot, execution, policy, check) {
     && /^\d+\.\d+\.\d+$/.test(marker?.claude_code_version ?? "");
   checks.push(check("execution:agent-versions", versionsMatch ? "pass" : "fail", versionsMatch ? "pinned Codex and Claude Code versions match the managed marker" : "pinned Codex or Claude Code versions are invalid or differ from the managed marker"));
 
+  // Codex, Claude, and `gh` credentials live only in named volumes scoped to
+  // this devcontainer. The host's real Codex/Claude home directories are
+  // staged read-only at /mnt/host-*: post-create copies just the one auth
+  // file each tool needs into its isolated volume, so a host login carries
+  // over without sharing live session state, sockets, or host-only config.
+  const CREDENTIAL_VOLUME_TARGETS = ["/home/vscode/.codex", "/home/vscode/.claude", "/home/vscode/.config/gh"];
+  const HOST_STAGING_TARGETS = { "/mnt/host-codex": ".codex", "/mnt/host-claude": ".claude" };
   const mounts = (configObject?.mounts ?? []).filter((mount) => typeof mount === "string");
-  const hasMountTarget = (target) => mounts.some((mount) => mount.split(",").some((part) => /^(?:target|dst|destination)=/.test(part) && part.slice(part.indexOf("=") + 1) === target));
-  const mountsMatch = mounts.length > 0 && mounts.every((mount) => /type=volume/.test(mount)) && hasMountTarget("/home/vscode/.codex") && hasMountTarget("/home/vscode/.claude");
-  checks.push(check("execution:mounts", mountsMatch ? "pass" : "fail", mountsMatch ? "agent credentials live in project-scoped named volumes" : "credential mounts are missing or are not project-scoped volumes"));
+  const mountField = (mount, key) => mount.split(",").map((part) => part.split("=")).find(([name]) => name === key)?.[1];
+  const hasMountFlag = (mount, flag) => mount.split(",").includes(flag);
+  const hasMountTarget = (target) => mounts.some((mount) => mountField(mount, "target") === target);
+  const credentialVolumesMatch = CREDENTIAL_VOLUME_TARGETS.every((target) => mounts.some((mount) => mountField(mount, "target") === target && mountField(mount, "type") === "volume" && /\$\{devcontainerId\}/.test(mountField(mount, "source") ?? "")));
+  const hostStagingMatch = Object.entries(HOST_STAGING_TARGETS).every(([target, suffix]) => mounts.some((mount) => mountField(mount, "target") === target && mountField(mount, "type") === "bind" && mountField(mount, "source") === `\${localEnv:HOME}/${suffix}` && hasMountFlag(mount, "readonly")));
+  const mountsMatch = mounts.length > 0 && CREDENTIAL_VOLUME_TARGETS.every(hasMountTarget) && credentialVolumesMatch && hostStagingMatch;
+  checks.push(check("execution:mounts", mountsMatch ? "pass" : "fail", mountsMatch ? "agent credentials live in project-scoped named volumes, seeded by a read-only host staging mount used only to copy in authentication" : "credential mounts are missing or are not the expected named-volume/read-only-staging configuration"));
 
-  const unsafeMount = /docker\.sock|(?:source|target)=[^,\n]*(?:\.ssh|\.aws|\.azure|\.config\/gcloud)|localEnv:HOME}(?:,|\/)/i.test(config);
-  checks.push(check("execution:unsafe-mounts", unsafeMount ? "fail" : "pass", unsafeMount ? "a host credential directory or Docker socket is mounted into the container" : "no broad host credential or Docker socket mount was detected"));
+  const unsafeMount = /docker\.sock|(?:source|target)=[^,\n]*(?:\.ssh|\.aws|\.azure|\.config\/gcloud)/i.test(config)
+    || mounts.some((mount) => /localEnv:HOME/.test(mountField(mount, "source") ?? "") && (!Object.hasOwn(HOST_STAGING_TARGETS, mountField(mount, "target")) || !hasMountFlag(mount, "readonly")));
+  checks.push(check("execution:unsafe-mounts", unsafeMount ? "fail" : "pass", unsafeMount ? "a host credential directory or Docker socket is mounted into the container" : "no broad host credential or Docker socket mount was detected beyond the read-only Codex/Claude auth staging mounts"));
 
   const environment = configObject?.containerEnv ?? {};
   const expectedCapabilities = ["CHOWN", "KILL", "NET_ADMIN", "SETGID", "SETUID"];

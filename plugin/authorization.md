@@ -103,7 +103,10 @@ fail-closed egress policy is applied before any agent work.
 Never mount the Docker socket, host home, SSH directory, global cloud
 credentials, or global agent configuration. Codex, Claude, and provider
 authentication each get a distinct named volume, scoped to the repository and
-treated as sensitive.
+treated as sensitive. A read-only staging mount of the host's real `~/.codex`
+and `~/.claude` exists only so root-owned `post-create` can copy a single auth
+file into each volume at container creation; nothing else from those host
+directories is ever read.
 
 The root-owned allowed-domain file and hostname-verifying proxy are baked into
 the image. Adding a project tool, MCP server, or integration domain requires a

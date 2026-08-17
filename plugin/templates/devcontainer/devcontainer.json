@@ -29,7 +29,9 @@
   "mounts": [
     "source=adw-codex-${devcontainerId},target=/home/vscode/.codex,type=volume",
     "source=adw-claude-${devcontainerId},target=/home/vscode/.claude,type=volume",
-    "source=adw-gh-${devcontainerId},target=/home/vscode/.config/gh,type=volume"
+    "source=adw-gh-${devcontainerId},target=/home/vscode/.config/gh,type=volume",
+    "source=${localEnv:HOME}/.codex,target=/mnt/host-codex,type=bind,consistency=cached,readonly",
+    "source=${localEnv:HOME}/.claude,target=/mnt/host-claude,type=bind,consistency=cached,readonly"
   ],
   "containerEnv": {
     "ADW_MANAGED_DEVCONTAINER": "1",

@@ -83,15 +83,29 @@ test("the generated managed container pins agents, runs non-root, and drops ever
   assert.match(dockerfile, /managed-settings\.d\/20-adw\.json/);
 });
 
-test("agent credentials live in project-scoped named volumes and no host path is mounted", () => {
+test("Codex, Claude, and gh credentials live in project-scoped named volumes, with only a read-only host staging mount for auth and no other host path mounted", () => {
   const { config, configText } = render();
 
   assert.ok(config.mounts.length > 0);
-  assert.ok(config.mounts.every((mount) => /type=volume/.test(mount)), "every credential mount must be a named volume");
-  assert.ok(config.mounts.every((mount) => /\$\{devcontainerId\}/.test(mount)), "credential volumes must be scoped to this container");
+  for (const target of ["/home/vscode/.codex", "/home/vscode/.claude", "/home/vscode/.config/gh"]) {
+    const mount = config.mounts.find((entry) => entry.includes(`target=${target},`));
+    assert.ok(mount, `${target} must be mounted`);
+    assert.match(mount, /type=volume/);
+    assert.match(mount, /\$\{devcontainerId\}/);
+  }
+  for (const [target, suffix] of [["/mnt/host-codex", ".codex"], ["/mnt/host-claude", ".claude"]]) {
+    const mount = config.mounts.find((entry) => entry.includes(`target=${target},`));
+    assert.ok(mount, `${target} must be mounted`);
+    assert.match(mount, /type=bind/);
+    assert.match(mount, new RegExp(`source=\\$\\{localEnv:HOME\\}/${suffix.replace(".", "\\.")},`));
+    assert.match(mount, /(?:^|,)readonly(?:,|$)/, `${target} must be read-only`);
+  }
+
   assert.doesNotMatch(configText, /docker\.sock/i);
-  assert.doesNotMatch(configText, /localEnv:HOME/i);
   assert.doesNotMatch(configText, /\.ssh|\.aws|\.azure|\.config\/gcloud/i);
+  // The only permitted `localEnv:HOME` usage is the two read-only host staging mounts above.
+  const otherHomeMounts = config.mounts.filter((mount) => /localEnv:HOME/.test(mount) && !/target=\/mnt\/host-(?:codex|claude),/.test(mount));
+  assert.deepEqual(otherHomeMounts, []);
   assert.match(config.workspaceMount, /target=\/workspace,type=bind/);
 });
 

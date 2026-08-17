@@ -620,19 +620,29 @@ checked-in `plugin/templates/devcontainer/codex.rules` source file.
 
 #### Codex path, step by step
 
-1. The managed image contains a root-owned, read-only `/etc/adw/codex.rules`.
-   It was built from the generated `.devcontainer/codex.rules`.
-2. Container setup installs that policy into the `vscode` user's Codex rules
-   directory as `adw-managed-development.rules`.
-3. Codex reads its rule files before it executes a command. The rules name
-   command prefixes and a decision: `allow`, `prompt`, or `forbidden`.
-   Its generated config also contains exact per-app/per-tool approval modes.
-4. Multiple rules may match. The most restrictive decision wins. Thus the
+1. `adw:init`/`adw:doctor` write the committed, project-level
+   `.codex/rules/adw.rules` (and `.codex/config.toml`) directly into the
+   repository, using the same `CODEX_RULES` policy the managed devcontainer
+   renders into `.devcontainer/codex.rules`.
+2. Codex discovers and reads project-local exec policy from `.codex/` while
+   walking from the repository root to the current directory, so the
+   committed `.codex/rules/adw.rules` applies automatically inside the
+   container without any separate install step. The rules name command
+   prefixes and a decision: `allow`, `prompt`, or `forbidden`. The generated
+   config also contains exact per-app/per-tool approval modes.
+3. Multiple rules may match. The most restrictive decision wins. Thus the
    general `git reset` prompt rule cannot accidentally weaken the specific
    `git reset --hard` forbidden rule.
-5. If allowed, Codex still runs inside its workspace-write sandbox and inside
+4. If allowed, Codex still runs inside its workspace-write sandbox and inside
    the managed container. The rules do not grant host access, arbitrary mounts,
    or unrestricted network access.
+
+The managed image still contains a root-owned, read-only
+`/etc/adw/codex.rules` built from the same policy, but nothing installs it
+into the `vscode` user's home directory: `~/.codex` is an isolated,
+container-scoped named volume (see "Isolation modes" above), and a project's
+exec policy must not be written somewhere it would leak into every other
+ADW-managed container on the same host account.
 
 #### Claude Code path, step by step
 
@@ -658,8 +668,10 @@ The policy decision is not the only protection. The managed container also
 enforces technical limits that do not depend on an agent making a good choice:
 
 - It runs the development user as non-root and drops most Linux capabilities.
-- It does not mount the host home directory, SSH directory, cloud credentials,
-  or Docker socket.
+- It does not mount the SSH directory, cloud credentials, or Docker socket. The
+  only host paths it touches at all are read-only staging mounts of
+  `~/.codex`/`~/.claude`, used once by root-owned `post-create` to copy an
+  existing login into the container's own isolated credential volumes.
 - Its firewall/proxy starts fail-closed and allows HTTPS only to the generated,
   exact domain allowlist; it checks TLS SNI as well.
 - Its normal `git` path is a root-owned wrapper that rejects force/delete push
@@ -762,10 +774,16 @@ printf '%s\n' '{"tool":"mcp__github__add_comment"}' \
 
 Managed containers run non-root, drop Linux capabilities except a tiny named
 set, use a fail-closed egress proxy with exact allowlisted HTTPS domains and SNI
-matching, avoid Docker sockets/host homes/SSH mounts, use project-scoped
-credential volumes, pin agent versions, and install a Git wrapper that blocks
-dangerous pushes. `public-pages` is an intentional, bounded public-read
-exception; `hosted-only` keeps network use to configured domains.
+matching, avoid Docker sockets/SSH mounts/other host credential directories,
+use project-scoped credential volumes, pin agent versions, and install a Git
+wrapper that blocks dangerous pushes. Codex and Claude credentials get a
+one-time exception at container creation: a read-only staging mount of the
+host's real `~/.codex`/`~/.claude` lets root-owned `post-create` copy an
+existing login into each tool's own volume, so you don't have to reauthenticate
+in every container. Nothing else about those host directories — session state,
+sockets, host-only config — is shared. `public-pages` is an intentional,
+bounded public-read exception; `hosted-only` keeps network use to configured
+domains.
 
 ### `adw:doctor`: the repair boundary
 
