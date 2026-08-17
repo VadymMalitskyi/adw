@@ -6,6 +6,13 @@ agent_commands=(codex claude)
 
 for path in "${credential_paths[@]}"; do
   mkdir -p "$path"
+  # A rebuild reuses the same named volume (its name is keyed off this
+  # workspace, not this container instance), so the directory may already be
+  # vscode-owned from a previous run. Root has no CAP_DAC_OVERRIDE here, so
+  # reclaim it explicitly with CAP_CHOWN (which root does keep) before
+  # writing into it below, rather than relying on a fresh mkdir to still be
+  # root-owned.
+  chown root:root "$path"
 done
 
 # Codex and Claude get their own isolated, container-only home directories
@@ -13,9 +20,7 @@ done
 # and a cached "newer version is available" marker that would fight the
 # pinned, root-owned install. Only the auth token itself is copied in once,
 # from the read-only host staging mounts, so a host login carries over
-# without sharing anything else. This must happen before the chown below:
-# root has no CAP_DAC_OVERRIDE here, so once vscode owns the directory root
-# can no longer write into it.
+# without sharing anything else.
 if [[ -f /mnt/host-codex/auth.json ]]; then
   install -m 0600 /mnt/host-codex/auth.json /home/vscode/.codex/auth.json
 fi
