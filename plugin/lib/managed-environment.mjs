@@ -36,6 +36,24 @@ const OFFICIAL_FEATURES = {
 
 const CONDA_FEATURE = "ghcr.io/devcontainers/features/conda:2";
 
+// Some VS Code extensions acquire their own private copy of a language
+// runtime for their own tooling (a language server, a debugger) -- separate
+// from the project SDK a feature above already installs -- by downloading it
+// straight from vendor infrastructure rather than through an ecosystem
+// registry this firewall allowlists. Left alone, that acquisition just hangs
+// and times out as "offline" behind the managed firewall. The fix is not to
+// widen the allowlist to vendor CDNs; it's to point the extension at the SDK
+// the container already has. Keyed by the devcontainer feature that installs
+// the SDK the redirect points to; add an entry here, not a new allowlist
+// domain, if another extension turns out to need the same treatment.
+const RUNTIME_TOOL_REDIRECTS = {
+  [OFFICIAL_FEATURES.dotnet]: {
+    "dotnetAcquisitionExtension.existingDotnetPath": [
+      { extensionId: "ms-dotnettools.csharp", path: "/usr/local/dotnet/current/dotnet" },
+    ],
+  },
+};
+
 const ECOSYSTEM_DOMAINS = {
   node: ["registry.npmjs.org"],
   python: ["pypi.org", "files.pythonhosted.org"],
@@ -620,6 +638,10 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { webAccess =
   if (nodeVersion) config.build.args.NODE_MAJOR = nodeVersion.split(".")[0];
   config.build.args.ADW_PROJECT_APT_PACKAGES = [...new Set(requirements.system_packages.map(({ name }) => name))].sort().join(" ");
   if (Object.keys(requirements.features).length > 0) config.features = requirements.features;
+  for (const [feature, settings] of Object.entries(RUNTIME_TOOL_REDIRECTS)) {
+    if (!requirements.features[feature]) continue;
+    config.customizations.vscode.settings = { ...config.customizations.vscode.settings, ...settings };
+  }
   if (requirements.forward_ports.length > 0) config.forwardPorts = requirements.forward_ports.map(({ port }) => port);
   config.postCreateCommand = "sudo /usr/local/bin/adw-init-firewall && sudo /usr/local/bin/adw-post-create && /usr/local/bin/adw-project-setup";
 

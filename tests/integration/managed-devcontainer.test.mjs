@@ -180,6 +180,20 @@ test("a managed container always provisions both agents", () => {
   assert.equal(claudeSettings.hooks.PreToolUse.length, 2);
 });
 
+test("a detected .NET SDK also points the C# extension's runtime acquisition at that SDK, so it never falls back to a firewall-blocked download", () => {
+  const root = mkdtempSync(join(tmpdir(), "adw-managed-dotnet-"));
+  writeFileSync(join(root, "App.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\" />\n");
+  const { files } = managedDevelopmentFiles(root, templateRoot, { runtimeVersions: { dotnet: "8" } });
+  const config = JSON.parse(files.get("devcontainer.json"));
+
+  assert.equal(config.features["ghcr.io/devcontainers/features/dotnet:1"].version, "8");
+  assert.deepEqual(config.customizations.vscode.settings["dotnetAcquisitionExtension.existingDotnetPath"], [
+    { extensionId: "ms-dotnettools.csharp", path: "/usr/local/dotnet/current/dotnet" },
+  ]);
+  // The setting must not crowd out the extension list already living on the same node.
+  assert.equal(config.customizations.vscode.extensions.includes("anthropic.claude-code"), true);
+});
+
 test("web access is reflected consistently in the build arg, the marker, and the managed Claude settings", async (t) => {
   await t.test("public-pages", () => {
     const { config, marker, claudeSettings } = render({ webAccess: "public-pages" });
