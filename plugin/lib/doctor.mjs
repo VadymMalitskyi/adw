@@ -186,11 +186,13 @@ function managedDevcontainerChecks(projectRoot, execution, policy, check) {
     && readFileSync(join(directory, "claude-permission-hook.mjs"), "utf8") === readFileSync(join(pluginRoot, "templates/devcontainer/claude-permission-hook.mjs"), "utf8")
     && /COPY \.devcontainer\/codex\.rules/.test(dockerfile)
     && /COPY \.devcontainer\/git-wrapper\.sh \/usr\/local\/bin\/git/.test(dockerfile)
+    && /COPY \.devcontainer\/codex-wrapper\.sh \/usr\/local\/bin\/codex/.test(dockerfile)
     && /managed-settings\.d\/20-adw\.json/.test(dockerfile)
     && /adw-claude-permission-hook/.test(dockerfile)
     && marker?.codex_rules_sha256 === sha256(readFileSync(join(directory, "codex.rules")))
     && marker?.permission_policy_sha256 === sha256(readFileSync(join(directory, "permission-policy.json")))
     && marker?.git_wrapper_sha256 === sha256(readFileSync(join(directory, "git-wrapper.sh")))
+    && marker?.codex_wrapper_sha256 === sha256(readFileSync(join(directory, "codex-wrapper.sh")))
     && marker?.claude_settings_sha256 === sha256(readFileSync(join(directory, "claude-settings.json")))
     && marker?.claude_hook_sha256 === sha256(readFileSync(join(directory, "claude-permission-hook.mjs")));
   checks.push(check("execution:permission-files", permissionsValid ? "pass" : "fail", permissionsValid ? "managed Codex and Claude permission payloads match their recorded digests" : "managed Codex or Claude permission payloads, installs, or recorded digests are invalid"));

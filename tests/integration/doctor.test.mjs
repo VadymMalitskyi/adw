@@ -126,6 +126,12 @@ test("each kind of drift fails its own check and exits 5", async (t) => {
       stillPassing: ["permissions:codex"],
     },
     {
+      name: "the container-owned Codex wrapper",
+      drift: (root) => writeFileSync(join(root, ".devcontainer/codex-wrapper.sh"), "#!/usr/bin/env bash\nexec /usr/bin/codex \"$@\"\n"),
+      failing: "execution:permission-files",
+      stillPassing: ["execution:managed-files"],
+    },
+    {
       name: "the container-owned egress allowlist",
       drift: (root) => writeFileSync(join(root, ".devcontainer/allowed-domains.txt"), `${readFileSync(join(root, ".devcontainer/allowed-domains.txt"), "utf8")}evil.example.com\n`),
       failing: "execution:domains",

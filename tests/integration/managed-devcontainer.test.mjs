@@ -22,6 +22,7 @@ const DIGESTED_FILES = {
   codex_rules_sha256: "codex.rules",
   permission_policy_sha256: "permission-policy.json",
   git_wrapper_sha256: "git-wrapper.sh",
+  codex_wrapper_sha256: "codex-wrapper.sh",
   claude_settings_sha256: "claude-settings.json",
   claude_hook_sha256: "claude-permission-hook.mjs",
   egress_proxy_sha256: "egress-proxy.mjs",
@@ -79,6 +80,8 @@ test("the generated managed container pins agents, runs non-root, and drops ever
   assert.match(dockerfile, /chmod 0555 \/usr\/local\/bin\/adw-project-setup/);
   assert.match(dockerfile, /chmod 0555 \/usr\/local\/bin\/adw-claude-permission-hook/);
   assert.match(dockerfile, /COPY \.devcontainer\/git-wrapper\.sh \/usr\/local\/bin\/git/);
+  assert.match(dockerfile, /COPY \.devcontainer\/codex-wrapper\.sh \/usr\/local\/bin\/codex/);
+  assert.match(dockerfile, /chmod 0555 \/usr\/local\/bin\/codex/);
   assert.match(dockerfile, /COPY \.devcontainer\/codex\.rules/);
   assert.match(dockerfile, /managed-settings\.d\/20-adw\.json/);
 });
@@ -125,7 +128,7 @@ test("the generated file set is exactly MANAGED_FILES and every recorded digest 
   const { files, marker } = render();
 
   assert.deepEqual([...files.keys()].sort(), [...MANAGED_FILES].sort());
-  assert.equal(MANAGED_FILES.length, 14);
+  assert.equal(MANAGED_FILES.length, 15);
   assert.equal(files.has("project-requirements.md"), false, "project-requirements.md is no longer generated");
 
   const digestKeys = Object.keys(marker).filter((key) => key.endsWith("_sha256")).sort();
@@ -294,6 +297,29 @@ test("the managed git wrapper permits ordinary Git and blocks unsafe auto-approv
     ["push", "origin", "+main"],
     ["push", "origin", ":main"],
     ["push", "--delete", "origin", "main"],
+  ]) {
+    const result = spawnSync("bash", [wrapper, ...args], { encoding: "utf8" });
+    assert.equal(result.status, 64, `${args.join(" ")}: ${result.stderr}`);
+    assert.match(result.stderr, /ADW blocks/);
+  }
+});
+
+test("the managed codex wrapper turns off Codex's own broken sandbox but still blocks the flag that would also skip approval gating", () => {
+  const wrapper = join(templateRoot, "codex-wrapper.sh");
+  const syntax = spawnSync("bash", ["-n", wrapper], { encoding: "utf8" });
+  assert.equal(syntax.status, 0, syntax.stderr);
+
+  // /usr/bin/codex only exists inside the managed container, not on the test
+  // machine, so the override itself is asserted from the wrapper's source
+  // rather than by executing it end to end.
+  const source = readFileSync(wrapper, "utf8");
+  assert.match(source, /exec \/usr\/bin\/codex -c sandbox_mode="danger-full-access" "\$@"/);
+
+  // Blocking happens before the exec line is ever reached, so this runs on
+  // any machine regardless of whether codex is installed.
+  for (const args of [
+    ["--dangerously-bypass-approvals-and-sandbox"],
+    ["exec", "--dangerously-bypass-approvals-and-sandbox", "echo hi"],
   ]) {
     const result = spawnSync("bash", [wrapper, ...args], { encoding: "utf8" });
     assert.equal(result.status, 64, `${args.join(" ")}: ${result.stderr}`);

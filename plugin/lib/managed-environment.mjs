@@ -73,7 +73,7 @@ const AGENT_DOMAINS = [
 
 export const MANAGED_FILES = Object.freeze([
   "devcontainer.json", "Dockerfile", "allowed-domains.txt", "egress-proxy.mjs", "init-firewall.sh",
-  "post-create.sh", "codex.rules", "permission-policy.json", "git-wrapper.sh", "claude-settings.json", "claude-permission-hook.mjs",
+  "post-create.sh", "codex.rules", "permission-policy.json", "git-wrapper.sh", "codex-wrapper.sh", "claude-settings.json", "claude-permission-hook.mjs",
   "project-requirements.json", "project-setup.sh", "adw-managed.json",
 ]);
 
@@ -676,6 +676,7 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { webAccess =
   marker.codex_rules_sha256 = sha256(codexRules);
   marker.permission_policy_sha256 = sha256(policyJson);
   marker.git_wrapper_sha256 = sha256(readFileSync(join(templateRoot, "git-wrapper.sh"), "utf8"));
+  marker.codex_wrapper_sha256 = sha256(readFileSync(join(templateRoot, "codex-wrapper.sh"), "utf8"));
   marker.claude_settings_sha256 = sha256(claudeSettings);
   marker.claude_hook_sha256 = sha256(readFileSync(join(templateRoot, "claude-permission-hook.mjs"), "utf8"));
   marker.egress_proxy_sha256 = sha256(readFileSync(join(templateRoot, "egress-proxy.mjs"), "utf8"));
@@ -694,6 +695,7 @@ export function managedDevelopmentFiles(projectRoot, templateRoot, { webAccess =
     ["codex.rules", codexRules],
     ["permission-policy.json", policyJson],
     ["git-wrapper.sh", readFileSync(join(templateRoot, "git-wrapper.sh"), "utf8")],
+    ["codex-wrapper.sh", readFileSync(join(templateRoot, "codex-wrapper.sh"), "utf8")],
     ["claude-settings.json", claudeSettings],
     ["claude-permission-hook.mjs", readFileSync(join(templateRoot, "claude-permission-hook.mjs"), "utf8")],
     ["project-requirements.json", requirementsText],
