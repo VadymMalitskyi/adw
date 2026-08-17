@@ -119,11 +119,35 @@ install_egress_chain() {
   fi
 }
 
+# Nothing else supervises the proxy: if it exits after startup (observed in
+# practice with no trace in its own log, so most likely an external kill
+# rather than a crash it could log), egress silently and permanently stops
+# working -- iptables still only accepts port 443 from the proxy's uid, and
+# nothing is listening for it anymore. Called from the refresh loop on a
+# short cycle so a dead proxy comes back within seconds, not the full
+# multi-minute DNS-refresh interval.
+ensure_proxy_running() {
+  if [ -f "$proxy_pid_file" ] && kill -0 "$(cat "$proxy_pid_file")" 2>/dev/null; then
+    return 0
+  fi
+  echo "[adw-firewall] egress proxy is not running; restarting it" >&2
+  rm -f "$proxy_pid_file"
+  start-stop-daemon --start --background --make-pidfile --pidfile "$proxy_pid_file" \
+    --chuid "$proxy_user" --exec /usr/local/bin/adw-egress-proxy -- >>"$proxy_log" 2>&1
+}
+
 if [ "${1:-}" = "--refresh" ]; then
+  readonly proxy_check_interval=5
+  elapsed_since_dns_refresh=0
   while true; do
-    sleep "$refresh_interval"
-    if resolve_domains; then
-      install_egress_chain
+    sleep "$proxy_check_interval"
+    ensure_proxy_running
+    elapsed_since_dns_refresh=$((elapsed_since_dns_refresh + proxy_check_interval))
+    if [ "$elapsed_since_dns_refresh" -ge "$refresh_interval" ]; then
+      elapsed_since_dns_refresh=0
+      if resolve_domains; then
+        install_egress_chain
+      fi
     fi
   done
 fi
