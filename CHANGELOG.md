@@ -4,6 +4,14 @@ All notable changes to this private plugin are documented here.
 
 ## Unreleased
 
+- The C# extension's runtime redirect now points at `/usr/share/dotnet/dotnet`, the
+  `DOTNET_ROOT` the devcontainer .NET feature actually installs into. The previous
+  path did not exist, so the extension silently ignored it and fell back to a
+  firewall-blocked download.
+- Version bumped to 1.0.1. The plugin cache is keyed by version, so a pinned version
+  string leaves every already-populated cache — including the one inside each managed
+  container's `adw-claude-*` volume — serving stale bytes after an update.
+
 ### Simplified to a deterministic kernel plus raw skills
 
 ADW now keeps code only where interpretation or partial failure is genuinely
