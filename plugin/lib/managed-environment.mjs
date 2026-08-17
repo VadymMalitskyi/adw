@@ -49,7 +49,9 @@ const CONDA_FEATURE = "ghcr.io/devcontainers/features/conda:2";
 const RUNTIME_TOOL_REDIRECTS = {
   [OFFICIAL_FEATURES.dotnet]: {
     "dotnetAcquisitionExtension.existingDotnetPath": [
-      { extensionId: "ms-dotnettools.csharp", path: "/usr/local/dotnet/current/dotnet" },
+      // DOTNET_ROOT for ghcr.io/devcontainers/features/dotnet; a path that does not
+      // exist is silently ignored and the extension falls back to downloading.
+      { extensionId: "ms-dotnettools.csharp", path: "/usr/share/dotnet/dotnet" },
     ],
   },
 };

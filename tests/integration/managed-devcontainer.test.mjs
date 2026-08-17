@@ -191,7 +191,7 @@ test("a detected .NET SDK also points the C# extension's runtime acquisition at 
 
   assert.equal(config.features["ghcr.io/devcontainers/features/dotnet:1"].version, "8");
   assert.deepEqual(config.customizations.vscode.settings["dotnetAcquisitionExtension.existingDotnetPath"], [
-    { extensionId: "ms-dotnettools.csharp", path: "/usr/local/dotnet/current/dotnet" },
+    { extensionId: "ms-dotnettools.csharp", path: "/usr/share/dotnet/dotnet" },
   ]);
   // The setting must not crowd out the extension list already living on the same node.
   assert.equal(config.customizations.vscode.extensions.includes("anthropic.claude-code"), true);
