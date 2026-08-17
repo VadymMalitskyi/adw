@@ -244,6 +244,17 @@ export function mergeClaudeSettings(source = "", policy = defaultPermissionPolic
 export function managedClaudeSettings({ allowedDomains = [], webAccess = "public-pages", policy = defaultPermissionPolicy() } = {}) {
   if (!["hosted-only", "public-pages"].includes(webAccess)) throw new ContractError(`unsupported web access profile: ${webAccess}`);
   const settings = JSON.parse(mergeClaudeSettings("", policy));
+  // Bubblewrap cannot create the Linux user namespace its nested sandbox
+  // needs here: the managed image deliberately never grants CAP_SYS_ADMIN or
+  // apparmor=unconfined (see execution:hardening), so unprivileged namespace
+  // creation is always blocked. The outer container -- non-root, dropped
+  // capabilities, fail-closed egress, this same ask/deny policy enforced by
+  // the PreToolUse hook below -- is the isolation boundary here, so Bash
+  // falls back to running without the extra nested layer instead of being
+  // permanently disabled. Outside this container (a bare host with no other
+  // boundary), mergeClaudeSettings still fails closed by default.
+  settings.sandbox.failIfUnavailable = false;
+  settings.sandbox.allowUnsandboxedCommands = true;
   settings.sandbox.network = {
     allowedDomains: [...new Set(allowedDomains)].sort(),
     strictAllowlist: true,

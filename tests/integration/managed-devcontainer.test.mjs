@@ -171,6 +171,11 @@ test("a managed container always provisions both agents", () => {
   assert.deepEqual(new Set(claudeSettings.sandbox.network.allowedDomains), allowedDomains);
   assert.equal(claudeSettings.sandbox.network.strictAllowlist, true);
   assert.equal(claudeSettings.sandbox.autoAllowBashIfSandboxed, true);
+  // Bubblewrap can never start in this container (no CAP_SYS_ADMIN, no
+  // apparmor=unconfined), so Bash must fall back to running unsandboxed
+  // rather than becoming permanently unavailable to Claude.
+  assert.equal(claudeSettings.sandbox.failIfUnavailable, false);
+  assert.equal(claudeSettings.sandbox.allowUnsandboxedCommands, true);
   assert.deepEqual(claudeSettings.permissions.allow, ["WebSearch"]);
   assert.equal(claudeSettings.hooks.PreToolUse.length, 2);
 });
