@@ -22,9 +22,17 @@ Add `--details` when a failure needs digests and container wiring to diagnose.
 Add `--checks permissions` for the cheap pre-execution gate that inspects only
 the permission policy.
 
+If the shell reports `node: command not found` (or exit code 127), stop: the
+plugin runtime itself is missing, and no further check can run. Neither
+provider guarantees it — Codex ships as a native binary and Claude Code pins a
+runtime it does not put on `PATH`. Report that Node >=20 must be installed, or
+that the workflow must run inside the managed container, and do not attempt
+repair.
+
 Exit code 0 means every check passed; 5 means at least one failed. The report
 covers:
 
+- the running Node interpreter against the required `>=20` plugin runtime;
 - both provider manifests, their shared version, and the shared skill tree;
 - an optional `adw: 1` shared policy when one exists;
 - explicit component overrides and their unambiguous ownership;

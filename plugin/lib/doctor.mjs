@@ -39,6 +39,27 @@ function regularProjectFile(projectRoot, relativePath) {
   return rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel);
 }
 
+// The oldest Node that runs this plugin. Codex ships as a native binary and
+// Claude Code pins its own runtime, so neither provider guarantees the `node`
+// on PATH is current — only the managed container does. A missing `node` fails
+// before this module loads; the doctor skill diagnoses that case. What is
+// answerable from inside the process is whether the interpreter that did start
+// is new enough for the syntax and APIs the plugin uses.
+const MINIMUM_NODE_MAJOR = 20;
+
+function runtimeCheck(check) {
+  const version = process.versions.node;
+  const major = Number.parseInt(version, 10);
+  const supported = Number.isInteger(major) && major >= MINIMUM_NODE_MAJOR;
+  return check("runtime:node", supported ? "pass" : "fail", supported
+    ? `Node ${version} satisfies the >=${MINIMUM_NODE_MAJOR} plugin runtime requirement`
+    : `Node ${version} is older than the required >=${MINIMUM_NODE_MAJOR} plugin runtime`, {
+    node_version: version,
+    minimum_major: MINIMUM_NODE_MAJOR,
+    execpath: process.execPath,
+  });
+}
+
 function manifestCheck(check) {
   try {
     const codex = JSON.parse(readFileSync(join(pluginRoot, ".codex-plugin/plugin.json"), "utf8"));
@@ -255,7 +276,7 @@ export async function runDoctor(directory, { details = false, checks: selection 
     return { ok: !checks.some(({ status }) => status === "fail"), read_only: true, project_root: projectRoot, checks };
   }
 
-  const checks = [manifestCheck(check)];
+  const checks = [runtimeCheck(check), manifestCheck(check)];
   const top = git(projectRoot, ["rev-parse", "--show-toplevel"]);
   if (top.status !== 0 || realpathSync(top.stdout.trim()) !== projectRoot) {
     checks.push(check("repository", "fail", "project root is not the Git top level"));

@@ -192,7 +192,7 @@ test("doctor accepts an absent policy but stops for an invalid present policy", 
 
     const result = doctor(root, { env: { ADW_MANAGED_DEVCONTAINER: "1" } });
     assert.equal(result.status, EXIT_CHECK_FAILED);
-    assert.deepEqual(result.ids, ["plugin", "repository", "project-contract"]);
+    assert.deepEqual(result.ids, ["runtime:node", "plugin", "repository", "project-contract"]);
     const contract = result.report.checks.at(-1);
     assert.equal(contract.status, "fail");
     assert.deepEqual(contract.errors.map(({ path }) => path).sort(), ["/bogus"]);
@@ -205,7 +205,7 @@ test("doctor accepts an absent policy but stops for an invalid present policy", 
 
     const result = doctor(root, { env: { ADW_MANAGED_DEVCONTAINER: "1" } });
     assert.equal(result.status, EXIT_CHECK_FAILED);
-    assert.deepEqual(result.ids, ["plugin", "repository", "project-contract"]);
+    assert.deepEqual(result.ids, ["runtime:node", "plugin", "repository", "project-contract"]);
     assert.equal(result.statusOf("project-contract"), "fail");
   });
 
@@ -213,7 +213,7 @@ test("doctor accepts an absent policy but stops for an invalid present policy", 
     const root = mkdtempSync(join(tmpdir(), "adw-doctor-nogit-"));
     const result = doctor(root);
     assert.equal(result.status, EXIT_CHECK_FAILED);
-    assert.deepEqual(result.ids, ["plugin", "repository"]);
+    assert.deepEqual(result.ids, ["runtime:node", "plugin", "repository"]);
     assert.equal(result.statusOf("repository"), "fail");
   });
 });
