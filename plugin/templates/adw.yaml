@@ -14,9 +14,14 @@ adw: 1
 # out as a worktree. Defaults are branch `docs` at `worktrees/docs`; the
 # worktree must stay under `worktrees/`, which ADW keeps ignored on the base
 # branch. `adw:init` creates the branch and attaches the worktree.
+#
+# `plan_template` optionally points at a project-owned plan skeleton, as a
+# project-relative path on the base branch. Omit it to use the skeleton
+# shipped with the plugin. Nothing parses either one.
 # docs:
 #   branch: docs
 #   worktree: worktrees/docs
+#   plan_template: .adw/templates/plan.md
 
 # Optional. `adw:init` defaults to `managed-devcontainer`; an absent project
 # policy outside initialization still uses the lightweight provider sandbox.

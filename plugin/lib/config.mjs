@@ -1,12 +1,12 @@
 // The stable ADW project contract.
 //
 // `adw.yaml` holds only settings that retained behavior actually reads: the
-// base branch, the documentation branch and its worktree, the isolation and
-// web-access choices that shape the managed container, runtime versions the
-// repository cannot pin itself, component paths with their project-owned
-// validation commands, optional provider declarations. Anything else is
-// rejected rather than ignored, so a stale field is a loud error instead of a
-// silent no-op.
+// base branch, the documentation branch with its worktree and plan template,
+// the isolation and web-access choices that shape the managed container,
+// runtime versions the repository cannot pin itself, component paths with
+// their project-owned validation commands, optional provider declarations.
+// Anything else is rejected rather than ignored, so a stale field is a loud
+// error instead of a silent no-op.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -42,7 +42,9 @@ export function defaultProjectConfig(baseBranch = "main") {
     git: { base_branch: baseBranch },
     // A project whose base branch is already named `docs` gets a distinct
     // default rather than a collision the user has to notice and fix.
-    docs: { branch: baseBranch === DEFAULT_DOCS_BRANCH ? "adw-docs" : DEFAULT_DOCS_BRANCH, worktree: DEFAULT_DOCS_WORKTREE },
+    // `plan_template` stays null unless the project points at its own skeleton;
+    // `adw:plan` falls back to the one shipped with the plugin.
+    docs: { branch: baseBranch === DEFAULT_DOCS_BRANCH ? "adw-docs" : DEFAULT_DOCS_BRANCH, worktree: DEFAULT_DOCS_WORKTREE, plan_template: null },
     execution: { isolation: "provider-sandbox", web_access: "public-pages" },
     development: { runtime_versions: {} },
     components: {},
@@ -302,12 +304,15 @@ export function validateProjectConfig(data, inferredBase = "main") {
   if (normalized.docs.branch === normalized.git.base_branch) normalized.docs.branch = "adw-docs";
 
   if (data.docs !== undefined && checkObject(errors, data.docs, "/docs")) {
-    checkKnownKeys(errors, data.docs, new Set(["branch", "worktree"]), "/docs");
+    checkKnownKeys(errors, data.docs, new Set(["branch", "worktree", "plan_template"]), "/docs");
     if (data.docs.branch !== undefined && checkBranchName(errors, data.docs.branch, "/docs/branch")) normalized.docs.branch = data.docs.branch;
     if (data.docs.worktree !== undefined && checkRelativePath(errors, data.docs.worktree, "/docs/worktree")) {
       const worktree = normalizeRelativePath(data.docs.worktree);
       if (!worktree.startsWith("worktrees/")) errors.add("/docs/worktree", "must live under `worktrees/`, the path ADW keeps ignored on the base branch");
       else normalized.docs.worktree = worktree;
+    }
+    if (data.docs.plan_template !== undefined && checkRelativePath(errors, data.docs.plan_template, "/docs/plan_template")) {
+      normalized.docs.plan_template = normalizeRelativePath(data.docs.plan_template);
     }
   }
   // Checked even when the section is absent: the default docs branch collides

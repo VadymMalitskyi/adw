@@ -64,16 +64,7 @@ parallelism.
 Use the project's configured validation commands rather than inventing new ones.
 Where the plan genuinely needs a new command, say so explicitly and say why.
 
-## 3. Review it
-
-Run a cold review pass before showing the plan: spawn a fresh subagent with only
-the plan text and access to the repository, and ask it for the weakest point and
-ranked findings. It must not see this conversation — that blindness is the
-point, because implementers will be equally blind.
-
-Apply the findings you agree with. Report the ones you rejected and why.
-
-## 4. Return it
+## 3. Return it
 
 Present the plan in the conversation, then write it to the documentation
 branch. Take `docs.branch` and `docs.worktree` from `adw config`; the worktree
@@ -96,10 +87,22 @@ For example, `2026-08-17-auth-replace-session-cookies.md`. If that path is
 already taken, append `-2`; never overwrite an existing plan. Write only that
 one file. Ask before committing it, and never push.
 
-`<plugin-root>/templates/plan.md` is an optional skeleton you may start from;
-nothing parses it, so rename, reorder, or drop its sections whenever the change
-is better served that way. If the user names a different path, write there
-instead and say that it is outside the plans directory.
+Resolve the plan skeleton in this order, and say which one you used:
+
+1. a template path the user named in this invocation, for example
+   `adw:plan --template <path>`;
+2. `docs.plan_template` from `adw config`, when the project set one — a
+   project-relative path on the base branch;
+3. `<plugin-root>/templates/plan.md`, the skeleton shipped with the plugin.
+
+If a template named by either of the first two does not exist, say so and stop
+rather than silently falling back to the next one — a missing project template
+is a configuration mistake worth surfacing.
+
+A skeleton is optional in every case; nothing parses it, so rename, reorder, or
+drop its sections whenever the change is better served that way. If the user
+names a different output path, write there instead and say that it is outside
+the plans directory.
 
 Then state plainly what happens next: they confirm the plan and the phase they
 want, and `adw:execute` carries it out. Nothing about the plan is binding until

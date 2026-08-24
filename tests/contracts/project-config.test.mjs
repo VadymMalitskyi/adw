@@ -28,7 +28,7 @@ test("the contract accepts a small handwritten configuration and normalizes its 
   assert.deepEqual(result.data, {
     adw: 1,
     git: { base_branch: "main" },
-    docs: { branch: "docs", worktree: "worktrees/docs" },
+    docs: { branch: "docs", worktree: "worktrees/docs", plan_template: null },
     execution: { isolation: "provider-sandbox", web_access: "public-pages" },
     development: { runtime_versions: {} },
     components: { app: { path: ".", validate: [] } },
@@ -47,7 +47,7 @@ docs:
   worktree: worktrees/project-docs
 `));
   assert.equal(withOverride.valid, true, JSON.stringify(withOverride.errors));
-  assert.deepEqual(withOverride.data.docs, { branch: "project-docs", worktree: "worktrees/project-docs" });
+  assert.deepEqual(withOverride.data.docs, { branch: "project-docs", worktree: "worktrees/project-docs", plan_template: null });
 
   // A docs checkout outside `worktrees/` is not ignored on the base branch, so
   // the whole documentation tree would land in the next code commit.
@@ -67,6 +67,27 @@ docs:
   const unknown = validateProjectConfig(parseYaml("adw: 1\ndocs:\n  remote: origin\n"));
   assert.equal(unknown.valid, false);
   assert.ok(errorPaths(unknown).includes("/docs/remote"), errorPaths(unknown).join(", "));
+});
+
+test("the plan template is an optional project-relative path", () => {
+  const withTemplate = validateProjectConfig(parseYaml("adw: 1\ndocs:\n  plan_template: .adw/templates/plan.md\n"));
+  assert.equal(withTemplate.valid, true, JSON.stringify(withTemplate.errors));
+  assert.equal(withTemplate.data.docs.plan_template, ".adw/templates/plan.md");
+
+  // Absent means the plugin's own skeleton, not a path the skill has to guess.
+  const withoutTemplate = validateProjectConfig(parseYaml("adw: 1\n"));
+  assert.equal(withoutTemplate.valid, true, JSON.stringify(withoutTemplate.errors));
+  assert.equal(withoutTemplate.data.docs.plan_template, null);
+
+  // A template outside the project is a path the docs worktree could never
+  // read, so it fails the contract rather than the skill.
+  const escaping = validateProjectConfig(parseYaml("adw: 1\ndocs:\n  plan_template: ../elsewhere/plan.md\n"));
+  assert.equal(escaping.valid, false);
+  assert.ok(errorPaths(escaping).includes("/docs/plan_template"), errorPaths(escaping).join(", "));
+
+  const absolute = validateProjectConfig(parseYaml("adw: 1\ndocs:\n  plan_template: /etc/plan.md\n"));
+  assert.equal(absolute.valid, false);
+  assert.ok(errorPaths(absolute).includes("/docs/plan_template"), errorPaths(absolute).join(", "));
 });
 
 test("a validation command is normalized whether it is written as a string or an object", () => {
