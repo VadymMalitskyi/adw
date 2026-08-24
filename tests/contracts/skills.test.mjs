@@ -188,7 +188,9 @@ test("no skill references a concept the stateless workflow removed", () => {
     ["personal local state", /\.adw\/local\.yaml|\.adw\/preferences\.md/i],
     ["the adw-helper wrapper", /\badw-helper\b/i],
     ["an execution mode", /\bexecution[ .]mode\b/i],
-    ["a routing block", /\brouting block\b|\bAGENTS\.md\b|\bCLAUDE\.md\b/i],
+    // The removed concept is the routing block ADW used to inject into an
+    // instruction file, not the files themselves: init now seeds them.
+    ["a routing block", /\brouting block\b/i],
   ];
 
   for (const name of SKILLS) {

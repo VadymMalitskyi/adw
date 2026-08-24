@@ -85,6 +85,13 @@ Repository instruction files own conventions that do not have an ADW setting.
 Personal preferences belong in `~/.config/adw/profile.md` or the Git-ignored
 `.adw/user.md`, never in the shared project policy.
 
+Apply seeds `AGENTS.md`, `CLAUDE.md`, and `.adw/user.md`, but only when that
+exact file is absent. `AGENTS.md` holds the instructions and `CLAUDE.md` points
+at it, so both agents read one file. Each is a starting point, not a managed
+file: init writes it once and nothing regenerates or repairs it afterwards. An
+existing file of any of those names is left byte-for-byte alone, so a project
+that already has instructions keeps them and only the missing ones appear.
+
 If the user asks to persist a convention for which ADW has no setting, stop
 after the preview and propose a separate, deliberate documentation change.
 Do not silently add unsupported fields to `adw.yaml`.
@@ -131,7 +138,9 @@ Present to the user:
   worktree is ignored on the base branch, so neither shows up in their next
   commit;
 - every path under `writes`, grouped as configuration, permission policy,
-  managed container, and ignore entries;
+  seeded agent instructions and personal profile, managed container, and ignore
+  entries. For the seeded group, name which of the three files are missing and
+  therefore being created, and say the others are being left untouched;
 - the detected components and how many validation commands each has;
 - every entry in `unresolved`, in plain language, with what it will cost them
   later if left unresolved.
@@ -160,6 +169,11 @@ Initialization writes files, creates the `worktrees/` directory, and creates
 and attaches the documentation branch. It commits nothing on the base branch,
 authenticates nothing, and contacts no external service. Say so, and name the
 documentation branch and worktree it created.
+
+Say which of `AGENTS.md`, `CLAUDE.md`, and `.adw/user.md` it seeded. Point out
+that `AGENTS.md` and `CLAUDE.md` are the project's to edit and belong in the
+first commit, while `.adw/user.md` is private to this checkout and already
+Git-ignored.
 
 Then give the next steps:
 
@@ -202,7 +216,12 @@ lives so they can take it later.
   one.
 - Never generate speculative application code, architecture prose, project
   contracts, or plan templates. Code-style rules are not an exception: they are
-  offered from the catalog after apply, chosen by the user, and never invented. The documentation branch is created empty apart
-  from a README describing what it holds; filling it is `adw:generate-docs`.
+  offered from the catalog after apply, chosen by the user, and never invented.
+  The seeded `AGENTS.md` is not an exception either: it states only how to reach
+  this project's ADW contract and records no conventions. The documentation
+  branch is created empty apart from a README describing what it holds; filling
+  it is `adw:generate-docs`.
+- Never overwrite `AGENTS.md`, `CLAUDE.md`, or `.adw/user.md`. They are seeded
+  only when absent and are never refreshed or repaired.
 - Never reuse an existing directory at the docs worktree path. If something is
   already there and is not an attached worktree, apply refuses.

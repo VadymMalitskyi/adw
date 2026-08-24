@@ -77,7 +77,7 @@ test("an empty directory becomes a Git repository with the ADW file set and noth
 
   const { applied } = initialize(root, { isolation: "provider-sandbox" });
   assert.equal(applied.applied, true);
-  assert.deepEqual(applied.writes.map(({ path }) => path).sort(), [".gitignore", "adw.yaml", ...PERMISSION_FILES].sort());
+  assert.deepEqual(applied.writes.map(({ path }) => path).sort(), [".gitignore", "adw.yaml", "AGENTS.md", "CLAUDE.md", ".adw/user.md", ...PERMISSION_FILES].sort());
   assert.equal(readFileSync(join(root, "adw.yaml"), "utf8"), "# ADW project policy. Omit a setting to use repository discovery or ADW's safe default.\nadw: 1\n");
   assert.equal(git(root, ["symbolic-ref", "--short", "HEAD"]).stdout, "main");
   // Initialization writes files; it never commits them.
@@ -394,4 +394,30 @@ test("initialization never writes outside the project root", () => {
   assert.deepEqual(readdirSync(parent).sort(), ["project", "sibling"]);
   assert.deepEqual(readdirSync(sibling), []);
   assert.ok(statSync(join(root, "adw.yaml")).isFile());
+});
+
+test("init seeds agent instructions and a private profile, and never touches one that already exists", () => {
+  const root = commitRepository(scratch("starter"));
+
+  initialize(root, { isolation: "provider-sandbox" });
+
+  assert.match(readFileSync(join(root, "AGENTS.md"), "utf8"), /^# /, "AGENTS.md is titled with the project name");
+  assert.match(readFileSync(join(root, "CLAUDE.md"), "utf8"), /@AGENTS\.md/, "CLAUDE.md points at the canonical file");
+  assert.ok(existsSync(join(root, ".adw/user.md")), "the private profile is seeded");
+  assert.equal(git(root, ["check-ignore", ".adw/user.md"]).stdout, ".adw/user.md", "the private profile stays Git-ignored");
+});
+
+test("existing agent instructions survive initialization byte for byte", () => {
+  const root = scratch("starter-existing");
+  mkdirSync(root, { recursive: true });
+  const mine = "MY OWN RULES\n";
+  writeFileSync(join(root, "CLAUDE.md"), mine);
+  commitRepository(root);
+
+  const { preview } = initialize(root, { isolation: "provider-sandbox" });
+
+  assert.equal(readFileSync(join(root, "CLAUDE.md"), "utf8"), mine);
+  const written = preview.writes.map(({ path }) => path);
+  assert.ok(!written.includes("CLAUDE.md"), "an existing instruction file is never a write");
+  assert.ok(written.includes("AGENTS.md"), "the missing one is still seeded");
 });

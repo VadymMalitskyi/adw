@@ -8,7 +8,7 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ContractError, InputError, applyAtomicWrites, isObject, isSafeRelativePath, normalizeRelativePath } from "./safe-files.mjs";
 import { DEFAULT_DOCS_BRANCH, DEFAULT_DOCS_WORKTREE, ISOLATION_MODES, RUNTIMES, WEB_ACCESS_MODES, isValidBranchName, isValidDomain, loadProjectConfig, parseYaml, providerDomains, validateProjectConfig } from "./config.mjs";
@@ -17,6 +17,11 @@ import { managedDevelopmentFiles } from "./managed-environment.mjs";
 
 const IGNORE_START = "# ADW:START";
 const IGNORE_END = "# ADW:END";
+const STARTER_FILES = [
+  { path: "AGENTS.md", template: "agents.md", action: "create-agent-instructions" },
+  { path: "CLAUDE.md", template: "claude.md", action: "create-agent-instructions" },
+  { path: ".adw/user.md", template: "user-profile.md", action: "create-user-profile" },
+];
 const IDENTIFIER = /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/;
 const CAPABILITIES = new Set(["work_tracker", "code_host", "observability", "knowledge"]);
 
@@ -427,6 +432,21 @@ function managedFiles(projectRoot, { webAccess, integrationDomains, runtimeVersi
   return { requirements: generated.requirements, files: [...generated.files].map(([name, content]) => ({ path: `.devcontainer/${name}`, content })) };
 }
 
+// Agent instructions and the private profile are seeded only when they are
+// absent, so init never overwrites what a project or a person already wrote.
+// Nothing refreshes or repairs them afterwards: from here they are owned by the
+// repository and by whoever works in this checkout.
+function starterFiles(projectRoot) {
+  const project = basename(projectRoot);
+  return STARTER_FILES
+    .filter(({ path }) => !existsSync(join(projectRoot, path)))
+    .map(({ path, template, action }) => ({
+      path,
+      action,
+      content: readFileSync(join(pluginRoot(), "templates", template), "utf8").replaceAll("{{project}}", project),
+    }));
+}
+
 export function planInitialization(directory, rawAnswers = {}) {
   const answers = checkAnswers(rawAnswers);
   const repository = repositoryState(directory);
@@ -470,6 +490,8 @@ export function planInitialization(directory, rawAnswers = {}) {
     const before = readOrEmpty(projectRoot, file.path);
     files.push({ path: file.path, before, after: file.content, action: before ? "merge-permission-policy" : "create-permission-policy" });
   }
+
+  for (const file of starterFiles(projectRoot)) add(file.path, file.content, file.action);
 
   let requirements = null;
   if (execution.isolation === "managed-devcontainer") {
