@@ -38,7 +38,7 @@ Never hand-edit the bundle. Every other file under `plugin/bin/` and `plugin/lib
 
 Start a new session and run `adw:status`. State is reconstructed from Git alone: the group branches, their commits, the worktrees they are attached to, the diff, and — when a `code_host` is configured — the open pull requests. Chat history is not required and is not trusted.
 
-An interrupted execution resumes on the same evidence. Resuming a group's branch is a judgment call: Git can show its merge base with the configured base branch, the commits it holds since that base, and whether its worktree is dirty, but an ordinary branch carries no digest or trailer proving it was prepared for the same prior task packet. ADW reports what Git can establish and confirms with the user before continuing to work in a branch that already exists, rather than silently reusing or refusing it.
+An interrupted execution recovers from Git evidence across sessions. Resuming a group's branch is a judgment call: Git can show its merge base with the configured base branch, the commits it holds since that base, and whether its worktree is dirty, but an ordinary branch carries no digest or trailer proving it was prepared for the same prior task packet. ADW derives a fresh packet and confirms it before continuing, rather than silently reusing or refusing it. Claude Dynamic Workflow may resume a paused run only within its active interactive session; ADW adds no durable workflow state or `resumeFromRunId`.
 
 ADW never removes a branch or worktree for you. Ask for the cleanup commands and run them yourself once the work is merged or deliberately abandoned.
 
@@ -51,7 +51,7 @@ Earlier releases carried a second workflow database beside Git. If you remember 
 | `SYNC.yaml` and doc-sync markers | The docs branch carries no state file; `adw:generate-docs` builds the documentation set and `adw:sync-docs` audits and reconciles drift against live repository evidence |
 | `changes/<id>/plan.md` as a required canonical location | Plans live in the conversation and in `<docs.worktree>/plans/<date>-<abbreviation>-<description>.md` on the documentation branch |
 | `approval.json`, approval history, plan digests, plan-approval binding | Confirming in conversation authorizes execution |
-| Phase run records and their state machine | Git, the pull request, and the tracker item are the record |
+| Phase run records and their state machine | Git is the cross-session evidence; the transient deterministic workflow has no durable record |
 | The project-owned plan-template registry (`planning:` in `adw.yaml`) | Plans are ordinary Markdown; `plugin/templates/plan.md` is optional guidance |
 | `.adw/local.yaml`, `.adw/preferences.md`, `.adw/cache/` | Use optional Markdown profiles: global `~/.config/adw/profile.md` and Git-ignored `.adw/user.md`; ADW maintains no machine-readable local state |
 | Generated `PROJECT.md` and ADW routing blocks in `AGENTS.md` / `CLAUDE.md` | Skills carry their own instructions |

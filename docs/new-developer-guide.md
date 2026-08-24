@@ -341,7 +341,7 @@ an approved phase into the smaller technical steps.
 | You decide | ADW coordinates |
 |---|---|
 | The outcome you want and what is out of scope | Repository investigation and a proposed plan |
-| Whether a phase should start | Isolated branches/worktrees and bounded agent packets |
+| Whether a phase should start | Isolated branches/worktrees, a confirmed packet, and deterministic execution gates |
 | Whether a proposed external action should happen | Independent diff review, validation, and an honest result |
 | When to pause or change direction | Durable Git state so the work can be resumed later |
 
@@ -379,7 +379,8 @@ real product choices come back as explicit decisions.
 ### 2. Confirm a phase
 
 The coordinator restates the selected phase, every group, expected write paths,
-and validation. Your confirmation is the authorization for **local** execution.
+branches, worktrees, exact configured validation tuples, and provider route.
+Your confirmation authorizes this **local** packet.
 It does not authorize a push, PR, issue, tracker update, knowledge-page update,
 or any other external write.
 
@@ -395,7 +396,7 @@ write paths, validation commands, and a proposed branch and worktree:
   "affected_paths": ["src/api", "test/api"],
   "branch": "adw/<change-id>/api",
   "worktree": "worktrees/<change-id>/api",
-  "validation": ["npm test"]
+  "validation": [{"component": "app", "cwd": ".", "command": "npm test"}]
 }
 ```
 
@@ -430,28 +431,37 @@ user rather than silently working around it. ADW never automatically deletes
 worktrees or branches later; it only prints exact cleanup commands for a
 person to run.
 
-### 4. Implement, review, validate, commit
+### 4. Preflight, execute, finalize, commit
 
 Within every group, ADW follows this sequence:
 
 ```text
-group packet
-   -> implementation agent in only that worktree
-   -> independent reviewer reads the actual diff
-   -> implementer fixes in-scope high-severity findings
-   -> reviewer checks again
-   -> configured validation commands run
-   -> coordinator verifies scope and commits on that group branch
+confirmed group packet
+   -> shared execution-preflight validates paths, Git baselines, and exact validation tuples
+   -> selected native provider runs implementation -> review -> optional fix -> re-review
+   -> shared execution-finalize checks Git/scope and runs configured validation
+   -> coordinator commits on that group branch after a passing final result
 ```
 
 Groups whose write paths are disjoint can follow this sequence in parallel.
-Inside one group, it is intentionally sequential: review needs an implemented
-diff, and validation needs the final implementation.
+Inside one group, it is intentionally sequential, and fixes/re-reviews are
+limited to two cycles. The provider result is only a candidate: finalization
+reloads the exact `{component, cwd, command}` tuple from project configuration,
+runs it in a confined directory, and rechecks Git after every command.
 
 Workers never commit, push, create PRs, or change external trackers. The
 coordinator owns Git commits and all external action. A required test that was
-not run is not a passing result—ADW must report skipped, timed-out, or failed
-checks honestly.
+not run is not a passing result—ADW must report skipped, timed-out, signaled, or
+failed checks honestly. Safe results omit raw prompts, worker events, command
+output, environment values, and credentials; rerun an already-confirmed command
+interactively when you need diagnostics.
+
+Codex runs noninteractive workers under the active project policy and can check
+Git between worker processes. Claude uses its enabled native Dynamic Workflow
+inside the current paid interactive session; it never falls back to `claude -p`
+or a different billing route. Claude's workflow cannot inspect Git directly, so
+the shared finalizer performs its authoritative scope/mutation check after it
+returns. The final standards match, but the inter-stage assurance is different.
 
 ### 5. Deliver only with another yes
 
@@ -473,7 +483,9 @@ You can close the session at any point. `adw:status` reads, but does not modify:
 - read-only configured provider state such as open PRs.
 
 It ends with the most useful next action. There is intentionally no “run
-record,” approval artifact, docs branch, or hidden ADW database to recover.
+record,” approval artifact, or hidden ADW database to recover. Claude can resume
+a paused native workflow only within its same interactive session; otherwise
+derive a fresh packet and confirm it again from Git evidence.
 
 ### If you are interrupted: a tiny recovery script
 

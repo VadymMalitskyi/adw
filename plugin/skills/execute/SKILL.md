@@ -1,139 +1,143 @@
 ---
 name: execute
-description: Carry out one phase of a confirmed plan by preparing isolated branches and worktrees for its parallel groups, spawning implementation and review agents, running the project's validation commands, and summarizing outcomes from Git. Use when the user asks to execute or implement a plan.
+description: Carry out a confirmed plan phase through ADW's deterministic native-provider workflow, Git gates, configured validation, and a coordinator-owned summary.
 ---
 
 # Execute a phase
 
-You are the coordinator, not the implementer. You own Git and every external
-action. Subagents write and review code inside their own worktree; they never
-commit, push, create tracker items, or open pull requests. ADW never merges,
-marks a pull request ready, releases, deploys, or force-pushes.
+You are the coordinator, not the implementer. You own Git, confirmation, and
+every external action. The deterministic workflow executes an already-confirmed
+packet; it does not interpret Markdown as authorization. Workers never commit,
+push, create tracker items, open pull requests, or perform an external action.
+ADW never merges, marks a pull request ready, releases, deploys, or force-pushes.
 
 Read `<plugin-root>/authorization.md` and follow it throughout. Resolve the
 plugin root as described there.
 
-## 1. Confirm what you are executing
+## 1. Confirm the phase and exact packet
 
-1. Run `adw config` and require exit 0. Retain `git.base_branch` from its
-   validated configuration.
-2. Run `adw doctor --checks permissions`. If the permission policy has drifted,
-   stop and invoke `adw:doctor` to preview and repair it — execution must not
-   proceed on a weakened policy.
-3. Verify the configured isolation is the active runtime, per the authorization
-   contract.
-4. Identify the plan and the specific phase. Restate to the user, in your own
-   words: the phase, its groups, each group's write paths, the branch and
-   worktree you propose for each group, and the validation that will run. Ask
-   them to confirm.
+1. Run node <plugin-root>/bin/adw.mjs config and require exit 0. Retain
+   `git.base_branch` and the normalized `validation_commands`.
+2. Run node <plugin-root>/bin/adw.mjs doctor --checks permissions. If policy has
+   drifted, stop and invoke `adw:doctor` to preview and repair it.
+3. Verify that configured isolation is the active runtime. A workflow is a
+   guardrail, not a replacement for provider policy or isolation.
+4. Read the plan and the component documentation it needs, following the
+   documentation-branch contract in `<plugin-root>/authorization.md`. Derive
+   one bounded group packet per independent group: `group_id`, complete
+   `tasks`, exact project-relative `affected_paths`, `branch`, `worktree`, and
+   validation references as exact `{component, cwd, command}` tuples selected
+   from `validation_commands`.
+5. Restate the phase, groups, write paths, branches, worktrees, validation
+   tuples, and selected provider route. Preview the exact normalized packet and
+   ask the user to confirm it. Conversation confirmation authorizes this one
+   packet; there is no approval artifact, plan digest, or durable run record.
 
-That confirmation is the authorization. There is no approval file, no plan
-digest, and nothing to verify against a stored record.
+Do not execute a phase that has no configured validation tuples capable of
+matching its required checks. A packet-supplied shell command is never itself
+authorization to run a validation command.
 
-## 2. Derive group packets
+## 2. Prepare isolation and preflight
 
-Before writing any packet, read the component documentation for the components
-this phase touches, following "Read the documentation branch" in
-`<plugin-root>/authorization.md`. Implementation agents work inside their own
-worktree and cannot reach the documentation worktree beside it, so whatever
-they need from it has to arrive in their packet, carried by you and quoted in
-`tasks` with its source and state named. Do not widen a group's access to let
-it fetch documentation itself.
+Resolve the base commit with `git rev-parse <base-branch>`. Before creating a
+group worktree, inspect `git worktree list --porcelain`, the branch ref, and
+the destination on disk. Refuse an occupied, symlinked, dirty, ambiguous, or
+mismatched target. Refuse duplicate branch/worktree values or exact and
+parent/child affected-path overlap.
 
-Turn the confirmed phase into bounded packets — one per group:
-
-- `group_id`: a short lowercase identifier;
-- `tasks`: the interpreted instructions, complete enough for an agent that never
-  sees this conversation;
-- `affected_paths`: the exact project-relative paths the group will write;
-- `branch`: the Git branch the group's work lands on. Propose
-  `adw/<change-id>/<group-id>` as a readable default, but it is an ordinary
-  execution-time choice — the plan or the user may hand you any valid Git
-  branch name instead, and you pass it through unchanged;
-- `worktree`: the local path for the group's isolated checkout. Propose
-  `worktrees/<change-id>/<group-id>` with the same latitude;
-- `validation`: the commands that prove the group works, drawn from
-  `validation_commands` in `adw config`.
-
-Groups within a phase must have disjoint write paths, branches, and worktree
-paths. If write paths overlap, the plan is wrong for parallel execution: split
-it differently or run the overlapping work sequentially in one group.
-
-## 3. Prepare isolated branches and worktrees
-
-Resolve the base commit yourself: `git rev-parse <base-branch>`.
-
-Before creating anything, inspect native Git state for every group:
-
-- `git worktree list --porcelain` — is the planned worktree path already
-  attached, and to what branch?
-- `git show-ref --verify --quiet refs/heads/<branch>` — does the branch already
-  exist?
-- Does the planned worktree path already exist on disk, and is it empty, a
-  symlink, or occupied by something unrelated?
-
-If a branch or worktree path is already in use for something else, or the
-target is occupied or ambiguous, stop and resolve it with the user before
-preparing anything — never force past it.
-
-If a group's branch already exists and its worktree is already attached,
-treat it as a resumed attempt rather than a fresh one: report what Git can
-actually establish — whether the worktree is attached to the requested branch,
-its merge base with the selected base branch, the commits it holds since that
-base, and any dirty files — and confirm with the user before continuing to
-work in it. There is no marker commit or packet digest to check against; Git
-state is the only evidence, and it cannot prove the resumed work still matches
-an earlier task packet.
-
-For a genuinely new group, create its branch and worktree with native Git:
+For a new group, use:
 
 ```
 git worktree add -b <branch> <worktree-path> <base-commit>
 ```
 
-Do not create an empty marker commit. The group's own commits, once work
-starts, are the record of what happened.
+For an existing attached branch/worktree, report its merge base, commits since
+base, and dirty files, then obtain fresh confirmation before continuing. Git
+can show evidence but cannot prove an old task packet still applies.
 
-## 4. Implement and review
+Pass the confirmed packet to the shared gate on stdin:
 
-For each group, in parallel:
+```
+node <plugin-root>/bin/adw.mjs execution-preflight --project-root <absolute-project-root>
+```
 
-1. Spawn an implementation agent scoped to that group's worktree. Give it the
-   tasks, the write paths, the validation commands, and the instruction that it
-   must not leave its worktree, commit, push, or touch anything external.
-2. Spawn an independent review agent on the resulting diff. It must not be the
-   agent that wrote the code. Ask it for correctness problems first, then
-   anything that would fail review.
-3. Feed high-severity findings back to the implementer and re-review. Stop when
-   the review is clean or when a finding needs a human decision — surface those
-   rather than deciding scope yourself.
+Require its schema-valid execution envelope. It captures clean-start Git HEAD
+and status evidence for targets, the coordinator checkout, and registered
+non-target worktrees; it also verifies exact validation references. On a
+malformed packet, nonzero result, or malformed envelope, stop without launching
+workers.
 
-## 5. Validate
+## 3. Run the selected native workflow
 
-Run the group's configured validation commands directly in its worktree, then
-the whole-phase validation. Report the real output.
+Use exactly one provider-native route for the preflight envelope:
 
-Never describe a check as passing unless you ran it and saw it pass. If a
-command was skipped, timed out, or could not run, say exactly that. A phase with
-an unrun required check is not a passing phase.
+- **Codex:** invoke `<plugin-root>/workflows/adw-execute-phase-codex.mjs` with
+  the envelope on stdin. It launches noninteractive `codex exec` workers with
+  the active project policy; do not add a sandbox override, bypass flag, ignore
+  flag, or approval-bypass flag. It emits bounded lifecycle NDJSON and one
+  terminal `workflow.completed` event.
+- **Claude Code:** call the native Workflow tool with
+  `{name: "adw:execute-phase", args: executionEnvelope}`. Wait for its terminal
+  result, validate the returned object against the shared result contract, and
+  map missing, null, stopped, or malformed output to a typed provider failure.
+  Never fall back to `claude -p`, an API adapter, or a different billing route.
+  The Workflow uses the active interactive session's billing identity; display
+  subscription identity when known and say it is unknown when it cannot be
+  established.
 
-## 6. Commit and summarize
+Both routes settle independent groups concurrently and use the fixed group
+sequence: implementation, fresh review, optional fix, fresh re-review, then
+provider finalization. A group has at most two fix/re-review cycles. A worker
+result is only a candidate: unresolved high findings, a malformed result, or a
+worker failure makes that group fail. One failed group must not cancel
+independent groups.
 
-Commit each group's work on its own branch. Committing is allowed; pushing is
-not — ask separately, and ask again for anything else external.
+Codex additionally checks Git HEAD/status and read-only review behavior between
+worker processes. Claude Workflow agents are instructed to be read-only during
+review, but their authoritative Git/scope check happens after the native
+workflow returns; do not claim identical inter-stage assurance.
 
-Summarize from Git and your tool results: per group, the branch, the head
-commit, review outcome, and validation outcome, plus what remains. Reconstruct
-this from `git log`, `git worktree list`, and the run you just did — there is no
-record file to read.
+## 4. Finalize authoritatively
 
-## 7. Delivery and cleanup
+Invoke the shared finalizer even when the provider result failed, so it can
+report unintended Git mutations:
 
-Push, pull requests, tracker updates, and any other external write each need
-their own explicit approval, named exactly. Follow
-`<plugin-root>/integrations/contracts.md` for configured providers.
+```
+node <plugin-root>/bin/adw.mjs execution-finalize --project-root <absolute-project-root>
+```
 
-For cleanup, give the user the exact commands for each group — `git worktree
-remove <worktree>` and `git branch -d <branch>` — to run once the work is
-merged or intentionally abandoned. ADW never removes a branch or worktree by
-itself.
+Supply the execution envelope and the typed provider result exactly as its
+documented input contract requires. Require a schema-valid, zero-exit final
+result before reporting success. The finalizer independently rechecks HEAD,
+scope, and non-target snapshots; reloads each exact configured validation tuple;
+runs only those commands in confined real directories; and repeats the Git
+gates after every validation command. Provider-reported validation is never
+authoritative.
+
+Report a required validation that exits nonzero, is signaled, times out, or is
+unrun as a failure. Safe results intentionally omit prompts, raw provider
+events, command output, environment values, and credentials. If diagnostics are
+needed, rerun the already-confirmed command interactively and report that
+separately.
+
+## 5. Commit, report, and recover
+
+The native workflow and finalizer never commit or make an external provider
+operation. After a passing final result, commit each group's work on its own
+branch. Pushing, pull requests, tracker updates, merges, releases, deployments,
+and other external writes each need separately named approval.
+
+Summarize the safe final result and Git evidence per group: branch, HEAD,
+provider outcome, review/fix outcome, configured-validation outcome, and any
+remaining failure. `groups_passed` means execution gates passed; it never means
+the independently produced branches were integrated. Whole-phase/integration
+validation needs a separately authorized integration step.
+
+There is no ADW-owned durable workflow state or `resumeFromRunId`. Claude may
+resume a paused native Workflow only within the same interactive session. After
+an interruption across sessions, use `adw:status`, inspect Git branches and
+worktrees, derive a fresh packet, and obtain fresh confirmation.
+
+For cleanup, give the user the exact `git worktree remove <worktree>` and
+`git branch -d <branch>` commands to run after merge or abandonment. ADW never
+removes a branch or worktree by itself.

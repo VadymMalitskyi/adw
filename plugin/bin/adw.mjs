@@ -16,6 +16,7 @@ import { applyInitialization, planInitialization, refreshApply, refreshPreview }
 import { managedDevelopmentFiles } from "../lib/managed-environment.mjs";
 import { runDoctor } from "../lib/doctor.mjs";
 import { explainPermission } from "../lib/permission-policy.mjs";
+import { executionFinalize, executionPreflight } from "../lib/execution-finalizer.mjs";
 
 const pluginRoot = resolve(fileURLToPath(import.meta.url), "../..");
 
@@ -28,6 +29,8 @@ const COMMANDS = [
   "doctor",
   "permissions-explain",
   "render-managed",
+  "execution-preflight",
+  "execution-finalize",
 ];
 
 function parseArguments(argv) {
@@ -104,6 +107,15 @@ async function dispatch(command, options) {
       mkdirSync(join(target, ".devcontainer"), { recursive: true });
       await applyAtomicWrites(target, [...generated.files].map(([name, content]) => ({ path: `.devcontainer/${name}`, content })));
       return { exitCode: EXIT.OK, body: { ok: true, project_root: target, files: [...generated.files.keys()], unresolved: generated.requirements.unresolved } };
+    }
+    case "execution-preflight": {
+      const projectRoot = realpathSync(requireProjectRoot(options));
+      return { exitCode: EXIT.OK, body: { ok: true, execution_envelope: executionPreflight(projectRoot, await readStdin()) } };
+    }
+    case "execution-finalize": {
+      const projectRoot = realpathSync(requireProjectRoot(options));
+      const body = await executionFinalize(projectRoot, await readStdin());
+      return { exitCode: body.status === "passed" ? EXIT.OK : EXIT.CHECK_FAILED, body: { ok: body.status === "passed", ...body } };
     }
     default:
       throw new Error(`unknown command ${JSON.stringify(command ?? "")}; expected one of: ${COMMANDS.join(", ")}`);

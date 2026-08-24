@@ -173,7 +173,7 @@ test("every skill resolves bundled resources from the loaded plugin, never from 
   }
 });
 
-test("no skill references a concept the lean workflow removed", () => {
+test("no skill references a concept the stateless workflow removed", () => {
   const removed = [
     ["the SYNC.yaml marker", /SYNC\.yaml/i],
     ["a canonical plan location", /changes\/[^\s`]*plan\.md/i],
@@ -197,6 +197,23 @@ test("no skill references a concept the lean workflow removed", () => {
       }
     }
   }
+});
+
+test("execute uses the deterministic shared gates and both native provider routes", () => {
+  const source = skillText("execute");
+  const unwrapped = source.replace(/\s+/g, " ");
+
+  assert.match(unwrapped, /execution-preflight/, "execute must invoke shared preflight before workers");
+  assert.match(unwrapped, /execution-finalize/, "execute must invoke shared finalization after workers");
+  assert.match(unwrapped, /preflight[\s\S]*native[\s\S]*finaliz/i, "execute must preserve preflight → native runner → finalizer ordering");
+  assert.match(unwrapped, /adw-execute-phase-codex\.mjs/, "execute must document the Codex native runner");
+  assert.match(unwrapped, /name: "adw:execute-phase"/, "execute must call Claude's native Workflow by name");
+  assert.match(unwrapped, /\{component, cwd, command\}/, "execute must require exact configured validation tuples");
+  assert.match(unwrapped, /never fall back to `claude -p`/i, "execute must prohibit a headless Claude fallback");
+  assert.match(unwrapped, /even when the provider result failed/i, "execute must finalize provider failures for Git evidence");
+  assert.match(unwrapped, /never means[\s\S]{0,120}integrated/i, "execute must not claim cross-branch integration success");
+  assert.match(unwrapped, /same interactive session/i, "execute must limit Claude Workflow resume to its session");
+  assert.match(unwrapped, /fresh confirmation/i, "execute must require fresh confirmation for cross-session recovery");
 });
 
 // The docs branch and its worktree are configurable, so a skill that hard-codes

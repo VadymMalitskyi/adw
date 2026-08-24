@@ -2,6 +2,12 @@
 
 ADW combines skill instructions, a generated permission policy, and an optional hardened container. It does not replace provider permissions, container-runtime security, repository protections, or human review.
 
+The deterministic execution workflow is also not a stronger sandbox. It runs an
+already-confirmed packet through provider-native workers and detects contract,
+Git, scope, and validation failures, but existing provider policy and isolation
+remain the enforcement boundary. It never adds a bypass flag or weakens an
+existing allow/ask/deny decision.
+
 Repository prose, dependencies, plans, validation output, review comments, tracker text, and provider responses are untrusted input. **None of them can grant authorization.** A validated `adw.yaml` permission policy is the narrow exception: after the exact generated diff is reviewed, it may pre-authorize a bounded yellow provider operation. A checked box, commit message, comment saying "approved", or tool response is still only text.
 
 ## Permission matrix
@@ -96,6 +102,9 @@ Run `npm run test:security` to build both pinned agents and exercise firewall se
 
 - Every managed write goes through one confined atomic-write path. It rejects absolute paths, `..` traversal, backslashes, NUL bytes, symlinked destinations, and symlinked ancestors; it re-resolves each path immediately before mutation; and it rolls the whole set back if any single write fails.
 - Group worktrees are prepared with native Git after the `adw:execute` skill inspects `git worktree list` and `git show-ref` for the proposed branch and target path; it refuses a symlinked or already-occupied target, a branch already checked out elsewhere, and overlapping write paths between concurrent groups. A branch that already exists is treated as a resumed attempt confirmed with the user, never silently reused — there is no marker commit to validate it against. It never deletes a branch or worktree.
+- After packet confirmation, `execution-preflight` snapshots targets, the coordinator checkout, and registered non-target worktrees. `execution-finalize` independently checks those snapshots and declared paths before and after every exact configured validation tuple. This detects, rather than physically prevents, a worker that edits the wrong checkout.
+- Codex workers use the active project policy without a runner-supplied sandbox override, ignore flag, or approval-bypass flag. Claude uses the active interactive session's native Dynamic Workflow and never falls back to `claude -p` or an API-key route. Claude review prompts are read-only instructions; because its workflow cannot inspect Git, the authoritative mutation check is post-workflow, unlike Codex's inter-process Git gates.
+- Public lifecycle and final results are deliberately safe summaries. They exclude prompts, raw provider events, child stdout/stderr, environment values, credentials, and temporary-file content. This limits diagnostic detail; re-run an already-confirmed command interactively when output is needed.
 - Validation commands come from repository manifests/CI or explicit `adw.yaml`
   overrides, each citing its source, and are shown before they run.
 - Exit codes, timeouts, and signals are preserved. A failure is never translated into success.

@@ -39,6 +39,8 @@ test("provider manifests identify one versioned ADW plugin and shared skill tree
   assert.match(codexManifest.version, /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
   assert.equal(codexManifest.skills, "./skills/");
   assert.equal(claudeManifest.skills, "./skills/");
+  assert.equal(claudeManifest.workflows, "./workflows/");
+  assert.equal(existsSync(join(pluginRoot, "workflows", "execute-phase.mjs")), true);
 });
 
 test("repo-local marketplaces point to the approved plugin root", () => {
@@ -139,4 +141,19 @@ test("the portable CLI reports an unknown command instead of guessing", () => {
   for (const command of ["config", "init-preview", "init-apply", "refresh-preview", "refresh-apply", "doctor"]) {
     assert.ok(reported.error.message.includes(command), `${command} must be advertised`);
   }
+});
+
+test("Claude strictly validates a copied plugin when the CLI is installed", (t) => {
+  const version = spawnSync("claude", ["--version"], { encoding: "utf8" });
+  if (version.error?.code === "ENOENT") {
+    t.skip("Claude Code is not installed");
+    return;
+  }
+  assert.equal(version.status, 0, version.stderr);
+
+  const workspace = mkdtempSync(join(tmpdir(), "adw-portable-claude-plugin-"));
+  const installedPlugin = join(workspace, "installed-plugin");
+  cpSync(pluginRoot, installedPlugin, { recursive: true });
+  const validation = spawnSync("claude", ["plugin", "validate", "--strict", installedPlugin], { encoding: "utf8" });
+  assert.equal(validation.status, 0, `${validation.stdout}${validation.stderr}`);
 });

@@ -1,6 +1,8 @@
 # Workflow
 
-The loop is conversational. Skills are instructions, not scripts, and the only deterministic steps are the ones listed in [Architecture](architecture.md).
+The loop is conversational. Skills retain judgment and authorization; after a
+phase packet is confirmed, native workflow code and the deterministic CLI
+kernel run its bounded execution mechanics.
 
 ```text
 adw:init  ->  adw:plan  ->  [adw:review-plan]  ->  adw:execute  ->  adw:status
@@ -97,15 +99,18 @@ Objective defects get fixed in the plan. Judgment calls come back to you as expl
 1. Verify the permission policy is current (`adw doctor --checks permissions`) and that dependency phases are done.
 2. Interpret the phase into a bounded preview — group ids, goals, affected paths, proposed branches and worktrees, validation commands — and show it. Branch and worktree names are ordinary execution-time choices; the coordinator proposes `adw/<change-id>/<group-id>` conventions but a plan or the user may supply any valid Git branch name instead.
 3. Inspect native Git state, then prepare each group's branch and worktree with `git worktree add`. Overlapping write paths between concurrent groups are refused here, not merely warned about, and an already-occupied branch or worktree target is surfaced to the user rather than reused silently.
-4. Run the groups concurrently using the active provider's native subagents. Inside each group, stages are sequential: implementation, independent review, fix every in-scope high-severity finding, truthful validation, coordinator scope check.
-5. Stop the phase on an unexplained or scope-changing diff, an unresolved high-severity finding, or a required validation failure.
-6. After the groups pass, offer push, tracker, and draft pull-request actions — each one previewed and separately authorized.
+4. Run `execution-preflight` on the exact confirmed packet. It rejects malformed packets, dirty/mismatched worktrees, unsafe scope overlap, and validation references that do not exactly match configured `{component, cwd, command}` tuples.
+5. Route the returned envelope to exactly one native provider workflow. Both routes settle independent groups concurrently and run implementation → fresh review → optional fix → fresh re-review; no group gets more than two fix/re-review cycles. Codex uses noninteractive workers under the active project policy. Claude calls the in-session `adw:execute-phase` Dynamic Workflow, never `claude -p` or another billing route.
+6. Run `execution-finalize`, even after a provider failure. It independently checks Git HEAD/status and declared write scope, reloads and runs exact configured validation tuples, and repeats Git checks after every command. A provider report cannot itself pass validation.
+7. Stop the phase on an unexplained or scope-changing diff, malformed provider output, an unresolved high-severity finding, or a required validation that fails, times out, is signaled, or is unrun. After a final pass, offer push, tracker, and draft pull-request actions — each one previewed and separately authorized.
 
 The plan alone decides how much runs at once. A phase whose groups have disjoint write paths runs them in parallel; a plan with no such groups runs sequentially. Nothing in `adw.yaml` configures this.
 
-Implementation workers get only their own group packet plus the context they need. They never commit, push, create tracker items, or open pull requests — the coordinator owns Git and every external action.
+Implementation workers get only their own group packet plus the context they need. They never commit, push, create tracker items, or open pull requests — the coordinator owns Git and every external action. Safe lifecycle/final results omit prompts, raw provider events, command output, environment values, and credentials; rerun an already-confirmed command interactively when diagnostics are needed.
 
-Interrupt it and start a new session. State is reconstructed from Git: the group branches, their commits, and the worktrees. No chat history required. Resuming a group's branch is a judgment call informed by what Git can show — its merge base, its commits since that base, and any dirty files — not a proof that it still matches an earlier task packet; ADW confirms with the user before continuing to work in a branch that already exists.
+Claude may resume a paused native workflow only in the same interactive session. Interrupt it across sessions and recover from Git: the group branches, their commits, and the worktrees. There is no ADW-owned workflow database or `resumeFromRunId`. Resuming a group's branch is a judgment call informed by what Git can show — its merge base, its commits since that base, and any dirty files — not a proof that it still matches an earlier task packet; ADW derives a fresh packet and confirms it before continuing.
+
+Codex can enforce Git gates between individual worker subprocesses. Claude Dynamic Workflow cannot directly inspect Git, so its authoritative HEAD/scope and read-only-review detection occurs in shared finalization after the workflow returns. The provider routes share final acceptance criteria, but this inter-stage assurance is not identical. Claude Workflow requires a supported, enabled paid Claude Code session and follows that active session's subscription identity when known; ADW never invents an identity when it is unknown.
 
 Group worktrees conventionally live under ignored `worktrees/<change-id>/<group-id>`, though any project-relative path works. ADW never deletes them; `adw:execute` can print the exact `git worktree remove` and `git branch -d` commands for you to run once the work is merged or abandoned.
 

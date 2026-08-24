@@ -19,11 +19,11 @@ touching code history.
 
 ## How it is built
 
-Skills are raw instructions. They own everything that benefits from judgment and should stay visible in the conversation: reading the repository, planning, reviewing a plan, splitting a phase into groups, spawning implementers and reviewers, running Git and validation commands, summarizing status, and asking for authorization.
+Skills are raw instructions. They own everything that benefits from judgment and should stay visible in the conversation: reading the repository, planning, reviewing a plan, interpreting a phase into a confirmed packet, choosing a provider route, summarizing status, and asking for authorization. For confirmed execution, bundled workflow code owns transient mechanics — concurrent workers, fixed implementation/review/fix stages, structured results, and bounded events — while the coordinator retains authorization and Git ownership.
 
-Code exists only where interpretation or partial failure is genuinely dangerous. One CLI, `plugin/bin/adw.mjs`, and library modules under `plugin/lib/` own path confinement and atomic writes, the `adw.yaml` contract, permission-policy generation, managed-container rendering, init and refresh, and readiness checks. Every command prints one JSON object. Branch and worktree preparation for execution groups uses native Git directly, coordinated by the `adw:execute` skill rather than a custom CLI protocol.
+Code exists only where interpretation or partial failure is genuinely dangerous. One CLI, `plugin/bin/adw.mjs`, and library modules under `plugin/lib/` own path confinement, atomic writes, the `adw.yaml` contract, permission-policy generation, managed-container rendering, readiness checks, and the deterministic execution preflight/finalizer. Provider-native workflows under `plugin/workflows/` run an already-confirmed packet; they never parse a Markdown plan as authorization. Every CLI command prints one JSON object.
 
-There is no daemon, server, scheduler, telemetry, or workflow database. Git, your files, and your providers hold all the state.
+There is no daemon, server, scheduler, telemetry, hosted agent service, workflow database, or durable execution authorization record. Git, your files, and your providers hold all durable state; a native workflow process is transient.
 
 ## What to expect
 
@@ -31,7 +31,7 @@ There is no daemon, server, scheduler, telemetry, or workflow database. Git, you
 2. Uncertain ideas can use `adw:brainstorm` before plan → execute; small,
    well-understood changes use `adw:quick`.
 3. **Confirming in conversation is what authorizes execution.** There is no approval artifact, plan digest, or approval record.
-4. Groups inside a phase run in parallel, each in its own branch and worktree, only when their write paths are disjoint. The plan decides how much runs at once; there is no mode setting.
+4. Groups inside a phase run in parallel, each in its own branch and worktree, only when their write paths are disjoint. After confirmation, shared preflight validates the packet, the selected native provider runs the fixed worker sequence, and shared finalization independently gates Git evidence and configured validation. The plan decides how much runs at once; there is no mode setting.
 5. **External writes default to separate authorization.** Only an exact, reviewed generated provider-operation policy can pre-authorize a bounded write; confirming a plan alone authorizes local implementation and nothing else.
 6. **ADW never merges, releases, deploys, or force-pushes.**
 

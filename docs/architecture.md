@@ -1,13 +1,14 @@
 # Architecture
 
-ADW is a private plugin that gives Codex and Claude Code one shared development workflow. It has two parts and no third:
+ADW is a private plugin that gives Codex and Claude Code one shared development workflow with three layers:
 
 ```text
-plugin/skills/     raw instructions — reasoning, coordination, conversation
-plugin/bin + lib/  a small JSON CLI — the deterministic boundaries only
+plugin/skills/     raw instructions — judgment, authorization, coordination
+plugin/workflows/  transient provider-native execution mechanics
+plugin/bin + lib/  a small JSON CLI — the deterministic kernel and boundaries
 ```
 
-Two provider manifests (`.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`) carry packaging metadata and point both providers at the same physical `skills/` tree. `plugin/authorization.md` is the one contract every skill follows: how to resolve the plugin root and the project, and which effects run, ask, or are refused. There is no daemon, server, scheduler, telemetry, agent runtime, workflow database, or artifact framework. Git, the project's files, and the configured providers are the only state.
+Two provider manifests (`.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`) carry packaging metadata and point both providers at the same physical `skills/` tree. `plugin/authorization.md` is the one contract every skill follows: how to resolve the plugin root and the project, and which effects run, ask, or are refused. There is no daemon, server, scheduler, telemetry, hosted agent service, workflow database, or durable authorization artifact. Native workflow processes are short-lived; Git, the project's files, and the configured providers are the only durable state.
 
 ## What is code, and why
 
@@ -25,7 +26,7 @@ Code exists only where interpretation, duplication, or partial failure creates a
 
 `plugin/bin/adw.mjs` is a dispatcher and nothing else. It parses arguments, reads JSON from stdin when a command takes structured input, calls the owning library module, and prints one JSON object.
 
-Everything else — repository discovery, planning, plan review, splitting a phase into groups, spawning implementers and reviewers, running Git and validation commands, summarizing status, investigating incidents, choosing and invoking providers, asking for authorization — is a raw skill. Those steps benefit from model judgment and stay observable to the user in conversation; wrapping them in scripts would make them opaque without making them safer.
+Everything else — repository discovery, planning, plan review, splitting a phase into groups, packet confirmation, worktree preparation, provider selection, summarizing status, investigating incidents, and asking for authorization — is a raw skill. Workflow code consumes only a confirmed normalized envelope; it does not replace judgment or interpret Markdown as authorization.
 
 ## The CLI
 
@@ -71,9 +72,11 @@ Apply then writes through `applyAtomicWrites`, which additionally requires each 
 
 The plan alone decides how much runs at once. A phase's groups may run concurrently when their write paths are disjoint; the `adw:execute` skill refuses to prepare a set of groups whose write paths overlap.
 
-Branch and worktree preparation is ordinary Git, run by the coordinating skill rather than a dedicated CLI protocol. Before creating anything, the skill inspects `git worktree list --porcelain` and `git show-ref` for each group's proposed branch and worktree path, and refuses to proceed past an occupied or ambiguous target without asking the user. A genuinely new group is created with `git worktree add -b <branch> <worktree-path> <base-commit>`; nothing writes an empty marker commit. A later session reconstructs execution state from Git alone — a branch's commits, its merge base with the configured base branch, and its worktree attachment — but an ordinary branch cannot prove by itself that it was prepared for the same prior task packet, since there is no digest or trailer recording that intent. The skill reports what Git can establish and asks before resuming a branch that already exists.
+Branch and worktree preparation is ordinary Git, run by the coordinating skill. Before launching workers it calls `execution-preflight`, which validates the confirmed packet, target mapping, clean starts, path overlap, exact configured validation tuples, and snapshots every registered checkout. The selected native workflow then settles independent groups concurrently through implementation → review → optional fix → re-review. It returns a structured candidate result only. `execution-finalize` independently checks provider output and every Git snapshot, runs exact configured validation commands, and repeats Git gates after each command; only it can report execution success. A phase with no configured validation capable of matching required checks cannot pass.
 
-Preparing a group is the coordinator's own action, not a library invariant enforced by rollback: if one group's preparation fails partway, the coordinator reports it and works with the user to resolve it, rather than a module tearing the whole set back down. Nothing spawns agents, implements tasks, commits implementation work, pushes, opens pull requests, mutates trackers, or removes a branch or worktree; cleanup commands are printed for a person to run.
+Codex uses a noninteractive CLI host and can perform authoritative Git gates between worker subprocesses. Claude uses its native in-session Dynamic Workflow; it cannot call Git itself, so the shared post-workflow gate detects wrong-checkout, scope, or review mutations after return. Both routes share the packet and final result contract, but their inter-stage assurance is intentionally not identical. Claude can pause/resume only within the active interactive session. Cross-session recovery is Git-based, requires a fresh packet and confirmation, and has no ADW-owned `resumeFromRunId`.
+
+Preparing a group is the coordinator's own action, not a library invariant enforced by rollback: if one group's preparation fails partway, the coordinator reports it and works with the user to resolve it, rather than a module tearing the whole set back down. Native workflows spawn the bounded implementation/review workers but never commit implementation work, push, open pull requests, mutate trackers, or remove a branch or worktree; cleanup commands are printed for a person to run.
 
 ## Trust model
 
