@@ -23,6 +23,14 @@ Quick mode is wrong for anything that changes an interface other code depends
 on, alters security or permission behavior, needs a migration, or touches more
 than one component.
 
+There is no planning phase here, so this step is where you orient yourself.
+Read the component documentation for the area you are about to touch, following
+"Read the documentation branch" in `<plugin-root>/authorization.md`. It is also
+what makes the boundary above checkable: `docs/components/<component>.md` is
+where a component's responsibility and owned paths are written down, so it is
+the evidence for whether this change stays inside one component or crosses
+two.
+
 ## 2. Work
 
 Create one branch off the configured base branch — creating a local branch is

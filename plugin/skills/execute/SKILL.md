@@ -32,6 +32,14 @@ digest, and nothing to verify against a stored record.
 
 ## 2. Derive group packets
 
+Before writing any packet, read the component documentation for the components
+this phase touches, following "Read the documentation branch" in
+`<plugin-root>/authorization.md`. Implementation agents work inside their own
+worktree and cannot reach the documentation worktree beside it, so whatever
+they need from it has to arrive in their packet, carried by you and quoted in
+`tasks` with its source and state named. Do not widen a group's access to let
+it fetch documentation itself.
+
 Turn the confirmed phase into bounded packets — one per group:
 
 - `group_id`: a short lowercase identifier;

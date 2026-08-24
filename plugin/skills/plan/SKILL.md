@@ -25,6 +25,13 @@ the modules that own the behavior, the tests that cover it, and the validation
 commands the project already runs. Prefer reading the code over trusting any
 document that describes it.
 
+Read the project's own generated documentation as well, following "Read the
+documentation branch" in `<plugin-root>/authorization.md`. You write plans to
+that same branch, and `docs/components/<component>.md` states each component's
+responsibility and owned paths, which is what the group split in step 2 depends
+on. The preference above still holds: where the documentation and the code
+disagree, the code wins.
+
 Say what you could not determine. An honest gap is more useful than a confident
 guess, because the agents who execute this plan will not see this conversation.
 
