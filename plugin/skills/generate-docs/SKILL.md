@@ -30,7 +30,10 @@ the base branch's working tree.
 ## 2. Inspect before proposing files
 
 1. Read repository instructions, manifests, lockfiles, CI, entry points, tests,
-   configuration, and every existing document, on both branches.
+   configuration, and every existing document, on both branches. For every
+   component you expect to document, read the actual implementation of its
+   core files, not just its directory layout or public signatures — a
+   component page written from structure alone is not sufficient.
 2. Sort what you learn into two kinds:
    - **verified** — proved by source, configuration, or an executable command;
    - **inferred** — your reading of why the code is shaped this way, what the
@@ -54,7 +57,10 @@ the repository genuinely has nothing to say about it.
 - what the project does, its audience, and its major constraints;
 - the top-level layout, component map, and links to component references;
 - how the system works: entry points, dependencies, and important data or
-  control flows;
+  control flows, traced through the actual code for at least the primary
+  paths — not inferred from names alone;
+- a diagram of the component map and, for each major flow described above, a
+  diagram of that flow (Mermaid, in a fenced code block);
 - the design decisions that shape it, and what each one trades away;
 - concise, verified setup, run, and validation commands.
 
@@ -62,7 +68,14 @@ Then, for each meaningful independently understandable component, write
 `docs/components/<component>.md` stating its responsibility and boundaries,
 owned paths and entry points, public interfaces or inputs/outputs, dependencies
 and integration points, relevant configuration, its failure modes, and useful
-verified commands to run, test, lint, type-check, or debug it.
+verified commands to run, test, lint, type-check, or debug it. Ground each of
+these in the actual implementation: name the specific functions, classes, or
+files (with paths, and line numbers where they sharpen the claim) that a
+reader would open to verify it, and describe failure modes as read from real
+error handling, not assumed from the component's purpose. Add a diagram
+(Mermaid, in a fenced code block) wherever the component's structure,
+interactions with other components, or an internal flow would be clearer
+shown than described.
 
 Add the supporting pages the repository supports evidence for — development
 setup and workflow, integrations and external dependencies, security and
@@ -83,7 +96,16 @@ user asks only for an audit, return the proposal without writing.
 ## 4. Write and verify
 
 After approval, create or update only the reviewed paths inside the docs
-worktree. Keep prose concise and use stable headings.
+worktree. Use stable headings. Match length to the material: do not pad with restated
+structure or filler, but do not trim real detail for the sake of brevity — a
+large or intricate component earns a long page.
+
+Write in plain language: short sentences, the simplest words that stay
+accurate, and jargon introduced with a one-line explanation on first use. A
+reader who is new to the codebase, not just new to the domain, should be able
+to follow every page without re-reading. Plain language and detail are not in
+tension — explain the detailed, real behavior of the system simply, rather
+than cutting the detail to keep the prose simple.
 
 Separate the two kinds of content visibly. Verified claims are stated plainly,
 with a source path where it helps. Interpretation goes in clearly labeled
