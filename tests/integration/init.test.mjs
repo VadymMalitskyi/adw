@@ -404,6 +404,11 @@ test("init seeds agent instructions and a private profile, and never touches one
   assert.match(readFileSync(join(root, "AGENTS.md"), "utf8"), /^# /, "AGENTS.md is titled with the project name");
   assert.match(readFileSync(join(root, "CLAUDE.md"), "utf8"), /@AGENTS\.md/, "CLAUDE.md points at the canonical file");
   assert.ok(existsSync(join(root, ".adw/user.md")), "the private profile is seeded");
+  const agents = readFileSync(join(root, "AGENTS.md"), "utf8");
+  assert.ok(agents.includes(".adw/user.md"), "AGENTS.md points at the private profile");
+  assert.ok(agents.includes("worktrees/docs"), "AGENTS.md names the real documentation worktree");
+  assert.ok(!agents.includes("{{"), "no placeholder survives into a seeded file");
+  assert.ok(readFileSync(join(root, "CLAUDE.md"), "utf8").includes("@.adw/user.md"), "CLAUDE.md imports the private profile");
   assert.equal(git(root, ["check-ignore", ".adw/user.md"]).stdout, ".adw/user.md", "the private profile stays Git-ignored");
 });
 

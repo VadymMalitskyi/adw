@@ -436,15 +436,16 @@ function managedFiles(projectRoot, { webAccess, integrationDomains, runtimeVersi
 // absent, so init never overwrites what a project or a person already wrote.
 // Nothing refreshes or repairs them afterwards: from here they are owned by the
 // repository and by whoever works in this checkout.
-function starterFiles(projectRoot) {
-  const project = basename(projectRoot);
+function starterFiles(projectRoot, docs) {
+  const values = { project: basename(projectRoot), docs_branch: docs.branch, docs_worktree: docs.worktree };
   return STARTER_FILES
     .filter(({ path }) => !existsSync(join(projectRoot, path)))
-    .map(({ path, template, action }) => ({
-      path,
-      action,
-      content: readFileSync(join(pluginRoot(), "templates", template), "utf8").replaceAll("{{project}}", project),
-    }));
+    .map(({ path, template, action }) => {
+      const source = readFileSync(join(pluginRoot(), "templates", template), "utf8");
+      const content = Object.entries(values).reduce((text, [key, value]) => text.replaceAll(`{{${key}}}`, value), source);
+      if (content.includes("{{")) throw new ContractError(`the ${template} template has a placeholder this project cannot fill`);
+      return { path, action, content };
+    });
 }
 
 export function planInitialization(directory, rawAnswers = {}) {
@@ -491,7 +492,7 @@ export function planInitialization(directory, rawAnswers = {}) {
     files.push({ path: file.path, before, after: file.content, action: before ? "merge-permission-policy" : "create-permission-policy" });
   }
 
-  for (const file of starterFiles(projectRoot)) add(file.path, file.content, file.action);
+  for (const file of starterFiles(projectRoot, answers.docs)) add(file.path, file.content, file.action);
 
   let requirements = null;
   if (execution.isolation === "managed-devcontainer") {
