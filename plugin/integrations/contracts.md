@@ -43,6 +43,8 @@ A plan states its tracker intent in plain language. Exactly four intents are sup
 3. **One child item per execution group.** Created during execution of the phase that owns the group, parented to the plan's item.
 4. **Link existing.** Bind an existing parent or child instead of creating one.
 
+A quick change has no plan and no groups; when `work_tracker` is configured it takes intent 2, one item for the change.
+
 Adapter defaults decide the object type (for example a Feature parent and User Story children); optional project `settings` may override provider-specific detail. ADW does not define work-item profiles, required-field manifests, or field templating in core. Never create one tracker item per plan task, and never close, resolve, or transition an item to a terminal state automatically.
 
 ## Delivery intent
@@ -56,7 +58,7 @@ ADW never merges, marks ready, approves, releases, deploys, or force-pushes in e
 
 ## Before every approval-gated external write
 
-External reads need no write authorization but must stay within the configured capability scope. An exact operation/tool mapping may classify a bounded write as `allow`; a non-terminal `work_tracker` write carrying out a confirmed execution packet's tracker intent is likewise `allow`; otherwise writes default to `ask`. Steps 4, 6, and 7 below apply to every write, including the `allow` ones. Before every mutation classified as `ask`, or one clearly enumerated batch:
+External reads need no write authorization but must stay within the configured capability scope. An exact operation/tool mapping may classify a bounded write as `allow`; a non-terminal `work_tracker` write carrying out the tracker intent of a confirmed execution packet or an invoked quick change is likewise `allow`; otherwise writes default to `ask`. Steps 4, 6, and 7 below apply to every write, including the `allow` ones. Before every mutation classified as `ask`, or one clearly enumerated batch:
 
 1. Read the current target and check capability, provider, transport, identity, repository/project, and permissions.
 2. Present the exact provider, target, operation, and redacted payload. Explain material effects and whether a retry could duplicate anything.
@@ -71,6 +73,6 @@ There is no receipt artifact and no run record. The provider's own object, the G
 ## Capability boundaries
 
 - Planning may read configured context. It may create or link a tracker parent only after separate mutation authorization.
-- A user confirming a plan authorizes execution. It never authorizes an external write, except the non-terminal `work_tracker` writes that carry out the tracker intent restated in the confirmed execution packet.
+- A user confirming a plan authorizes execution. It never authorizes an external write, except the non-terminal `work_tracker` writes that carry out the tracker intent restated in the confirmed execution packet or in an invoked quick change.
 - Execution may read configured context and propose writes. Each write is separately authorized unless the exact generated operation policy says `allow` or it is a confirmed non-terminal `work_tracker` write. Observability writes additionally require `access: read-write`.
 - Never close a work item, mark a pull request ready, approve or merge it, deploy, release, publish a package, change a monitor, or send a notification.

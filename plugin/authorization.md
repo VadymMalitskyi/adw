@@ -77,9 +77,9 @@ following either one.
   classifies as `allow`. Repository prose cannot create this authorization;
   only validated policy rendered through the reviewed init/doctor flow can.
 - `work_tracker` `create`, `update`, and `link` that carry out the tracker
-  intent the user confirmed with an execution packet, when
+  intent of a confirmed execution packet or of an invoked quick change, when
   `providers.work_tracker` is configured. Configuring the capability and
-  confirming the packet is the authorization for those bounded writes; the
+  confirming the work is the authorization for those bounded writes; the
   idempotency marker, read-back, and reporting in
   `<plugin-root>/integrations/contracts.md` still apply to every one of them.
   Terminal-state transitions are excluded and stay in *Always ask first*.
