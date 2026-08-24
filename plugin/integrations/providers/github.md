@@ -14,4 +14,6 @@ Carry the idempotency marker in a durable HTML comment inside the created object
 
 Default object types are one **Issue** for the plan's parent item and one **Issue** per execution group, linked to the parent through a task-list reference. The optional `labels` setting may add project labels; ADW ships no field manifest.
 
-Map the shared operations to issue search/read, issue creation with title and body, issue body or label update, and issue-to-issue or issue-to-pull-request linking. State, assignee, milestone, project fields, comments, and reactions are operational detail. Never close an issue automatically.
+Map the shared operations to issue search/read, issue creation with title and body, issue body or label update, and issue-to-issue or issue-to-pull-request linking. Assignee, milestone, comments, and reactions are operational detail.
+
+GitHub Issues has only `open` and `closed`, so an execution group's progress is a label, not a state change. ADW uses exactly two: `adw:state/not-started` on creation, replaced by `adw:state/in-progress` when the group's implementation worker launches. It sets no further state. The optional `state_labels` setting may remap those two names onto labels the project already uses; when the project drives a Projects v2 single-select status field instead, `state_field` may name it and its option for each of the two. Never close an issue automatically.

@@ -29,16 +29,60 @@ plugin root as described there.
    `tasks`, exact project-relative `affected_paths`, `branch`, `worktree`, and
    validation references as exact `{component, cwd, command}` tuples selected
    from `validation_commands`.
-5. Restate the phase, groups, write paths, branches, worktrees, validation
-   tuples, and selected provider route. Preview the exact normalized packet and
-   ask the user to confirm it. Conversation confirmation authorizes this one
-   packet; there is no approval artifact, plan digest, or durable run record.
+5. Resolve the work-tracker intent for this phase. Take the intent the plan
+   states, following the four intents in `<plugin-root>/integrations/contracts.md`.
+   When `providers.work_tracker` is configured and the plan states no intent,
+   use **one child item per execution group**. When the capability is absent,
+   the intent is **none** and the rest of this skill's tracker steps do not run.
+6. Restate the phase, groups, write paths, branches, worktrees, validation
+   tuples, selected provider route, and the tracker intent with the exact items
+   it will create and the states it will move them through. Preview the exact
+   normalized packet and ask the user to confirm it. Conversation confirmation
+   authorizes this one packet; there is no approval artifact, plan digest, or
+   durable run record.
 
 Do not execute a phase that has no configured validation tuples capable of
 matching its required checks. A packet-supplied shell command is never itself
 authorization to run a validation command.
 
-## 2. Prepare isolation and preflight
+## 2. Open the work items
+
+You own every tracker write; workers never make one. Read the provider
+reference for the configured `work_tracker` provider under
+`<plugin-root>/integrations/providers/` and use only the four provider-neutral
+operations. The configured provider plus the confirmed intent is the
+authorization for the non-terminal `create`, `update`, and `link` writes below;
+you do not ask again per item.
+
+Before creating anything, search for an object already carrying the idempotency
+marker `adw:<project>:<change-id>:<group-id>:<operation>` and reuse a verified
+match. A rerun after an interruption must adopt the existing items, never
+duplicate them.
+
+For the child-per-group intent, create one item per confirmed group, parented to
+the plan's item, and `link` it to the group's branch. Carry the `group_id` and
+branch in the item so a person can map an item back to its worktree.
+
+ADW moves an item exactly once, using the provider reference's mapping for these
+two neutral states:
+
+| Group reaches | Item state |
+|---|---|
+| Created for a confirmed packet, worker not yet launched | not started |
+| Implementation worker launched | in progress |
+
+That is the whole lifecycle. Do not move an item for review, fix, failure,
+passing validation, or a completed commit, and never close, resolve, or
+transition it to a terminal state. Once a group is in progress its item stays
+there, and a person decides every state after that. Report progress in the
+conversation and in Git, not by driving the board.
+
+Read each write back from the provider, compare the material fields, and report
+the stable external id and canonical URL. A tracker write that fails never fails
+the group: report the uncertainty and continue the Git and validation gates,
+which are the authoritative evidence.
+
+## 3. Prepare isolation and preflight
 
 Resolve the base commit with `git rev-parse <base-branch>`. Before creating a
 group worktree, inspect `git worktree list --porcelain`, the branch ref, and
@@ -68,7 +112,7 @@ non-target worktrees; it also verifies exact validation references. On a
 malformed packet, nonzero result, or malformed envelope, stop without launching
 workers.
 
-## 3. Run the selected native workflow
+## 4. Run the selected native workflow
 
 Use exactly one provider-native route for the preflight envelope:
 
@@ -98,7 +142,7 @@ worker processes. Claude Workflow agents are instructed to be read-only during
 review, but their authoritative Git/scope check happens after the native
 workflow returns; do not claim identical inter-stage assurance.
 
-## 4. Finalize authoritatively
+## 5. Finalize authoritatively
 
 Invoke the shared finalizer even when the provider result failed, so it can
 report unintended Git mutations:
@@ -121,23 +165,27 @@ events, command output, environment values, and credentials. If diagnostics are
 needed, rerun the already-confirmed command interactively and report that
 separately.
 
-## 5. Commit, report, and recover
+## 6. Commit, report, and recover
 
 The native workflow and finalizer never commit or make an external provider
 operation. After a passing final result, commit each group's work on its own
-branch. Pushing, pull requests, tracker updates, merges, releases, deployments,
-and other external writes each need separately named approval.
+branch. The group's work item stays in progress; do not advance or close it.
+Pushing, pull requests, merges, releases, deployments, any further work-item
+state, and other external writes each need separately named approval.
 
 Summarize the safe final result and Git evidence per group: branch, HEAD,
-provider outcome, review/fix outcome, configured-validation outcome, and any
-remaining failure. `groups_passed` means execution gates passed; it never means
-the independently produced branches were integrated. Whole-phase/integration
-validation needs a separately authorized integration step.
+provider outcome, review/fix outcome, configured-validation outcome, work-item
+id and URL, and any remaining failure. `groups_passed` means execution gates
+passed; it never means the independently produced branches were integrated, and
+it never means a work item is done. Whole-phase/integration validation needs a
+separately authorized integration step.
 
 There is no ADW-owned durable workflow state or `resumeFromRunId`. Claude may
 resume a paused native Workflow only within the same interactive session. After
 an interruption across sessions, use `adw:status`, inspect Git branches and
-worktrees, derive a fresh packet, and obtain fresh confirmation.
+worktrees, search the tracker for items carrying this change's idempotency
+marker, derive a fresh packet, and obtain fresh confirmation. Existing items are
+evidence about a prior run, never authorization to continue it.
 
 For cleanup, give the user the exact `git worktree remove <worktree>` and
 `git branch -d <branch>` commands to run after merge or abandonment. ADW never

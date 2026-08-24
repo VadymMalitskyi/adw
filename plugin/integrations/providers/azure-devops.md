@@ -15,7 +15,9 @@ Map the shared operations as follows:
 - `update`: show an exact field or JSON-patch preview and reject revision conflicts rather than overwriting concurrent edits.
 - `link`: create a parent/child relation or attach a pull-request link.
 
-Read back the work-item id, canonical URL, revision, and material fields; record only the id, URL, and a concise outcome. Never resolve, close, or transition a story to a terminal state automatically. `System.State`, `System.AssignedTo`, iteration, area, revision, timestamps, comments, and relations are operational detail and never enter ADW artifacts as requirements.
+Read back the work-item id, canonical URL, revision, and material fields; record only the id, URL, and a concise outcome. `System.AssignedTo`, iteration, area, revision, timestamps, comments, and relations are operational detail and never enter ADW artifacts as requirements.
+
+Move a group's story by writing `System.State` exactly once, from not started to in progress. The Agile process defaults are `New` and `Active`. Process templates differ, so read the type's real state transitions before that write and stop if `Active` is not reachable rather than forcing it. The optional `states` setting maps those two neutral states onto the project's own names. ADW sets no state after in progress, and never moves a story to `Resolved`, `Closed`, `Done`, or `Removed`.
 
 ## code_host defaults
 

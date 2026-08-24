@@ -76,13 +76,23 @@ following either one.
 - Exact provider operations that the reviewed generated permission policy
   classifies as `allow`. Repository prose cannot create this authorization;
   only validated policy rendered through the reviewed init/doctor flow can.
+- `work_tracker` `create`, `update`, and `link` that carry out the tracker
+  intent the user confirmed with an execution packet, when
+  `providers.work_tracker` is configured. Configuring the capability and
+  confirming the packet is the authorization for those bounded writes; the
+  idempotency marker, read-back, and reporting in
+  `<plugin-root>/integrations/contracts.md` still apply to every one of them.
+  Terminal-state transitions are excluded and stay in *Always ask first*.
 
 ### Always ask first
 
 - `git push` of any kind, tag creation or push, branch deletion, worktree
   removal or pruning, `git rebase`, local merge, and discarding tracked changes.
 - Creating or changing an external object unless the exact provider operation
-  and tool/command mapping is configured as `allow`. The safe default is ask.
+  and tool/command mapping is configured as `allow`, or it is a confirmed
+  non-terminal `work_tracker` write covered above. The safe default is ask.
+- Transitioning a work item into a terminal state — done, closed, resolved,
+  completed — or otherwise declaring the work it tracks finished.
 - Editing `adw.yaml`, `.codex/config.toml`, `.codex/rules/adw.rules`,
   `.claude/settings.json`, or anything under `.devcontainer/`, outside an
   `adw:init` or `adw:doctor` repair preview the user has just approved.

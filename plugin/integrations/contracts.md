@@ -56,7 +56,7 @@ ADW never merges, marks ready, approves, releases, deploys, or force-pushes in e
 
 ## Before every approval-gated external write
 
-External reads need no write authorization but must stay within the configured capability scope. An exact operation/tool mapping may classify a bounded write as `allow`; otherwise writes default to `ask`. Before every mutation classified as `ask`, or one clearly enumerated batch:
+External reads need no write authorization but must stay within the configured capability scope. An exact operation/tool mapping may classify a bounded write as `allow`; a non-terminal `work_tracker` write carrying out a confirmed execution packet's tracker intent is likewise `allow`; otherwise writes default to `ask`. Steps 4, 6, and 7 below apply to every write, including the `allow` ones. Before every mutation classified as `ask`, or one clearly enumerated batch:
 
 1. Read the current target and check capability, provider, transport, identity, repository/project, and permissions.
 2. Present the exact provider, target, operation, and redacted payload. Explain material effects and whether a retry could duplicate anything.
@@ -71,6 +71,6 @@ There is no receipt artifact and no run record. The provider's own object, the G
 ## Capability boundaries
 
 - Planning may read configured context. It may create or link a tracker parent only after separate mutation authorization.
-- A user confirming a plan authorizes execution. It never authorizes an external write; each of those is asked for separately when it happens.
-- Execution may read configured context and propose writes. Each write is separately authorized unless the exact generated operation policy says `allow`. Observability writes additionally require `access: read-write`.
+- A user confirming a plan authorizes execution. It never authorizes an external write, except the non-terminal `work_tracker` writes that carry out the tracker intent restated in the confirmed execution packet.
+- Execution may read configured context and propose writes. Each write is separately authorized unless the exact generated operation policy says `allow` or it is a confirmed non-terminal `work_tracker` write. Observability writes additionally require `access: read-write`.
 - Never close a work item, mark a pull request ready, approve or merge it, deploy, release, publish a package, change a monitor, or send a notification.
