@@ -2,3 +2,5 @@ interface:
   display_name: "ADW Review Plan"
   short_description: "Red-team a plan before execution"
   default_prompt: "Use $review-plan to independently review this implementation plan."
+policy:
+  allow_implicit_invocation: false

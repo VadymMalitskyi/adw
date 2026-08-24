@@ -2,3 +2,5 @@ interface:
   display_name: "ADW Plan"
   short_description: "Plan a repository-grounded change"
   default_prompt: "Use $plan to write and red-team an implementation plan for this change."
+policy:
+  allow_implicit_invocation: false

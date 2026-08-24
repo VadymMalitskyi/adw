@@ -446,30 +446,25 @@ export function planInitialization(directory, rawAnswers = {}) {
     files.push({ path, before, after, action });
   };
 
-  const explicitPolicy = answers.baseBranch !== undefined
-    || answers.docsExplicit
-    || answers.components !== undefined
-    || execution.isolation !== "provider-sandbox"
-    || answers.web_access !== undefined && answers.web_access !== "public-pages"
-    || Object.keys(answers.runtime_versions ?? {}).length > 0
-    || Object.keys(answers.providers ?? {}).length > 0;
   if (existsSync(join(projectRoot, "adw.yaml"))) {
     throw new ContractError("adw.yaml already exists; edit the shared project policy deliberately, then run adw:doctor for generated-file repair");
   }
-  if (explicitPolicy) {
-    add("adw.yaml", renderProjectConfig({
-      baseBranch,
-      docs: answers.docs,
-      isolation: execution.isolation,
-      webAccess: answers.webAccess,
-      runtimeVersions: answers.runtimeVersions,
-      components: answers.components ?? components,
-      providers: answers.providers,
-      includeGit: answers.baseBranch !== undefined,
-      includeDocs: answers.docsExplicit,
-      includeComponents: answers.components !== undefined,
-    }), "create-project-policy");
-  }
+  // This file is both the shared policy and the durable activation marker.
+  // Even a project that uses only inferred defaults needs the minimal
+  // `adw: 1` contract so an installed plugin cannot mistake an arbitrary
+  // repository for an initialized ADW project.
+  add("adw.yaml", renderProjectConfig({
+    baseBranch,
+    docs: answers.docs,
+    isolation: execution.isolation,
+    webAccess: answers.webAccess,
+    runtimeVersions: answers.runtimeVersions,
+    components: answers.components ?? components,
+    providers: answers.providers,
+    includeGit: answers.baseBranch !== undefined,
+    includeDocs: answers.docsExplicit,
+    includeComponents: answers.components !== undefined,
+  }), "create-project-policy");
 
   for (const file of permissionProjectFiles((path) => readOrEmpty(projectRoot, path))) {
     const before = readOrEmpty(projectRoot, file.path);

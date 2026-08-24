@@ -1,6 +1,7 @@
 ---
 name: onboard
 description: Orient a contributor in an already-initialized ADW project — verify the plugin, diagnose readiness, enter the configured container, and authenticate the configured provider tools. Use when someone joins a project, starts from a fresh clone, or changes machines.
+disable-model-invocation: true
 ---
 
 # Onboard a contributor

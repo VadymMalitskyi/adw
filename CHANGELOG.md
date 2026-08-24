@@ -4,6 +4,15 @@ All notable changes to this private plugin are documented here.
 
 ## Unreleased
 
+### ADW activation is explicit
+
+- Codex and Claude can no longer invoke ADW skills implicitly. Installing the
+  plugin leaves ordinary agent requests on the agent's normal workflow until a
+  person explicitly invokes an ADW skill.
+- `adw:init` now always creates `adw.yaml`, with `adw: 1` as the minimal
+  contract. Every other ADW workflow requires that committed activation marker
+  and stops with an initialization instruction when it is absent.
+
 ### Managed development is now the recommended default
 
 - `adw:init` now creates a managed devcontainer by default. It preserves an

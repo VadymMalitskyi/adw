@@ -1,6 +1,7 @@
 ---
 name: init
 description: Initialize ADW in any repository state — an empty directory, an unborn Git repository, or an established project — through a guided setup interview that recommends evidence-based choices, previews exact files, then writes them after explicit approval. Use when adopting ADW in a project for the first time.
+disable-model-invocation: true
 ---
 
 # Initialize ADW
@@ -20,10 +21,9 @@ Resolve the target directory. `adw init-preview` classifies it as one of:
 - `unborn-repository` — a Git repository with no commits.
 - `established` — at least one commit.
 
-If the target already has `adw.yaml`, stop: it has an explicit shared policy.
-Point at `adw:doctor` for diagnosis and managed-file repair, or a deliberate
-policy edit. A project without that file can still be initialized; generated
-permission files and the managed-container marker establish the local setup.
+If the target already has `adw.yaml`, stop: ADW is already activated and the
+file is its shared project contract. Point at `adw:doctor` for diagnosis and
+managed-file repair, or a deliberate policy edit.
 
 Read enough of the repository to answer the questions below honestly: the
 manifests, lockfiles, `README`, and existing `.devcontainer/`. Do not write
@@ -115,9 +115,9 @@ with the answers as JSON on stdin:
 
 Every field is optional. Omit `base_branch` to use the detected/default Git
 base branch, omit `docs` to use the default documentation branch and worktree,
-and omit `components` to use detected components as planning
-evidence. Init writes `adw.yaml` only when the approved answers introduce a
-shared policy or override; it does not persist discovery as configuration.
+and omit `components` to use detected components as planning evidence. Init
+always writes `adw.yaml`; without shared overrides it contains only the minimal
+`adw: 1` activation contract and does not persist discovery as configuration.
 
 Present to the user:
 

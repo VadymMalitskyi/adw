@@ -1,6 +1,7 @@
 ---
 name: sync-docs
 description: Audit and reconcile the documentation branch with meaningful repository changes. Use after substantial implementation work, before a release or handoff, when docs may be stale, or when the user asks to update documentation from recent code, configuration, CI, or interface changes.
+disable-model-invocation: true
 ---
 
 # Synchronize project documentation

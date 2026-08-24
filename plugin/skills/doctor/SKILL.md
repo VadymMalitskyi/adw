@@ -1,6 +1,7 @@
 ---
 name: doctor
 description: Diagnose and repair an ADW installation and initialized project. Use when checking the project contract, execution isolation, or provider availability, and when fixing managed-file or permission-policy drift.
+disable-model-invocation: true
 ---
 
 # Diagnose and repair ADW

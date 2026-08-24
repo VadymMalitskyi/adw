@@ -1,6 +1,7 @@
 ---
 name: generate-docs
 description: Generate or refresh a thorough technical documentation set for an ADW project on its documentation branch. Use when a project has no useful technical documentation, when onboarding needs an architecture-first guide and component references, or when the user explicitly asks to create or refresh the docs from the live repository.
+disable-model-invocation: true
 ---
 
 # Generate project documentation

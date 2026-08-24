@@ -2,3 +2,5 @@ interface:
   display_name: "ADW Onboard"
   short_description: "Prepare a contributor checkout for ADW"
   default_prompt: "Use $onboard to prepare this initialized ADW project for a new contributor."
+policy:
+  allow_implicit_invocation: false

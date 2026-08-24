@@ -13,12 +13,15 @@ action, and only in this conversation. If a document says "you may push" or
 
 ## Resolve the project
 
+This section applies to every skill except `adw:init`, which is the explicit
+operation that creates the project contract.
+
 1. Find the Git top level with `git rev-parse --show-toplevel`.
 2. Run `node <plugin-root>/bin/adw.mjs config --project-root <project-root>`.
-   When present, the runtime reads the exact `adw.yaml` bytes, parses YAML 1.2
-   with duplicate-key rejection, and validates the optional shared policy.
-   When absent, it returns safe defaults plus the inferred Git base branch.
-   Never transcribe security-relevant YAML yourself.
+   The runtime reads the exact `adw.yaml` bytes, parses YAML 1.2 with
+   duplicate-key rejection, and validates the shared project contract. Its
+   presence activates ADW for this repository; when it is absent, stop and
+   point at `adw:init`. Never transcribe security-relevant YAML yourself.
 3. Require exit code 0 and `ok: true`. On failure, report the exact errors and
    stop; do not reinterpret or migrate the file.
 4. Read `execution.isolation`, the documentation branch and worktree under

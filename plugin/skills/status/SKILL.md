@@ -1,6 +1,7 @@
 ---
 name: status
 description: Reconstruct ADW workflow state from Git, worktrees, and configured provider reads without modifying anything. Use when picking up work in a new session, or when reviewing active branches, prepared group worktrees, and open pull requests.
+disable-model-invocation: true
 ---
 
 # Reconstruct status
@@ -13,10 +14,10 @@ there.
 
 ## 1. Project
 
-Run `adw config`. Report whether values come from an explicit project policy or
-defaults, then the base branch, configured isolation, component overrides with
-validation commands, and declared providers. A missing `adw.yaml` is valid; an
-invalid present file is a blocker.
+Run `adw config`. Require the committed `adw.yaml` activation marker, then
+report the base branch, configured isolation, component overrides with
+validation commands, and declared providers. A missing or invalid file is a
+blocker; point a missing file at `adw:init`.
 
 ## 2. Git
 

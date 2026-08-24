@@ -2,3 +2,5 @@ interface:
   display_name: "ADW Status"
   short_description: "Reconstruct workflow state from Git and providers"
   default_prompt: "Use $status to show what ADW work is in flight."
+policy:
+  allow_implicit_invocation: false

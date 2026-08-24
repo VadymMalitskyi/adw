@@ -75,11 +75,12 @@ function parseSkillFrontmatter(name, source) {
     metadata[key] = rawValue.replace(/^(?:"([\s\S]*)"|'([\s\S]*)')$/, (_, double, single) => double ?? single);
   }
 
-  assert.deepEqual(Object.keys(metadata).sort(), ["description", "name"], `${name}: skills use only the portable name and description frontmatter fields`);
+  assert.deepEqual(Object.keys(metadata).sort(), ["description", "disable-model-invocation", "name"], `${name}: skills must declare the shared metadata plus Claude's explicit-only policy`);
   assert.match(metadata.name, /^[a-z0-9]+(?:-[a-z0-9]+)*$/, `${name}: invalid skill name`);
   assert.ok(metadata.name.length <= 64, `${name}: skill name exceeds 64 characters`);
   assert.ok(metadata.description.length > 0 && metadata.description.length <= 1024, `${name}: invalid description length`);
   assert.doesNotMatch(metadata.description, /[<>]/, `${name}: description must not contain angle brackets`);
+  assert.equal(metadata["disable-model-invocation"], "true", `${name}: Claude must never invoke ADW implicitly`);
   return metadata;
 }
 
@@ -87,6 +88,9 @@ function parseOpenAiMetadata(name, source) {
   assert.doesNotMatch(source, /\t/, `${name}: agents/openai.yaml must not contain tabs`);
   const lines = source.trimEnd().split("\n");
   assert.equal(lines.shift(), "interface:", `${name}: openai metadata must contain an interface mapping`);
+  assert.equal(lines.at(-2), "policy:", `${name}: openai metadata must contain an invocation policy`);
+  assert.equal(lines.at(-1), "  allow_implicit_invocation: false", `${name}: Codex must never invoke ADW implicitly`);
+  lines.splice(-2);
   const values = {};
   for (const [index, line] of lines.entries()) {
     const match = /^ {2}([a-z][a-z0-9_]*): "([^"\n]+)"$/.exec(line);

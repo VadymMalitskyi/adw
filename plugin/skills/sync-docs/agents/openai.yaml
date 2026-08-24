@@ -2,3 +2,5 @@ interface:
   display_name: "Sync Docs"
   short_description: "Detect and safely reconcile documentation drift"
   default_prompt: "Use $sync-docs to audit and update this project documentation after recent changes."
+policy:
+  allow_implicit_invocation: false

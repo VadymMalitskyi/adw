@@ -1,6 +1,7 @@
 ---
 name: execute
 description: Carry out a confirmed plan phase through ADW's deterministic native-provider workflow, Git gates, configured validation, and a coordinator-owned summary.
+disable-model-invocation: true
 ---
 
 # Execute a phase

@@ -175,15 +175,16 @@ test("each kind of drift fails its own check and exits 5", async (t) => {
   }
 });
 
-test("doctor accepts an absent policy but stops for an invalid present policy", async (t) => {
+test("doctor requires the activation contract and stops for invalid policy", async (t) => {
   await t.test("a missing adw.yaml", () => {
     const root = managedProject("adw-doctor-missing-config-");
     rmSync(join(root, "adw.yaml"));
 
     const result = doctor(root, { env: { ADW_MANAGED_DEVCONTAINER: "1" } });
-    assert.equal(result.status, 0);
-    assert.equal(result.statusOf("project-contract"), "pass");
-    assert.equal(result.report.isolation, "managed-devcontainer");
+    assert.equal(result.status, EXIT_CHECK_FAILED);
+    assert.equal(result.statusOf("project-contract"), "fail");
+    assert.equal(result.report.isolation, null);
+    assert.match(result.report.checks.find(({ id }) => id === "project-contract").summary, /run adw:init/);
   });
 
   await t.test("an adw.yaml that does not match the contract", () => {

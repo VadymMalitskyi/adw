@@ -39,10 +39,12 @@ Interrupt anything and start a new session. State is reconstructed from Git bran
 
 ## Project configuration
 
-`adw.yaml` is an optional shared project-policy file. Omit it when safe defaults
-and repository discovery are enough; add it only for shared isolation, provider,
-network, runtime, or component-validation overrides. Unknown keys are rejected,
-not ignored, so a stale field is a loud error instead of a silent no-op.
+`adw.yaml` is the committed ADW activation marker and shared project-policy
+file. `adw:init` always creates it; when repository discovery and safe defaults
+are sufficient, it contains only `adw: 1`. Additional fields are needed only
+for shared isolation, provider, network, runtime, or component-validation
+overrides. Unknown keys are rejected, not ignored, so a stale field is a loud
+error instead of a silent no-op.
 
 ```yaml
 adw: 1
@@ -85,6 +87,10 @@ providers: {}                   # work_tracker | code_host | observability | kno
 During `adw:init`, a project with no existing devcontainer defaults to the hardened `managed-devcontainer`; an existing project-owned devcontainer is preserved instead. Choose `provider-sandbox` explicitly when its lighter boundary is appropriate.
 
 ## Skills
+
+ADW skills are explicit-only. Installing the plugin does not let Codex or
+Claude select an ADW workflow from an ordinary request; invoke the namespaced
+skill deliberately when you want ADW.
 
 | Group | Skills |
 |---|---|

@@ -131,10 +131,10 @@ Group worktrees conventionally live under ignored `worktrees/<change-id>/<group-
 `adw:status` reconstructs the current picture from Git, the worktrees, and configured read-only provider queries: which branches exist, their commits since the base branch, what is dirty, which pull requests are open, and what the next action is. It reads no ADW-maintained record file, because there is none.
 
 `adw:doctor` first runs deterministic checks read-only — plugin manifests agree,
-an explicit `adw.yaml` matches the optional `adw: 1` policy contract, component
-overrides are unambiguous, the permission policy is present and current, the
-configured or detected isolation is active, and `worktrees/` is ignored. It
-classifies failures, previews exact repairs for ADW-managed files, applies only
+the required `adw.yaml` matches the `adw: 1` activation and policy contract,
+component overrides are unambiguous, the permission policy is present and
+current, the configured or detected isolation is active, and `worktrees/` is
+ignored. It classifies failures, previews exact repairs for ADW-managed files, applies only
 the paths the user approves through the fingerprint-bound refresh commands, and
 reruns the checks. It never repairs `adw.yaml`, application code, credentials,
 or a project-owned container. Live provider availability and authentication

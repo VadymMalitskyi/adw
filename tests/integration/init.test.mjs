@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import test from "node:test";
@@ -77,7 +77,8 @@ test("an empty directory becomes a Git repository with the ADW file set and noth
 
   const { applied } = initialize(root, { isolation: "provider-sandbox" });
   assert.equal(applied.applied, true);
-  assert.deepEqual(applied.writes.map(({ path }) => path).sort(), [".gitignore", ...PERMISSION_FILES].sort());
+  assert.deepEqual(applied.writes.map(({ path }) => path).sort(), [".gitignore", "adw.yaml", ...PERMISSION_FILES].sort());
+  assert.equal(readFileSync(join(root, "adw.yaml"), "utf8"), "# ADW project policy. Omit a setting to use repository discovery or ADW's safe default.\nadw: 1\n");
   assert.equal(git(root, ["symbolic-ref", "--short", "HEAD"]).stdout, "main");
   // Initialization writes files; it never commits them.
   assert.notEqual(git(root, ["status", "--porcelain"]).stdout, "");
@@ -94,7 +95,7 @@ test("an unborn repository is initialized without inventing a commit", () => {
   assert.equal(preview.repository.state, "unborn-repository");
   assert.equal(preview.repository.git_init, false);
   assert.equal(applied.repository.base_branch, "trunk");
-  assert.equal(existsSync(join(root, "adw.yaml")), false);
+  assert.equal(existsSync(join(root, "adw.yaml")), true);
 });
 
 test("initializing a directory that has unversioned content is refused", () => {
@@ -181,7 +182,7 @@ test("a monorepo reports discovered component evidence without persisting it as 
   const root = fromFixture("monorepo");
   const { preview } = initialize(root, { isolation: "provider-sandbox" });
   assert.ok(preview.components.length > 1, JSON.stringify(preview.components));
-  assert.equal(existsSync(join(root, "adw.yaml")), false);
+  assert.equal(readFileSync(join(root, "adw.yaml"), "utf8").includes("components:"), false);
   assert.ok(preview.components.some(({ path }) => path === "apps/web"));
   assert.ok(preview.components.some(({ path }) => path === "services/api"));
 });
@@ -203,12 +204,12 @@ test("apply refuses a fingerprint that does not match the reviewed preview", () 
   assert.equal(existsSync(join(root, ".devcontainer")), false);
 });
 
-test("initialization is idempotent for a default-policy project", () => {
+test("the activation marker prevents reinitializing an ADW project", () => {
   const root = commitRepository(scratch("repeat"));
   initialize(root, { isolation: "provider-sandbox" });
   const again = run("init-preview", root, { isolation: "provider-sandbox" });
-  assert.equal(again.status, 0, JSON.stringify(again.body));
-  assert.equal(again.body.writes.length, 0);
+  assert.equal(again.status, 3, JSON.stringify(again.body));
+  assert.match(again.body.error.message, /adw\.yaml already exists/);
 });
 
 test("a symlinked managed target is refused rather than written through", () => {
@@ -298,13 +299,28 @@ test("initialization creates the worktrees directory and attaches the documentat
   assert.equal(git(root, ["status", "--porcelain", "--untracked-files=all"]).stdout.includes("worktrees/"), false);
 });
 
-test("a second initialization neither recreates the documentation branch nor reattaches its worktree", () => {
+test("a refused second initialization leaves the documentation branch and worktree untouched", () => {
   const root = commitRepository(scratch("docs-idempotent"));
   initialize(root, { isolation: "provider-sandbox" });
   const head = git(root, ["rev-parse", "docs"]).stdout;
 
-  const again = initialize(root, { isolation: "provider-sandbox" });
-  assert.deepEqual(again.preview.docs, { branch: "docs", worktree: "worktrees/docs", branch_action: "existing", worktree_action: "already-attached" });
+  const again = run("init-preview", root, { isolation: "provider-sandbox" });
+  assert.equal(again.status, 3);
+  assert.match(again.body.error.message, /adw\.yaml already exists/);
+  assert.equal(git(root, ["rev-parse", "docs"]).stdout, head);
+  assert.equal(git(root, ["rev-list", "--count", "docs"]).stdout, "1");
+});
+
+test("a legacy default-policy project can acquire the activation marker without recreating documentation", () => {
+  const root = commitRepository(scratch("legacy-marker"));
+  initialize(root, { isolation: "provider-sandbox" });
+  const head = git(root, ["rev-parse", "docs"]).stdout;
+  rmSync(join(root, "adw.yaml"));
+
+  const migrated = initialize(root, { isolation: "provider-sandbox" });
+  assert.deepEqual(migrated.preview.docs, { branch: "docs", worktree: "worktrees/docs", branch_action: "existing", worktree_action: "already-attached" });
+  assert.deepEqual(migrated.applied.writes.map(({ path }) => path), ["adw.yaml"]);
+  assert.match(readFileSync(join(root, "adw.yaml"), "utf8"), /^# ADW project policy[\s\S]*\nadw: 1\n$/);
   assert.equal(git(root, ["rev-parse", "docs"]).stdout, head);
   assert.equal(git(root, ["rev-list", "--count", "docs"]).stdout, "1");
 });

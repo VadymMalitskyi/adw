@@ -1,6 +1,7 @@
 ---
 name: brainstorm
 description: Facilitate a rigorous, interactive discovery conversation for an early product, engineering, or process idea. Use when the user has an uncertain idea and wants probing questions, challenged assumptions, alternative directions, and a decision-ready brief before invoking adw:plan. Do not use when the user has already chosen a direction and asks for an implementation plan.
+disable-model-invocation: true
 ---
 
 # Brainstorm an idea

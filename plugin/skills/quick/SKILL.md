@@ -1,6 +1,7 @@
 ---
 name: quick
 description: Implement a genuinely small, low-risk change on exactly one branch with focused tests, whole-diff review, and real validation. Use when the user explicitly asks for a quick change that needs no plan.
+disable-model-invocation: true
 ---
 
 # Make a quick change

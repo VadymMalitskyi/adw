@@ -36,8 +36,8 @@ If this is an existing ADW project, do these in order:
    anything uncertain, multi-part, or consequential.
 
 If you are setting ADW up for a project for the first time, begin with
-`adw:init` instead. Do not rerun init merely because you cannot find an
-`adw.yaml`; that file is optional.
+`adw:init` instead. A committed `adw.yaml` marks an initialized ADW project;
+if it is missing, normal ADW skills stop and direct you to init.
 
 ### Jump to the part you need
 
@@ -178,12 +178,13 @@ When you are unsure which route to use, answer these in order:
 Only four confident “yes” answers make `quick` a good fit. Choosing `plan`
 when you are uncertain is normal; it is not an escalation or a failure.
 
-## Optional project policy: `adw.yaml`
+## Project activation and policy: `adw.yaml`
 
-`adw.yaml` is optional. Use it for a small, committed shared policy when a
-project needs to constrain isolation, integrations, network access, runtimes,
-or an exceptional component/validation override. Otherwise ADW uses safe
-defaults and repository evidence.
+`adw.yaml` is the small, committed activation contract. The minimal file
+contains only `adw: 1`. Add policy fields when a project needs to constrain
+isolation, integrations, network access, runtimes, or an exceptional
+component/validation override; omitted settings still use safe defaults and
+repository evidence.
 
 ```yaml
 adw: 1

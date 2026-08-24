@@ -271,7 +271,7 @@ export async function runDoctor(directory, { details = false, checks: selection 
     let config;
     try { config = await loadProjectConfig(projectRoot); }
     catch (error) { return { ok: false, read_only: true, project_root: projectRoot, checks: [check("permissions:configuration", "fail", error.message)] }; }
-    if (!config.valid) return { ok: false, read_only: true, project_root: projectRoot, checks: [check("permissions:configuration", "fail", "adw.yaml does not match the project policy contract", { errors: config.errors })] };
+    if (!config.valid) return { ok: false, read_only: true, project_root: projectRoot, checks: [check("permissions:configuration", "fail", config.source === "missing" ? "adw.yaml is missing; run adw:init to activate ADW for this project" : "adw.yaml does not match the project policy contract", { errors: config.errors })] };
     const checks = permissionChecks(projectRoot, config.data.permissions);
     return { ok: !checks.some(({ status }) => status === "fail"), read_only: true, project_root: projectRoot, checks };
   }
@@ -290,7 +290,7 @@ export async function runDoctor(directory, { details = false, checks: selection 
     checks.push(check("project-contract", "fail", error.message));
     return { ok: false, read_only: true, project_root: projectRoot, isolation: null, checks };
   }
-  checks.push(check("project-contract", config.valid ? "pass" : "fail", config.valid ? (config.source === "defaults" ? "no adw.yaml; using repository discovery and ADW defaults" : "adw.yaml matches the adw: 1 project policy contract") : "adw.yaml does not match the adw: 1 project policy contract", config.valid ? { source: config.source } : { errors: config.errors }));
+  checks.push(check("project-contract", config.valid ? "pass" : "fail", config.valid ? "adw.yaml activates ADW and matches the adw: 1 project policy contract" : config.source === "missing" ? "adw.yaml is missing; run adw:init to activate ADW for this project" : "adw.yaml does not match the adw: 1 project policy contract", config.valid ? { source: config.source } : { errors: config.errors }));
   if (!config.valid) return { ok: false, read_only: true, project_root: projectRoot, isolation: null, checks };
 
   const project = config.data;

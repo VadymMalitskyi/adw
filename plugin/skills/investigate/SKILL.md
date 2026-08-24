@@ -1,6 +1,7 @@
 ---
 name: investigate
 description: Investigate an operational alert against configured observability evidence and repository code without changing either, producing a severity assessment, likely cause, and a safe remediation proposal. Use when a monitor, incident, error spike, trace, or log signal needs analysis.
+disable-model-invocation: true
 ---
 
 # Investigate an alert

@@ -2,3 +2,5 @@ interface:
   display_name: "ADW Doctor"
   short_description: "Diagnose and repair an ADW project"
   default_prompt: "Use $doctor to check this project's ADW setup and repair ADW-managed drift after approval."
+policy:
+  allow_implicit_invocation: false

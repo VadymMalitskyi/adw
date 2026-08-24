@@ -1,6 +1,7 @@
 ---
 name: review-plan
 description: Independently red-team an implementation plan against live repository code and return a verdict of ship-ready, revise-recommended, or needs-rework with the weakest point and ranked findings. Use when a plan needs a cold second opinion before execution, or when adw:plan requests its review pass.
+disable-model-invocation: true
 ---
 
 # Review a plan

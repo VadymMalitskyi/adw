@@ -356,7 +356,8 @@ test("the loader reads and validates the project file itself", async () => {
   assert.equal(rejected.valid, false);
   assert.ok(rejected.errors.some(({ path }) => path === "/git/branch_template"));
 
-  const defaults = await loadProjectConfig(directory, "missing.yaml");
-  assert.equal(defaults.valid, true);
-  assert.equal(defaults.source, "defaults");
+  const missing = await loadProjectConfig(directory, "missing.yaml");
+  assert.equal(missing.valid, false);
+  assert.equal(missing.source, "missing");
+  assert.match(missing.errors[0].message, /run adw:init/);
 });

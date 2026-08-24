@@ -1,6 +1,7 @@
 ---
 name: address-review
 description: Classify and address pull-request review feedback on an existing branch, applying in-scope corrections and routing design changes back to planning. Use when the user asks to handle review comments on an ADW pull request.
+disable-model-invocation: true
 ---
 
 # Address review feedback

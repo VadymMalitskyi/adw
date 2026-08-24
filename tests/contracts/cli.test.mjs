@@ -75,10 +75,11 @@ test("every command answers with one JSON object on stdout", () => {
 test("exit codes are stable and distinguish input, contract, and check failures", () => {
   const root = project();
 
-  // No shared policy is a valid default-policy project.
-  const defaults = invoke(["config", "--project-root", root]);
-  assert.equal(defaults.status, EXIT.OK);
-  assert.equal(JSON.parse(defaults.stdout).config_source, "defaults");
+  // An ordinary repository is not implicitly treated as an ADW project.
+  const missing = invoke(["config", "--project-root", root]);
+  assert.equal(missing.status, EXIT.CONTRACT_INVALID);
+  assert.equal(JSON.parse(missing.stdout).config_source, "missing");
+  assert.match(JSON.parse(missing.stdout).errors[0].message, /run adw:init/);
 
   // Missing required argument.
   assert.equal(invoke(["config"]).status, EXIT.INPUT);

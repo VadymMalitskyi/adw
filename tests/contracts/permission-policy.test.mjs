@@ -358,10 +358,11 @@ test("the permissions gate fails closed on drifted policy without inspecting the
   const root = mkdtempSync(join(tmpdir(), "adw-permission-gate-"));
   const cliRun = () => spawnSync(process.execPath, [cli, "doctor", "--checks", "permissions", "--project-root", root], { encoding: "utf8" });
 
-  // A directory with nothing but policy files: no Git repository, no adw.yaml,
-  // no container. The gate must still reach a verdict.
+  // Without the activation marker, the gate must fail before accepting policy
+  // files in an arbitrary directory.
   assert.deepEqual(permissionChecks(root).map(({ id, status }) => [id, status]), [["permissions:configuration", "fail"]]);
 
+  writeFileSync(join(root, "adw.yaml"), "adw: 1\n");
   for (const file of permissionProjectFiles()) {
     mkdirSync(join(root, dirname(file.path)), { recursive: true });
     writeFileSync(join(root, file.path), file.content);

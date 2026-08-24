@@ -2,3 +2,5 @@ interface:
   display_name: "ADW Execute"
   short_description: "Carry out one phase of a confirmed plan"
   default_prompt: "Use $execute to carry out one phase of the confirmed plan in isolated worktrees."
+policy:
+  allow_implicit_invocation: false

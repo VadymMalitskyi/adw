@@ -51,9 +51,8 @@ export function defaultProjectConfig(baseBranch = "main") {
   };
 }
 
-// A missing project policy is intentional. Git remains the source of truth for
-// its default branch, so ADW derives it instead of requiring every repository
-// to repeat it in YAML.
+// Git remains the source of truth for values omitted from the project policy,
+// so ADW derives them instead of requiring every repository to repeat them.
 function inferredBaseBranch(projectRoot) {
   const git = (args) => spawnSync("git", args, { cwd: projectRoot, encoding: "utf8", env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } });
   const remote = git(["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]);
@@ -358,9 +357,9 @@ export async function loadProjectConfig(projectRoot, path = "adw.yaml") {
     data.execution = inferredExecution(projectRoot);
     return {
       data,
-      valid: true,
-      errors: [],
-      source: "defaults",
+      valid: false,
+      errors: [{ path: "/", message: `${path} is required; run adw:init to activate ADW for this project` }],
+      source: "missing",
     };
   }
   const raw = parseYaml(bytes, path);
