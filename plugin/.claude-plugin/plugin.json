@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "adw",
   "displayName": "ADW",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Git-native development workflows with optional work-tracker, code-host, observability, and knowledge integrations.",
   "author": {
     "name": "ADW maintainers"
