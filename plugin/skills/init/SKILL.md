@@ -7,15 +7,14 @@ description: Initialize ADW in any repository state — an empty directory, an u
 
 One skill covers every repository state. Detect what the repository proves,
 present it as a recommendation, ask the user to confirm or change each setup
-area, show the exact bytes, then write them after the user approves.
+area, show the exact bytes, then write them after approval.
 
 Read `<plugin-root>/authorization.md` first and follow it throughout. Resolve
 the plugin root as described there.
 
 ## 1. Understand the repository
 
-Resolve the target directory. `adw init-preview` classifies it for you as one
-of:
+Resolve the target directory. `adw init-preview` classifies it as one of:
 
 - `empty-directory` — no `.git` and no files. Apply will run `git init`.
 - `unborn-repository` — a Git repository with no commits.
@@ -35,9 +34,9 @@ anything yet and do not run project commands.
 Ask every topic below, even when repository evidence supplies a recommendation.
 Keep the interview compact: state the detected value, the recommended default,
 and the effect of changing it. Let the user accept the recommendation, choose
-another supported value, or say that they want no override recorded. Ask in
-short rounds and wait for the user's answer before moving on; do not dump the
-whole questionnaire into one message.
+another supported value, or record no override. Ask in short rounds and wait
+for the user's answer before moving on; do not dump the whole questionnaire
+into one message.
 
 1. **Base branch** — state the detected branch and ask whether ADW should use
    it. An explicit answer records `git.base_branch`; otherwise it stays Git
@@ -48,9 +47,9 @@ whole questionnaire into one message.
    `worktrees/docs`. Ask whether those names suit the project; an explicit
    answer records `docs.branch` and `docs.worktree`. The worktree path must
    stay under `worktrees/`, which ADW keeps ignored on the base branch.
-3. **Isolation** — Recommend `managed-devcontainer` by default: it provides a
-   generated, hardened, reproducible container with fail-closed egress. When
-   the repository already owns `.devcontainer/devcontainer.json`, recommend
+3. **Isolation** — Recommend `managed-devcontainer`: it provides a generated,
+   hardened, reproducible container with fail-closed egress. When the
+   repository already owns `.devcontainer/devcontainer.json`, recommend
    `project-devcontainer` instead so ADW preserves it. Offer
    `provider-sandbox` only when the user explicitly wants the lightweight,
    weaker boundary.
@@ -73,6 +72,13 @@ whole questionnaire into one message.
    configuration; keep every convention in existing repository-owned
    instructions or contributor documentation. Do not create or rewrite those
    files during init.
+9. **Code style** — ask whether the project wants a starting set of code-style
+   rules. Carry the answer, and anything the user said in topic 8, to the
+   post-apply offer in step 6; nothing about style is written during apply.
+   Skip the question entirely when the repository already answers it: an
+   existing style guide, populated instruction files, or a configured
+   formatter, linter, or type checker. A rule a configured tool already
+   enforces must never be offered.
 
 Do not ask about execution mode or plan templates.
 Repository instruction files own conventions that do not have an ADW setting.
@@ -155,7 +161,7 @@ and attaches the documentation branch. It commits nothing on the base branch,
 authenticates nothing, and contacts no external service. Say so, and name the
 documentation branch and worktree it created.
 
-Then give the concrete next steps:
+Then give the next steps:
 
 1. Review the generated files and commit them. Ask before committing, and never
    push.
@@ -170,6 +176,24 @@ Then give the concrete next steps:
    write the first plan into its `plans/` directory.
 6. Point at `adw:onboard` for anyone else joining the project.
 
+## 6. Offer the code-style rules
+
+Only when step 2 topic 9 established that the project wants them. This is a
+separate, deliberate change: it is not in the preview, not in the fingerprint,
+and not repaired by `adw:doctor`, because repository-owned instruction files
+belong to the project and are expected to change.
+
+Read `<plugin-root>/templates/code-style.md`. Present its rules as a menu the
+user picks from, one line each, grouped as the catalog groups them. Recommend
+the rules the repository has no tool for, and say which ones you left out
+because a configured formatter, linter, or type checker already enforces them.
+
+Then show the exact lines and the exact instruction file they would be appended
+to, and ask for approval. On approval, append them and stop. Never rewrite or
+reorder what the file already says, never create the file when the user did not
+approve one, and never commit. If the user declines, say where the catalog
+lives so they can take it later.
+
 ## Guarantees to keep
 
 - Preserve every byte the preview did not list. An existing project-owned
@@ -177,7 +201,8 @@ Then give the concrete next steps:
 - Never write credentials into `adw.yaml`, and refuse any answer that contains
   one.
 - Never generate speculative application code, architecture prose, project
-  contracts, or plan templates. The documentation branch is created empty apart
+  contracts, or plan templates. Code-style rules are not an exception: they are
+  offered from the catalog after apply, chosen by the user, and never invented. The documentation branch is created empty apart
   from a README describing what it holds; filling it is `adw:generate-docs`.
 - Never reuse an existing directory at the docs worktree path. If something is
   already there and is not an attached worktree, apply refuses.
