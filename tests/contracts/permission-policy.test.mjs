@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   CLAUDE_ALLOW,
+  CLAUDE_BASH_ALLOW,
   CLAUDE_ASK,
   CLAUDE_DENY,
   CODEX_RULES,
@@ -190,7 +191,9 @@ test("Claude policy uses sandbox-first Bash plus explicit external-write review"
   for (const rule of CLAUDE_ASK) assert.ok(merged.permissions.ask.includes(rule), `ask rule dropped: ${rule}`);
   for (const rule of CLAUDE_DENY) assert.ok(merged.permissions.deny.includes(rule), `deny rule dropped: ${rule}`);
   for (const rule of CLAUDE_ALLOW) assert.ok(merged.permissions.allow.includes(rule), `allow rule dropped: ${rule}`);
-  assert.deepEqual(merged.permissions.allow, ["mcp__docs__get_*", "WebSearch"]);
+  assert.ok(merged.permissions.allow.includes("mcp__docs__get_*"));
+  for (const rule of CLAUDE_BASH_ALLOW) assert.ok(merged.permissions.allow.includes(rule), `routine command rule dropped: ${rule}`);
+  assert.deepEqual(merged.permissions.allow, [...merged.permissions.allow].sort(), "allow must stay sorted so refresh sees no phantom drift");
   assert.ok(!merged.permissions.allow.includes("mcp__*"));
   assert.ok(merged.permissions.deny.includes("Read(./.env)"), "credential files must stay unreadable");
 
@@ -201,6 +204,12 @@ test("Claude policy uses sandbox-first Bash plus explicit external-write review"
     () => mergeClaudeSettings('{"permissions":{"allow":["Bash(custom-tool *)","mcp__docs__get_*"]}}'),
     /contains Bash allow rules.*review and remove them explicitly.*Bash\(custom-tool \*\)/,
   );
+  // ADW reads back the file it just wrote on every refresh, so its own output
+  // has to survive the same validation it applies to a project's file, byte for
+  // byte. A generator that its own validator rejects fails only in the field.
+  const generated = mergeClaudeSettings("");
+  assert.equal(mergeClaudeSettings(generated), generated, "ADW's generated policy must round-trip through its own merge unchanged");
+
   assert.throws(() => mergeClaudeSettings('{"sandbox":{"enabled":false}}'), /sandbox\.enabled=false conflicts/);
   assert.throws(() => mergeClaudeSettings('{"sandbox":{"autoAllowBashIfSandboxed":false}}'), /sandbox\.autoAllowBashIfSandboxed=false conflicts/);
   assert.throws(() => mergeClaudeSettings('{"sandbox":{"allowUnsandboxedCommands":true}}'), /allowUnsandboxedCommands=true conflicts/);

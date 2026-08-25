@@ -183,7 +183,12 @@ test("a managed container always provisions both agents", () => {
   // under this profile's no-bypassPermissions policy, so the nested sandbox
   // is off entirely -- the outer container is the isolation boundary here.
   assert.equal(claudeSettings.sandbox.enabled, false);
-  assert.deepEqual(claudeSettings.permissions.allow, ["WebSearch"]);
+  assert.ok(claudeSettings.permissions.allow.includes("WebSearch"));
+  // With the nested sandbox off, nothing auto-approves Bash here, so the
+  // routine-command rules are the only thing between this profile and a
+  // prompt on every single command the agent runs.
+  assert.ok(claudeSettings.permissions.allow.includes("Bash(git status *)"), "routine commands must be allow-listed when the sandbox is off");
+  assert.ok(claudeSettings.permissions.ask.includes("Bash(git push *)"), "ask must still outrank the routine allow rules");
   assert.equal(claudeSettings.hooks.PreToolUse.length, 2);
   assert.deepEqual(claudeSettings.statusLine, {
     type: "command",
