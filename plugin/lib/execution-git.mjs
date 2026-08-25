@@ -63,7 +63,7 @@ export function assertTargetState(projectRoot, group, target, { allowChanges = t
   return actual;
 }
 export function captureExecutionBaselines(projectRoot, packet) {
-  const root = realpathSync(projectRoot); const targets = packet.groups.map((group) => ({ group_id: group.group_id, ...assertCleanStart(root, group) }));
+  const root = realpathSync(projectRoot); const targets = packet.groups.map((group) => { const { path, ...snapshot } = assertCleanStart(root, group); return { group_id: group.group_id, ...snapshot }; });
   const targetPaths = new Set(packet.groups.map(({ worktree }) => worktree));
   const records = text(root, ["worktree", "list", "--porcelain"]).split("\n\n").filter(Boolean);
   const paths = records.map((record) => record.split("\n").find((line) => line.startsWith("worktree "))?.slice(9)).filter(Boolean);
