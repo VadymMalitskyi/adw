@@ -129,8 +129,9 @@ Use exactly one provider route for the preflight envelope:
 Both routes use the same fixed group sequence: implementation, fresh review,
 optional fix, fresh re-review. A group has at most two fix/re-review cycles. A
 stage result is only a candidate: unresolved high findings, a malformed result,
-or a stage failure makes that group fail. One failed group must not cancel
-independent groups.
+or a stage failure makes that group fail. A group's own stages are ordered, but
+groups never wait on each other: one failed group must not cancel independent
+groups, and no group is held at a stage boundary until another catches up.
 
 Give each stage subagent only its own group's worktree, affected paths, and
 tasks. An implementation or fix subagent may edit only inside the group's
