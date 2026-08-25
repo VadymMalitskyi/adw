@@ -1,5 +1,6 @@
 // Coordinator-owned preflight and final gate. Provider output is advisory;
 // Git evidence and configured validation decide whether a run passes.
+import { createHash } from "node:crypto";
 import { ContractError } from "./safe-files.mjs";
 import { validateExecutionPacket, validateExecutionEnvelope, validateProviderResult, validateFinalResult, EXECUTION_SCHEMA_VERSION } from "./execution-contract.mjs";
 import { captureExecutionBaselines, assertSnapshotEqual, assertTargetState } from "./execution-git.mjs";
@@ -13,6 +14,22 @@ export function executionPreflight(projectRoot, input) {
   const packet = validateExecutionPacket(input);
   const baselines = captureExecutionBaselines(projectRoot, packet);
   return validateExecutionEnvelope({ schema_version: EXECUTION_SCHEMA_VERSION, packet, ...baselines });
+}
+// The between-stage gate. A coordinator that drives stages itself has no worker
+// process to gate against, so it calls this after each stage instead: HEAD is
+// still the baseline, writes stayed inside the group's paths, and — when
+// `since` is supplied — a read-only stage changed nothing.
+export function executionAssertTarget(projectRoot, input) {
+  let envelope;
+  try { envelope = validateExecutionEnvelope(input.execution_envelope); }
+  catch (error) { throw error instanceof ContractError ? error : new ContractError("execution assert: malformed envelope"); }
+  const group = envelope.packet.groups.find(({ group_id }) => group_id === input.group_id);
+  if (!group) throw new ContractError(`execution assert: unknown group ${JSON.stringify(input.group_id ?? "")}`);
+  const target = envelope.targets.find(({ group_id }) => group_id === group.group_id);
+  const actual = assertTargetState(projectRoot, group, target, { allowChanges: true });
+  const snapshot = createHash("sha256").update(actual.status).update("\0").update(actual.content).digest("hex");
+  if (typeof input.since === "string" && input.since !== snapshot) throw new ContractError(`execution assert: ${group.group_id} changed during a read-only stage`);
+  return { group_id: group.group_id, snapshot };
 }
 function verifyGit(projectRoot, envelope) {
   assertSnapshotEqual(projectRoot, envelope.coordinator);

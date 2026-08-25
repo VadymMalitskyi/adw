@@ -11,8 +11,8 @@ const packetKeys = ["schema_version", "phase_id", "groups"];
 const groupKeys = ["group_id", "tasks", "affected_paths", "branch", "worktree", "validation", "review_level"];
 const validationKeys = ["component", "cwd", "command"];
 const envelopeKeys = ["schema_version", "packet", "targets", "coordinator", "non_targets"];
-const targetKeys = ["group_id", "head", "status"];
-const checkoutKeys = ["path", "head", "status"];
+const targetKeys = ["group_id", "head", "status", "content"];
+const checkoutKeys = ["path", "head", "status", "content"];
 const providerKeys = ["schema_version", "provider", "groups"];
 const providerGroupKeys = ["group_id", "status", "fix_cycles", "findings"];
 const findingKeys = ["severity", "summary"];
@@ -106,10 +106,10 @@ export function validateExecutionEnvelope(value) {
   const packet = validateExecutionPacket(value.packet);
   const targets = array(value.targets, "envelope.targets", { min: packet.groups.length, max: MAX_GROUPS }).map((target, index) => {
     exactKeys(target, targetKeys, `envelope.targets[${index}]`);
-    return { group_id: string(target.group_id, "envelope target group_id", { max: 128 }), head: string(target.head, "envelope target head", { max: 128 }), status: string(target.status, "envelope target status", { min: 0, max: 1_048_576 }) };
+    return { group_id: string(target.group_id, "envelope target group_id", { max: 128 }), head: string(target.head, "envelope target head", { max: 128 }), status: string(target.status, "envelope target status", { min: 0, max: 1_048_576 }), content: string(target.content, "envelope target content", { max: 128 }) };
   });
   if (new Set(targets.map(({ group_id }) => group_id)).size !== targets.length || targets.length !== packet.groups.length || !targets.every(({ group_id }) => packet.groups.some((group) => group.group_id === group_id))) fail("envelope targets must exactly match packet groups");
-  const checkout = (value, name) => { exactKeys(value, checkoutKeys, name); return { path: relativePath(value.path, `${name}.path`, { dot: true }), head: string(value.head, `${name}.head`, { max: 128 }), status: string(value.status, `${name}.status`, { min: 0, max: 1_048_576 }) }; };
+  const checkout = (value, name) => { exactKeys(value, checkoutKeys, name); return { path: relativePath(value.path, `${name}.path`, { dot: true }), head: string(value.head, `${name}.head`, { max: 128 }), status: string(value.status, `${name}.status`, { min: 0, max: 1_048_576 }), content: string(value.content, `${name}.content`, { max: 128 }) }; };
   const coordinator = checkout(value.coordinator, "envelope.coordinator");
   const non_targets = array(value.non_targets, "envelope.non_targets", { max: MAX_GROUPS }).map((entry, index) => checkout(entry, `envelope.non_targets[${index}]`));
   return { schema_version: EXECUTION_SCHEMA_VERSION, packet, targets, coordinator, non_targets };

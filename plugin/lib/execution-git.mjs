@@ -1,8 +1,9 @@
 // Git evidence used by the deterministic execution finalizer.  Porcelain is
 // deliberately read as bytes: filenames are not line oriented data.
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, realpathSync } from "node:fs";
-import { relative, resolve, sep } from "node:path";
+import { createHash } from "node:crypto";
+import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
+import { join, relative, resolve, sep } from "node:path";
 import { PathError, ContractError } from "./safe-files.mjs";
 import { isPathInScope } from "./execution-contract.mjs";
 
@@ -30,9 +31,23 @@ export function porcelainPaths(status) {
 }
 export function statusSnapshot(cwd) { return git(cwd, ["status", "--porcelain=v2", "-z", "--untracked-files=all"]).toString("base64"); }
 export function headSnapshot(cwd) { return text(cwd, ["rev-parse", "HEAD"]); }
+// Porcelain names the dirty paths but says nothing about their bytes, so an
+// edit to an already-dirty file leaves the status identical. A stage that is
+// supposed to change nothing is only provable against the content itself.
+export function contentSnapshot(cwd, status) {
+  const digest = createHash("sha256");
+  for (const path of porcelainPaths(Buffer.from(status, "base64")).sort()) {
+    digest.update(path).update("\0");
+    try { digest.update(readFileSync(join(cwd, path))); }
+    catch { digest.update("\0unreadable"); }
+    digest.update("\0");
+  }
+  return digest.digest("hex");
+}
 export function checkoutSnapshot(projectRoot, worktreePath = ".") {
   const cwd = worktreePath === "." ? realpathSync(projectRoot) : confined(realpathSync(projectRoot), resolve(projectRoot, worktreePath));
-  return { path: worktreePath, head: headSnapshot(cwd), status: statusSnapshot(cwd) };
+  const status = statusSnapshot(cwd);
+  return { path: worktreePath, head: headSnapshot(cwd), status, content: contentSnapshot(cwd, status) };
 }
 export function assertCleanStart(projectRoot, group) {
   const root = realpathSync(projectRoot); const worktree = confined(root, resolve(root, group.worktree));
@@ -52,13 +67,13 @@ export function assertScope(snapshot, scopes) {
 }
 export function assertSnapshotEqual(projectRoot, expected) {
   const actual = checkoutSnapshot(projectRoot, expected.path);
-  if (actual.head !== expected.head || actual.status !== expected.status) throw new ContractError(`execution git: checkout drift detected at ${expected.path}`);
+  if (actual.head !== expected.head || actual.status !== expected.status || actual.content !== expected.content) throw new ContractError(`execution git: checkout drift detected at ${expected.path}`);
   return actual;
 }
 export function assertTargetState(projectRoot, group, target, { allowChanges = true } = {}) {
   const actual = checkoutSnapshot(projectRoot, group.worktree);
   if (actual.head !== target.head) throw new ContractError(`execution git: HEAD changed in ${group.group_id}`);
-  if (!allowChanges && actual.status !== target.status) throw new ContractError(`execution git: read-only stage changed ${group.group_id}`);
+  if (!allowChanges && (actual.status !== target.status || actual.content !== target.content)) throw new ContractError(`execution git: read-only stage changed ${group.group_id}`);
   assertScope(actual.status, group.affected_paths);
   return actual;
 }

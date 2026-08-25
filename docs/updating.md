@@ -38,7 +38,7 @@ Never hand-edit the bundle. Every other file under `plugin/bin/` and `plugin/lib
 
 Start a new session and run `adw:status`. State is reconstructed from Git alone: the group branches, their commits, the worktrees they are attached to, the diff, and — when a `code_host` is configured — the open pull requests. Chat history is not required and is not trusted.
 
-An interrupted execution recovers from Git evidence across sessions. Resuming a group's branch is a judgment call: Git can show its merge base with the configured base branch, the commits it holds since that base, and whether its worktree is dirty, but an ordinary branch carries no digest or trailer proving it was prepared for the same prior task packet. ADW derives a fresh packet and confirms it before continuing, rather than silently reusing or refusing it. Claude Dynamic Workflow may resume a paused run only within its active interactive session; ADW adds no durable workflow state or `resumeFromRunId`.
+An interrupted execution recovers from Git evidence across sessions. Resuming a group's branch is a judgment call: Git can show its merge base with the configured base branch, the commits it holds since that base, and whether its worktree is dirty, but an ordinary branch carries no digest or trailer proving it was prepared for the same prior task packet. ADW derives a fresh packet and confirms it before continuing, rather than silently reusing or refusing it. Stage progress lives only in the running session and in the group worktrees; ADW adds no durable execution state.
 
 ADW never removes a branch or worktree for you. Ask for the cleanup commands and run them yourself once the work is merged or deliberately abandoned.
 

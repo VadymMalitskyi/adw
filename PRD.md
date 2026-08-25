@@ -67,7 +67,7 @@ The coordinator previews the exact interpreted packet — groups, scopes, branch
 
 The coordinator verifies permission policy and active isolation, interprets the requested phase, previews the exact packet, and receives confirmation. It prepares isolated branches/worktrees with native Git. `execution-preflight` rejects malformed input, unsafe paths, dirty/mismatched targets, overlapping scopes, and validation references that do not exactly match normalized configuration. It snapshots every registered checkout before any worker starts.
 
-The coordinator selects exactly one native provider route. Codex uses a dependency-free Node host that launches supported noninteractive `codex exec` workers under the active project policy. Claude uses the bundled Dynamic Workflow in the active interactive session; it never falls back to `claude -p`, changes credentials, or introduces API billing. Independent groups settle concurrently; each follows implementation → fresh review → optional fix → fresh re-review, with no more than two fix/re-review cycles. Provider output is schema-validated but remains a candidate, not authoritative execution success.
+The coordinator selects exactly one provider route. Codex uses a dependency-free Node host that launches supported noninteractive `codex exec` workers under the active project policy. Claude has no such host — nothing outside an interactive session can launch an in-session agent — so the coordinating skill drives the stages itself with in-session subagents, gating each one through `adw execution-assert-target`; it never falls back to `claude -p`, changes credentials, or introduces API billing. Independent groups settle concurrently; each follows implementation → fresh review → optional fix → fresh re-review, with no more than two fix/re-review cycles. Provider output is schema-validated but remains a candidate, not authoritative execution success.
 
 `execution-finalize` runs even after a provider failure to expose unintended Git mutations. It rechecks target HEADs/scopes and non-target snapshots, reloads exact configured `{component, cwd, command}` tuples, executes only those commands in confined real directories, and repeats Git checks after each command. Required validation cannot pass when it exits nonzero, is signaled, times out, or is unrun. Final public results contain bounded safe metadata, never raw prompts, provider events, command output, environment values, or credentials.
 
@@ -75,7 +75,7 @@ Codex can run authoritative Git gates between worker subprocesses. Claude Workfl
 
 ### Branches, worktrees, and delivery
 
-Defaults are `adw/<change-id>/<group-id>` and `worktrees/<change-id>/<group-id>`. ADW merges neither. Parallel groups must have disjoint write paths unless the plan defines a shared contract group in an earlier phase. Claude may resume a paused workflow within the same session only. Across sessions, recovery is Git-based and needs a newly derived, freshly confirmed packet; there is no workflow database, run record, cached stage, or `resumeFromRunId`.
+Defaults are `adw/<change-id>/<group-id>` and `worktrees/<change-id>/<group-id>`. ADW merges neither. Parallel groups must have disjoint write paths unless the plan defines a shared contract group in an earlier phase. Stage progress lives only in the running session and in the group worktrees. Across sessions, recovery is Git-based and needs a newly derived, freshly confirmed packet; there is no workflow database, run record, or cached stage.
 
 ### Validation evidence
 

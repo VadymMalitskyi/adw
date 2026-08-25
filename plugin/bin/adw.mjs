@@ -16,7 +16,7 @@ import { applyInitialization, planInitialization, refreshApply, refreshPreview }
 import { managedDevelopmentFiles } from "../lib/managed-environment.mjs";
 import { runDoctor } from "../lib/doctor.mjs";
 import { explainPermission } from "../lib/permission-policy.mjs";
-import { executionFinalize, executionPreflight } from "../lib/execution-finalizer.mjs";
+import { executionAssertTarget, executionFinalize, executionPreflight } from "../lib/execution-finalizer.mjs";
 
 const pluginRoot = resolve(fileURLToPath(import.meta.url), "../..");
 
@@ -30,6 +30,7 @@ const COMMANDS = [
   "permissions-explain",
   "render-managed",
   "execution-preflight",
+  "execution-assert-target",
   "execution-finalize",
 ];
 
@@ -111,6 +112,10 @@ async function dispatch(command, options) {
     case "execution-preflight": {
       const projectRoot = realpathSync(requireProjectRoot(options));
       return { exitCode: EXIT.OK, body: { ok: true, execution_envelope: executionPreflight(projectRoot, await readStdin()) } };
+    }
+    case "execution-assert-target": {
+      const projectRoot = realpathSync(requireProjectRoot(options));
+      return { exitCode: EXIT.OK, body: { ok: true, ...executionAssertTarget(projectRoot, await readStdin()) } };
     }
     case "execution-finalize": {
       const projectRoot = realpathSync(requireProjectRoot(options));

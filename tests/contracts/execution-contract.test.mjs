@@ -34,11 +34,12 @@ test("execution packets normalize safe paths and reject unknown or escaping inpu
 test("envelopes require an exact target record for every packet group", () => {
   const value = {
     schema_version: 1, packet: packet(),
-    targets: [{ group_id: "execution-core", head: "a".repeat(40), status: "" }],
-    coordinator: { path: ".", head: "b".repeat(40), status: "" }, non_targets: [],
+    targets: [{ group_id: "execution-core", head: "a".repeat(40), status: "", content: "c".repeat(64) }],
+    coordinator: { path: ".", head: "b".repeat(40), status: "", content: "d".repeat(64) }, non_targets: [],
   };
   assert.equal(validateExecutionEnvelope(value).targets.length, 1);
   assert.throws(() => validateExecutionEnvelope({ ...value, targets: [] }), /array of bounded length/);
+  assert.throws(() => validateExecutionEnvelope({ ...value, targets: [{ group_id: "execution-core", head: "a".repeat(40), status: "" }] }), /content/);
 });
 
 test("provider, event, and final outputs are strict safe allowlists", () => {

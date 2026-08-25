@@ -112,35 +112,45 @@ non-target worktrees; it also verifies exact validation references. On a
 malformed packet, nonzero result, or malformed envelope, stop without launching
 workers.
 
-## 4. Run the selected native workflow
+## 4. Run the groups
 
-Use exactly one provider-native route for the preflight envelope:
+Use exactly one provider route for the preflight envelope:
 
 - **Codex:** invoke `<plugin-root>/workflows/adw-execute-phase-codex.mjs` with
   the envelope on stdin. It launches noninteractive `codex exec` workers with
   the active project policy; do not add a sandbox override, bypass flag, ignore
   flag, or approval-bypass flag. It emits bounded lifecycle NDJSON and one
   terminal `workflow.completed` event.
-- **Claude Code:** call the native Workflow tool with
-  `{name: "adw:execute-phase", args: executionEnvelope}`. Wait for its terminal
-  result, validate the returned object against the shared result contract, and
-  map missing, null, stopped, or malformed output to a typed provider failure.
-  Never fall back to `claude -p`, an API adapter, or a different billing route.
-  The Workflow uses the active interactive session's billing identity; display
-  subscription identity when known and say it is unknown when it cannot be
-  established.
+- **Claude Code:** drive the stages yourself with in-session subagents, one
+  subagent per stage per group, launching independent groups concurrently. A
+  subagent inherits this session's billing identity; never shell out to
+  `claude -p`, an API adapter, or any other billing route to run a stage.
 
-Both routes settle independent groups concurrently and use the fixed group
-sequence: implementation, fresh review, optional fix, fresh re-review, then
-provider finalization. A group has at most two fix/re-review cycles. A worker
-result is only a candidate: unresolved high findings, a malformed result, or a
-worker failure makes that group fail. One failed group must not cancel
+Both routes use the same fixed group sequence: implementation, fresh review,
+optional fix, fresh re-review. A group has at most two fix/re-review cycles. A
+stage result is only a candidate: unresolved high findings, a malformed result,
+or a stage failure makes that group fail. One failed group must not cancel
 independent groups.
 
-Codex additionally checks Git HEAD/status and read-only review behavior between
-worker processes. Claude Workflow agents are instructed to be read-only during
-review, but their authoritative Git/scope check happens after the native
-workflow returns; do not claim identical inter-stage assurance.
+Give each stage subagent only its own group's worktree, affected paths, and
+tasks. An implementation or fix subagent may edit only inside the group's
+worktree and only within its affected paths. A review subagent inspects and
+reports; it never edits. No stage subagent may commit, push, create external
+objects, or touch another group's worktree.
+
+After every stage, gate the group before starting the next one:
+
+```
+node <plugin-root>/bin/adw.mjs execution-assert-target --project-root <absolute-project-root>
+```
+
+Supply `{execution_envelope, group_id}` on stdin. It requires HEAD to still
+match the preflight baseline and every changed path to stay inside the group's
+affected paths, and it returns the group's current `snapshot` — a digest over
+both the changed paths and their bytes. Pass that value back as `since` on the
+gate call after a review stage, so a review that edited anything is caught
+rather than trusted. A nonzero exit fails that group; do not start its next
+stage.
 
 ## 5. Finalize authoritatively
 
@@ -152,7 +162,9 @@ node <plugin-root>/bin/adw.mjs execution-finalize --project-root <absolute-proje
 ```
 
 Supply the execution envelope and the typed provider result exactly as its
-documented input contract requires. Require a schema-valid, zero-exit final
+documented input contract requires. Codex returns that result directly; on the
+Claude route, assemble it from the stage outcomes you observed, reporting a
+group as passed only when its own gates passed. Require a schema-valid, zero-exit final
 result before reporting success. The finalizer independently rechecks HEAD,
 scope, and non-target snapshots; reloads each exact configured validation tuple;
 runs only those commands in confined real directories; and repeats the Git
@@ -167,7 +179,7 @@ separately.
 
 ## 6. Commit, report, and recover
 
-The native workflow and finalizer never commit or make an external provider
+Stage workers and the finalizer never commit or make an external provider
 operation. After a passing final result, commit each group's work on its own
 branch. The group's work item stays in progress; do not advance or close it.
 Pushing, pull requests, merges, releases, deployments, any further work-item
@@ -180,8 +192,8 @@ passed; it never means the independently produced branches were integrated, and
 it never means a work item is done. Whole-phase/integration validation needs a
 separately authorized integration step.
 
-There is no ADW-owned durable workflow state or `resumeFromRunId`. Claude may
-resume a paused native Workflow only within the same interactive session. After
+There is no ADW-owned durable execution state. Stage progress lives only in this
+session and in the group worktrees. After
 an interruption across sessions, use `adw:status`, inspect Git branches and
 worktrees, search the tracker for items carrying this change's idempotency
 marker, derive a fresh packet, and obtain fresh confirmation. Existing items are

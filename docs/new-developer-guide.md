@@ -457,12 +457,12 @@ failed checks honestly. Safe results omit raw prompts, worker events, command
 output, environment values, and credentials; rerun an already-confirmed command
 interactively when you need diagnostics.
 
-Codex runs noninteractive workers under the active project policy and can check
-Git between worker processes. Claude uses its enabled native Dynamic Workflow
-inside the current paid interactive session; it never falls back to `claude -p`
-or a different billing route. Claude's workflow cannot inspect Git directly, so
-the shared finalizer performs its authoritative scope/mutation check after it
-returns. The final standards match, but the inter-stage assurance is different.
+Codex runs noninteractive workers under the active project policy. Claude runs
+each stage as an in-session subagent under the current session's identity; it
+never falls back to `claude -p` or a different billing route. Both check Git
+between stages with the same command, `adw execution-assert-target`, so a worker
+that commits, wanders outside its declared paths, or edits during a read-only
+review is caught before the next stage starts.
 
 ### 5. Deliver only with another yes
 
@@ -484,9 +484,9 @@ You can close the session at any point. `adw:status` reads, but does not modify:
 - read-only configured provider state such as open PRs.
 
 It ends with the most useful next action. There is intentionally no “run
-record,” approval artifact, or hidden ADW database to recover. Claude can resume
-a paused native workflow only within its same interactive session; otherwise
-derive a fresh packet and confirm it again from Git evidence.
+record,” approval artifact, or hidden ADW database to recover. Stage progress
+lives only in the running session, so after an interruption derive a fresh
+packet and confirm it again from Git evidence.
 
 ### If you are interrupted: a tiny recovery script
 
