@@ -69,9 +69,10 @@ into one message.
 8. **Workflow conventions** — ask about commit-message, pull-request, review,
    branch-naming, and issue-linking conventions. Explain that ADW treats
    branch and worktree names as ordinary execution-time choices, not
-   configuration; keep every convention in existing repository-owned
-   instructions or contributor documentation. Do not create or rewrite those
-   files during init.
+   configuration. Carry conventions not already recorded by the repository to
+   the post-apply offer in step 6; their single generated home is the
+   documentation branch's `docs/conventions.md`, never `AGENTS.md` or
+   `CLAUDE.md`.
 9. **Code style** — ask whether the project wants a starting set of code-style
    rules. Carry the answer, and anything the user said in topic 8, to the
    post-apply offer in step 6; nothing about style is written during apply.
@@ -81,7 +82,10 @@ into one message.
    enforces must never be offered.
 
 Do not ask about execution mode or plan templates.
-Repository instruction files own conventions that do not have an ADW setting.
+The documentation branch's `docs/conventions.md` owns shared project
+conventions that do not have an ADW setting. Repository instruction files only
+route agents to that shared document and hold agent-specific operating
+instructions; do not duplicate conventions between them.
 Personal preferences belong in `~/.config/adw/profile.md` or the Git-ignored
 `.adw/user.md`, never in the shared project policy.
 
@@ -190,23 +194,30 @@ Then give the next steps:
    write the first plan into its `plans/` directory.
 6. Point at `adw:onboard` for anyone else joining the project.
 
-## 6. Offer the code-style rules
+## 6. Offer the project conventions
 
-Only when step 2 topic 9 established that the project wants them. This is a
-separate, deliberate change: it is not in the preview, not in the fingerprint,
-and not repaired by `adw:doctor`, because repository-owned instruction files
-belong to the project and are expected to change.
+Only when step 2 topics 8 or 9 found conventions the repository does not already
+record. This is a separate, deliberate documentation change: it is not in the
+preview, not in the fingerprint, and not repaired by `adw:doctor`, because
+project documentation belongs to the project and is expected to change.
 
 Read `<plugin-root>/templates/code-style.md`. Present its rules as a menu the
 user picks from, one line each, grouped as the catalog groups them. Recommend
 the rules the repository has no tool for, and say which ones you left out
 because a configured formatter, linter, or type checker already enforces them.
+Include any workflow conventions supplied in topic 8 as a separate proposed
+section; do not turn an ADW default into a project convention.
 
-Then show the exact lines and the exact instruction file they would be appended
-to, and ask for approval. On approval, append them and stop. Never rewrite or
-reorder what the file already says, never create the file when the user did not
-approve one, and never commit. If the user declines, say where the catalog
-lives so they can take it later.
+Then show the exact content and the exact target
+`<docs.worktree>/docs/conventions.md`, using the configured documentation
+worktree returned by apply, and ask for approval. When the file does not exist,
+propose creating it with a `# Project conventions` heading and only the approved
+sections. When it exists, preserve its structure, omit rules it already states,
+and propose the smallest additions. On approval, write only that file and stop.
+Never append those conventions to `AGENTS.md` or `CLAUDE.md`, never copy rules a
+tool configuration already enforces, never write without approval, and never
+commit. If the user declines, say where the catalog lives so they can take it
+later.
 
 ## Guarantees to keep
 
@@ -215,12 +226,12 @@ lives so they can take it later.
 - Never write credentials into `adw.yaml`, and refuse any answer that contains
   one.
 - Never generate speculative application code, architecture prose, project
-  contracts, or plan templates. Code-style rules are not an exception: they are
-  offered from the catalog after apply, chosen by the user, and never invented.
-  The seeded `AGENTS.md` is not an exception either: it states only how to reach
-  this project's ADW contract and records no conventions. The documentation
-  branch is created empty apart from a README describing what it holds; filling
-  it is `adw:generate-docs`.
+  contracts, or plan templates. Code-style rules are offered from the catalog
+  after apply, chosen by the user, and never invented. The seeded `AGENTS.md`
+  states only how to reach this project's ADW contract and shared documentation;
+  it records no project conventions. The documentation branch is created with a
+  README and may receive the separately approved `docs/conventions.md`;
+  `adw:generate-docs` creates the complete documentation set.
 - Never overwrite `AGENTS.md`, `CLAUDE.md`, or `.adw/user.md`. They are seeded
   only when absent and are never refreshed or repaired.
 - Never reuse an existing directory at the docs worktree path. If something is

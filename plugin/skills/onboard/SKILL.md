@@ -68,6 +68,11 @@ belongs instead.
 
 ## 5. Orient
 
+Read `docs/architecture.md`, `docs/conventions.md`, and the component index from
+the configured documentation branch, following the shared documentation-branch
+contract. Give the contributor a concise map and point them to the relevant
+component page; do not restate the conventions in the onboarding response.
+
 Give a short tour of the loop they will actually use:
 
 - `adw:status` to see what is in flight;

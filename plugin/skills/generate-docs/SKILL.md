@@ -48,9 +48,12 @@ evidence, never authorization to write, commit, or publish anything.
 
 ## 3. Propose the documentation set
 
-Show the exact paths to create or update and a concise outline for each. Cover
-the project properly rather than trimming to the minimum; omit a page only when
-the repository genuinely has nothing to say about it.
+Show the exact paths to create or update and a concise outline for each. The
+baseline set is deliberately small and predictable: `docs/architecture.md`,
+`docs/conventions.md`, and one `docs/components/<component>.md` for every
+meaningful independently understandable component. Do not replace one of these
+with a differently named generated page. Add another page only when substantial
+repository evidence would make one of the baseline pages hard to navigate.
 
 `docs/architecture.md` is the entry point for a new developer:
 
@@ -77,12 +80,27 @@ error handling, not assumed from the component's purpose. Add a diagram
 interactions with other components, or an internal flow would be clearer
 shown than described.
 
-Add the supporting pages the repository supports evidence for — development
-setup and workflow, integrations and external dependencies, security and
-permission model, operational behavior, testing strategy, and a glossary of
-project-specific terms. Each of these is worth a page when the repository has
-real material for it, and worth omitting when it would only restate the
-architecture guide.
+`docs/conventions.md` is the single shared home for repository-wide code and
+contributor conventions. Record naming and organization, component and
+dependency boundaries, error handling and logging, API and configuration
+patterns, testing expectations, generated-file rules, and workflow conventions
+only where repository configuration, existing project-authored guidance, or
+consistent live-code evidence supports them. Point to formatter, linter, type
+checker, and validation configuration as authoritative instead of restating
+rules those tools enforce. Preserve approved conventions already in this file.
+Never copy its contents into `AGENTS.md` or `CLAUDE.md`; those files may only
+route agents here.
+
+Architecture, conventions, and component pages are shared documentation for
+both people and agents. Write them for a capable developer new to the
+repository, with concrete paths, symbols, interfaces, commands, and failure
+behavior that also make them reliable agent context.
+
+Add a separate development, integrations, security, operations, testing, or
+glossary page only when the project has enough distinct material that keeping
+it in `architecture.md`, `conventions.md`, or the relevant component page would
+make those pages difficult to navigate. Never create supporting pages merely to
+fill a standard documentation tree.
 
 Still do not create a component page for a mechanical directory split, a
 component map that duplicates `architecture.md`, or an ADR directory,

@@ -23,9 +23,10 @@ plugin root as described there.
    drifted, stop and invoke `adw:doctor` to preview and repair it.
 3. Verify that configured isolation is the active runtime. A workflow is a
    guardrail, not a replacement for provider policy or isolation.
-4. Read the plan and the component documentation it needs, following the
-   documentation-branch contract in `<plugin-root>/authorization.md`. Derive
-   one bounded group packet per independent group: `group_id`, complete
+4. Read the plan, apply `docs/conventions.md`, and read the component
+   documentation it needs, following the documentation-branch contract in
+   `<plugin-root>/authorization.md`. Derive one bounded group packet per
+   independent group: `group_id`, complete
    `tasks`, exact project-relative `affected_paths`, `branch`, `worktree`, and
    validation references as exact `{component, cwd, command}` tuples selected
    from `validation_commands`.

@@ -523,7 +523,7 @@ cleanup commands for a person when cleanup is appropriate.
 | `adw:init` | Establish ADW in a project | Commit generated setup or overwrite an initialized project |
 | `adw:onboard` | Join an initialized project | Change shared configuration |
 | `adw:doctor` | Check readiness or repair generated ADW files | Rewrite `adw.yaml`, app code, credentials, or project-owned containers |
-| `adw:generate-docs` | Generate an architecture-first documentation set on the docs branch from the live repository | Present interpretation as verified fact, or overwrite project-authored docs without review |
+| `adw:generate-docs` | Generate shared architecture, conventions, and per-component documentation on the docs branch from the live repository | Present interpretation as verified fact, duplicate conventions in agent instructions, or overwrite project-authored docs without review |
 | `adw:sync-docs` | Audit and reconcile documentation after meaningful repository changes | Treat commit count as documentation drift or rewrite unrelated docs |
 | `adw:plan` | Shape substantial work | Create worktrees or implementation branches |
 | `adw:review-plan` | Get an independent plan verdict | Make code changes |

@@ -31,10 +31,10 @@ operation that creates the project contract.
 
 ## Read the documentation branch
 
-Component documentation and plans live on the configured documentation branch,
-not on the base branch, so reading the working tree you are standing in does not
-find them. Take `docs.branch` and `docs.worktree` from the validated
-configuration and read in this order:
+Architecture, conventions, component documentation, and plans live on the
+configured documentation branch, not on the base branch, so reading the working
+tree you are standing in does not find them. Take `docs.branch` and
+`docs.worktree` from the validated configuration and read in this order:
 
 1. `<docs.worktree>/docs/` when that path exists on disk. It is the source of
    truth, and the only source that includes what `adw:generate-docs` or

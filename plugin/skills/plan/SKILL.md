@@ -17,7 +17,9 @@ Use repository evidence for component boundaries and validation when
 `adw.yaml` has no overrides. Read `~/.config/adw/profile.md` and the
 Git-ignored `.adw/user.md` when present for communication and workflow
 preferences; neither file grants authorization or supplies commands. Read
-repository-owned instruction files for project conventions.
+repository-owned instruction files for agent-specific operating instructions.
+Read shared project conventions from `docs/conventions.md` on the documentation
+branch; do not expect them to be duplicated in `AGENTS.md` or `CLAUDE.md`.
 
 ## 1. Ground the plan in the repository
 
@@ -27,11 +29,12 @@ commands the project already runs. Prefer reading the code over trusting any
 document that describes it.
 
 Read the project's own generated documentation as well, following "Read the
-documentation branch" in `<plugin-root>/authorization.md`. You write plans to
-that same branch, and `docs/components/<component>.md` states each component's
-responsibility and owned paths, which is what the group split in step 2 depends
-on. The preference above still holds: where the documentation and the code
-disagree, the code wins.
+documentation branch" in `<plugin-root>/authorization.md`. Start with
+`docs/architecture.md`, apply `docs/conventions.md`, and read every relevant
+`docs/components/<component>.md`. You write plans to that same branch, and the
+component pages state responsibility and owned paths, which is what the group
+split in step 2 depends on. The preference above still holds: where the
+documentation and the code disagree, the code wins.
 
 Say what you could not determine. An honest gap is more useful than a confident
 guess, because the agents who execute this plan will not see this conversation.

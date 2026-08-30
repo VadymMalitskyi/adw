@@ -39,8 +39,9 @@ It also creates the `worktrees/` directory, creates the documentation branch
 attaches it at `worktrees/docs`. Both the branch name and the worktree path are
 configurable through `docs.branch` and `docs.worktree`; the worktree must stay
 under `worktrees/`, the one path ADW keeps ignored on the base branch. The
-branch is created empty: init generates no documentation prose. Use
-`adw:generate-docs` after setup to fill it.
+branch starts with a README. Init may add a separately reviewed
+`docs/conventions.md` containing conventions the person selected; use
+`adw:generate-docs` after setup to build the complete documentation set.
 
 ## Documentation
 
@@ -49,17 +50,22 @@ worktree, not on the code branches. That keeps generated prose out of code
 review and lets docs be rewritten as often as they need to be without touching
 code history. The two branches share no ancestry.
 
-`adw:generate-docs` inspects the live repository and proposes a thorough
-documentation set inside `<docs.worktree>/docs/`. Its entry point is
-`docs/architecture.md`, which explains the project, its major flows, its design
-decisions, and verified setup/validation commands; independently understandable
-components receive focused `docs/components/<component>.md` references, and
-supporting pages cover development setup, integrations, security, operations,
-testing, and terminology where the repository has real material for them. Every
-factual claim traces to source; anything that is the model's reading of the
-code is written in a clearly labeled interpretation section, never mixed into
-plain fact. It creates or updates files only after the person approves the
+`adw:generate-docs` inspects the live repository and proposes a small baseline
+inside `<docs.worktree>/docs/`: `architecture.md` as the entry point,
+`conventions.md` as the single source for shared code and contributor
+conventions, and one `components/<component>.md` for every meaningful
+independently understandable component. Architecture explains the project, its
+major flows, its design decisions, and verified setup/validation commands;
+component pages explain responsibility, boundaries, interfaces, failure modes,
+and focused commands. A supporting page is added only when substantial material
+would make the baseline pages hard to navigate. Every factual claim traces to
+source; anything that is the model's reading of the code is clearly labeled as
+interpretation. It creates or updates files only after the person approves the
 exact scope.
+
+These pages serve both people and agents. The generated `AGENTS.md` routes
+agents to them but never copies `conventions.md`; formatter, linter, type-checker,
+and validation configuration remain authoritative for rules they enforce.
 
 `adw:sync-docs` audits that documentation against a supplied change range or recent
 repository work. It classifies documents as current, stale, incomplete, or

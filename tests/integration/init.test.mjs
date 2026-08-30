@@ -407,6 +407,10 @@ test("init seeds agent instructions and a private profile, and never touches one
   const agents = readFileSync(join(root, "AGENTS.md"), "utf8");
   assert.ok(agents.includes(".adw/user.md"), "AGENTS.md points at the private profile");
   assert.ok(agents.includes("worktrees/docs"), "AGENTS.md names the real documentation worktree");
+  assert.ok(agents.includes("docs/architecture.md"), "AGENTS.md routes to the architecture entry point");
+  assert.ok(agents.includes("docs/conventions.md"), "AGENTS.md routes to shared conventions");
+  assert.ok(agents.includes("docs/components/<component>.md"), "AGENTS.md routes to component documentation");
+  assert.match(agents, /Do not copy project conventions into this file/i, "AGENTS.md keeps conventions in one place");
   assert.ok(!agents.includes("{{"), "no placeholder survives into a seeded file");
   assert.ok(readFileSync(join(root, "CLAUDE.md"), "utf8").includes("@.adw/user.md"), "CLAUDE.md imports the private profile");
   assert.equal(git(root, ["check-ignore", ".adw/user.md"]).stdout, ".adw/user.md", "the private profile stays Git-ignored");

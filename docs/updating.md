@@ -62,6 +62,6 @@ Earlier releases carried a second workflow database beside Git. If you remember 
 | `adw:discover` | Folded into `adw:init`, `adw:plan`, and `adw:doctor` |
 | The old `adw:sync-docs` branch-maintenance workflow | Use the new `adw:sync-docs` skill, which audits the documentation branch against live repository changes |
 | `adw:init-greenfield`, `adw:init-brownfield` | One `adw:init` that detects the repository state |
-| `conventions:` in `adw.yaml` | Keep every convention, including branch naming, in repository-owned instruction and contributor documentation |
+| `conventions:` in `adw.yaml` | Keep shared code and contributor conventions in the documentation branch's `docs/conventions.md`; agent instruction files only route to it |
 | `adw:update` | Invoke `adw:doctor`; it diagnoses first and offers the same preview-bound managed-file repair when needed |
 | `git.branch_template` in `adw.yaml` | Branch and worktree names are ordinary execution-time choices proposed and confirmed during `adw:execute`, not project configuration |

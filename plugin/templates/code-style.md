@@ -1,7 +1,8 @@
-# Code style rules
+# Code-style convention catalog
 
-A menu for `adw:init` to offer. Nothing parses this file. Take what fits,
-reword it, drop the rest.
+A menu for `adw:init` to offer for `docs/conventions.md`. Nothing parses this
+file. Take what fits, reword it, drop the rest. Never copy selected rules into
+`AGENTS.md` or `CLAUDE.md`.
 
 Each rule is a threshold an agent can check itself against. Rules that cannot
 be checked ("write simple code") change nothing and cost context in every

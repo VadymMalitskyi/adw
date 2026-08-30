@@ -240,6 +240,29 @@ test("every skill that touches documentation or plans takes the branch and workt
   }
 });
 
+test("project conventions have one home and agent instructions only route to it", () => {
+  const agents = read("plugin/templates/agents.md");
+  const catalog = read("plugin/templates/code-style.md");
+  const init = skillText("init");
+  const generateDocs = skillText("generate-docs");
+
+  assert.match(agents, /docs\/architecture\.md/, "AGENTS.md must route to the architecture entry point");
+  assert.match(agents, /docs\/conventions\.md/, "AGENTS.md must route to shared project conventions");
+  assert.match(agents, /docs\/components\/<component>\.md/, "AGENTS.md must route to component documentation");
+  assert.match(agents, /Do not copy project conventions into this file/i, "AGENTS.md must state its routing-only boundary");
+
+  const catalogRules = catalog.split("\n").filter((line) => line.startsWith("- "));
+  assert.ok(catalogRules.length > 0, "the convention catalog must contain selectable rules");
+  for (const rule of catalogRules) {
+    assert.ok(!agents.includes(rule), `AGENTS.md duplicates convention catalog rule: ${rule}`);
+  }
+
+  assert.match(init, /<docs\.worktree>\/docs\/conventions\.md/, "init must offer conventions on the docs branch");
+  assert.match(init, /Never append those conventions to `AGENTS\.md` or `CLAUDE\.md`/i, "init must not put conventions in agent instructions");
+  assert.match(generateDocs, /baseline set[\s\S]*docs\/architecture\.md[\s\S]*docs\/conventions\.md[\s\S]*docs\/components\/<component>\.md/i, "generate-docs must create the shared baseline");
+  assert.match(generateDocs, /single shared home/i, "generate-docs must define conventions ownership");
+});
+
 test("the skills state the safety invariants ADW never trades away", () => {
   const prohibitions = SKILLS.flatMap((name) => sentences(skillText(name)))
     .filter((sentence) => /\b(?:never|not|no|refuse|stop|prohibit)\b/i.test(sentence));
