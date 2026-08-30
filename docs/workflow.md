@@ -111,7 +111,15 @@ or concrete blockers. Onboarding defines no independent readiness rules.
 
 `adw:plan` explores the repository read-only, returns a plan in conversation, and writes it to `<docs.worktree>/plans/<YYYY-MM-DD>-<abbreviation>-<short-description>.md` — for example `2026-08-17-auth-replace-session-cookies.md`. The date sorts the directory chronologically, the abbreviation is the ticket identifier or a short team-recognizable tag, and the description names what the change does. There is no required template and no plan registry, and a plan file never authorizes anything: confirming in conversation does.
 
-A useful plan states the problem and the observable outcome, maps phases and the groups inside them, gives each group its goal, its affected write paths, and its validation commands, and anchors claims to real code as grep-able `file -> symbol` references rather than line numbers. Configured providers may be read for context; a tracker write still needs its own preview and its own yes.
+A useful plan is intentionally detailed. It explains current and future behavior
+in ordinary words, diagrams the component or runtime flow with Mermaid, covers
+scope, edge cases, compatibility, security, performance, observability, rollout,
+and documentation, and maps every acceptance criterion to implementing work and
+proof. Its dependency-ordered phases give each group specific tasks, exact write
+paths, interface or data changes, failure behavior, and validation commands.
+Claims are anchored to real code as grep-able `file -> symbol` references rather
+than line numbers. Configured providers may be read for context; a tracker write
+still needs its own preview and its own yes.
 
 Planning writes one plan file on the documentation branch and nothing else. It
 never creates a code branch, an execution worktree, or an implementation, and
@@ -120,7 +128,16 @@ reviewed apply step.
 
 ## Review the plan
 
-`adw:review-plan` is a cold independent review. It runs as a fresh agent that receives the plan and the repository but not the planning conversation, and it checks whether the design actually solves the stated problem, what the single load-bearing assumption is, whether every anchor still matches live code, whether phase dependencies are ordered correctly, whether groups marked parallel really have disjoint write paths, whether the validation commands exist and are sufficient, and whether every acceptance criterion maps to executable work.
+`adw:review-plan` is a cold independent review. It runs as a fresh agent that
+receives the plan and the repository but not the planning conversation, and it
+checks whether the design actually solves the stated problem, whether the
+plain-language explanation and diagrams match the code, what the single
+load-bearing assumption is, whether every anchor still matches live code,
+whether phase dependencies are ordered correctly, whether groups marked
+parallel really have disjoint write paths, whether material edge cases and
+cross-cutting effects were addressed, whether the validation commands exist and
+are sufficient, and whether every acceptance criterion maps to executable work
+and proof.
 
 Objective defects get fixed in the plan. Judgment calls come back to you as explicit open decisions. It is the default final step of `adw:plan` and can also be invoked standalone on any plan.
 

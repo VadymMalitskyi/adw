@@ -39,9 +39,18 @@ Verify each of these against the repository, not against the plan's own claims:
 - **Parallel safety.** Do groups inside a phase have disjoint write paths? Two
   groups touching one file will be refused before execution — catch it now.
 - **Completeness.** Can an implementer who sees only this text do the work? Find
-  the group whose tasks are a summary rather than an instruction.
+  the group whose tasks are a summary rather than an instruction. Check that the
+  plan explains current and future behavior, relevant interfaces and data,
+  failure and edge cases, and cross-cutting effects; an unexplained omission is
+  a finding, while a reasoned `Not applicable` is acceptable.
+- **Clarity and diagrams.** Can a reader unfamiliar with the code understand the
+  approach in ordinary words? Verify that specialized terms are explained, that
+  at least one Mermaid diagram accurately shows the runtime or component flow,
+  and that non-obvious phase dependencies or parallel groups are diagrammed.
+  Diagrams must agree with both the prose and the repository.
 - **Validation.** Do the validation commands actually prove the acceptance
-  criteria, and do they exist in the project's configuration? A plan that
+  criteria, and do they exist in the project's configuration? Verify that each
+  acceptance-criterion id maps to implementing work and proof. A plan that
   validates nothing is not executable.
 - **Scope.** Is anything in the plan outside what the overview promised, or
   promised but missing from the phases?

@@ -39,7 +39,7 @@ documentation and the code disagree, the code wins.
 Say what you could not determine. An honest gap is more useful than a confident
 guess, because the agents who execute this plan will not see this conversation.
 
-## 2. Write the plan
+## 2. Write a detailed plan
 
 A plan has two audiences and must serve both.
 
@@ -47,14 +47,51 @@ A plan has two audiences and must serve both.
 users, what is explicitly out of scope, and the acceptance criteria. It must
 stand on its own.
 
+Default to a thorough plan, even when the request is short. A reader should not
+need the planning conversation or prior knowledge of the codebase to understand
+the change. Use short sentences and ordinary words. Explain a specialized term
+or acronym the first time it appears, and follow every diagram with a plain-word
+walkthrough. Do not use detail as padding: each paragraph, list item, and diagram
+must clarify behavior, a decision, implementation work, or proof.
+
+Before the phases, include:
+
+- **Current and future behavior:** walk through what happens today and what will
+  happen after the change, including the user-visible difference.
+- **Scope boundaries:** state what is in scope, what is out of scope, and the
+  assumptions or open decisions that could change the design.
+- **Technical approach:** explain the end-to-end path through the affected
+  components, from entry point to output, storage, or external system. Name
+  repository anchors as grep-able `path -> symbol` references, not line numbers.
+- **Diagrams:** include at least one Mermaid diagram showing the runtime flow or
+  component relationships, and a Mermaid dependency diagram when the phase or
+  parallel-group ordering is not obvious. A tiny change may use one compact
+  diagram for both. Diagrams supplement the prose; they never replace it.
+- **Acceptance coverage:** give every acceptance criterion a stable id such as
+  `AC1`, then map each id to the phase or group that implements it and the test or
+  validation that proves it.
+- **Cross-cutting effects:** address compatibility and migration, failure and
+  edge cases, security and privacy, performance, observability, rollout and
+  rollback, and documentation. If an area is irrelevant, mark it `Not
+  applicable` and explain why in one sentence instead of silently omitting it.
+
 **Implementation plan** — for the coordinating agent and the implementers, who
 see only this text. For each phase, in dependency order:
 
-- what the phase delivers and why it must come after the previous one;
+- what the phase delivers, its prerequisites, and why it must come after the
+  previous one;
 - the groups inside it, where a group is a unit one agent can implement alone;
-- for each group: the interpreted tasks, the **exact project-relative paths it
-  will write**, and the validation commands that prove it works;
+- for each group: the goal, step-by-step interpreted tasks, relevant existing
+  `path -> symbol` anchors, the **exact project-relative paths it will write**,
+  interface or data-shape changes, failure and edge-case behavior, acceptance
+  criteria covered, and validation commands that prove it works;
 - the whole-phase validation that proves the phase together.
+
+Be specific enough that an implementer can make the change without rediscovering
+the design. Replace vague directions such as "update the service" or "add tests"
+with the behavior to add, where it belongs, how it interacts with existing code,
+and which success and failure cases to test. Distinguish facts found in the
+repository from recommendations and unresolved choices.
 
 Groups inside one phase must have **disjoint write paths**. Two groups that need
 the same file are not parallel: put the shared file in an earlier group or an
@@ -66,6 +103,11 @@ parallelism.
 
 Use the project's configured validation commands rather than inventing new ones.
 Where the plan genuinely needs a new command, say so explicitly and say why.
+
+Finish with a whole-change test strategy, risks and mitigations, and open
+questions. The test strategy must cover the acceptance criteria and describe any
+manual check that cannot be automated. Risks should name the concrete failure,
+its likely impact, and the planned prevention or recovery.
 
 ## 3. Return it
 
