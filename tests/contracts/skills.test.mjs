@@ -259,7 +259,7 @@ test("project conventions have one home and agent instructions only route to it"
 
   assert.match(init, /<docs\.worktree>\/docs\/conventions\.md/, "init must offer conventions on the docs branch");
   assert.match(init, /Never append those conventions to `AGENTS\.md` or `CLAUDE\.md`/i, "init must not put conventions in agent instructions");
-  assert.match(generateDocs, /baseline set[\s\S]*docs\/architecture\.md[\s\S]*docs\/conventions\.md[\s\S]*docs\/components\/<component>\.md/i, "generate-docs must create the shared baseline");
+  assert.match(generateDocs, /baseline set[\s\S]*docs\/architecture\.md[\s\S]*docs\/conventions\.md[\s\S]*docs\/code-map\.md[\s\S]*docs\/components\/<component>\.md/i, "generate-docs must create the shared baseline");
   assert.match(generateDocs, /single shared home/i, "generate-docs must define conventions ownership");
 });
 
@@ -289,6 +289,14 @@ test("generate-docs requires evidence-backed onboarding depth, not checklist com
   assert.match(source, /Assign every material inventory item to a proposed page/i);
   assert.match(source, /Never use a file path[\s\S]*as a replacement for prose/i);
   assert.match(source, /every material part of the project from the documentation alone/i);
+  assert.match(source, /number of relevant files discovered, assigned, and still unassigned/i);
+  assert.match(source, /Do not ask for approval while any material topic or relevant file is unassigned/i);
+  assert.match(source, /Give every component page an owned-code tour/i);
+  assert.match(source, /directory summary or list of paths is not a code tour/i);
+  assert.match(source, /docs\/code-map\.md` is the auditable source-to-document index/i);
+  assert.match(source, /discovered and documented totals must match/i);
+  assert.match(source, /architecture guide below 1,500 words as presumptively incomplete/i);
+  assert.match(source, /component page below 1,000 words as presumptively incomplete/i);
 });
 
 test("the authorization contract resolves conflicts by domain", () => {

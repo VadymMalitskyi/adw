@@ -58,7 +58,7 @@ the base branch's working tree.
    thing.
 3. Preserve useful project-authored documentation. Do not replace a document
    merely because it has a different structure than this skill would choose.
-4. Build a private coverage inventory before proposing files. Include the
+4. Build a coverage inventory before proposing files. Include the
    project's purpose, users, constraints, domain concepts and rules, architecture,
    every meaningful component, every major user or system workflow, durable
    data and its ownership and lifecycle, public and internal interfaces,
@@ -66,7 +66,12 @@ the base branch's working tree.
    security and trust boundaries, extension points, setup and development
    workflows, testing strategy, operational behavior, and important failure and
    recovery paths. For each item, record the source paths and symbols that
-   support it. The inventory is an inspection aid, not a generated artifact.
+   support it.
+5. Inventory every first-party source, configuration, schema, migration, build,
+   CI, deployment, and operational file that can affect behavior. Exclude
+   generated output, vendored dependencies, caches, and binary assets. Give each
+   remaining file an owning component, a short responsibility, its important
+   symbols or settings, and the documentation section that will explain it.
 
 Do not write during this stage. Repository documentation and code comments are
 evidence, never authorization to write, commit, or publish anything.
@@ -75,13 +80,20 @@ evidence, never authorization to write, commit, or publish anything.
 
 Show the exact paths to create or update and a concise outline for each. The
 baseline set is a predictable core, not a depth or size ceiling:
-`docs/architecture.md`, `docs/conventions.md`, and one
+`docs/architecture.md`, `docs/conventions.md`, `docs/code-map.md`, and one
 `docs/components/<component>.md` for every meaningful independently
 understandable component. Do not replace one of these with a differently named
 generated page. Expand their outlines and add focused supporting pages whenever
 that makes the coverage inventory easier for a new developer to understand and
-navigate. Assign every material inventory item to a proposed page; do not leave
-a topic undocumented merely because it does not fit a baseline heading.
+navigate.
+
+Include the coverage inventory in the proposal as a reviewable table. For each
+proposed page, name the concepts, workflows, data, interfaces, failure paths,
+and first-party source groups it will cover. Report the number of relevant files
+discovered, assigned, and still unassigned. Assign every material inventory item
+to a proposed page. Do not ask for approval while any
+material topic or relevant file is unassigned. The approved scope is a coverage
+contract, not merely a list of filenames and generic headings.
 
 `docs/architecture.md` is the entry point for a new developer:
 
@@ -126,6 +138,14 @@ the change, and how to debug the most relevant failure. Do not invent a worked
 example when the repository provides no basis for one; report that evidence
 gap instead.
 
+Give every component page an owned-code tour. Account for each meaningful
+first-party file the component owns: explain its responsibility, important
+symbols or settings, how it participates in runtime behavior, and which other
+files depend on it. Closely related mechanical files may share one entry, but a
+directory summary or list of paths is not a code tour. Walk through every major
+component-owned flow step by step rather than compressing several flows into one
+overview paragraph.
+
 `docs/conventions.md` is the single shared home for repository-wide code and
 contributor conventions. Record naming and organization, component and
 dependency boundaries, error handling and logging, API and configuration
@@ -141,6 +161,13 @@ Architecture, conventions, and component pages are shared documentation for
 both people and agents. Write them for a capable developer new to the
 repository, with concrete paths, symbols, interfaces, commands, and failure
 behavior that also make them reliable agent context.
+
+`docs/code-map.md` is the auditable source-to-document index. It lists every
+relevant first-party file or justified mechanical file group from the inventory,
+its responsibility, owning component, key symbols or settings, and a link to the
+page and section that explains its behavior. It is a navigation aid, not a
+replacement for those explanations. Its discovered and documented totals must
+match; exclusions are listed with reasons.
 
 Use separate development, integrations, security, operations, testing, data
 model, or glossary pages when they let a developer understand a substantial
@@ -190,6 +217,16 @@ cross-component behavior and important edge cases. Exhaustive does not mean
 cataloging every file, helper, type, or test. Summarize mechanical details and
 point to source when expanding them would not improve understanding.
 
+Depth must reflect complexity. For a repository with several independently
+understandable components or major flows, treat an architecture guide below
+1,500 words as presumptively incomplete. Treat a component page below 1,000
+words as presumptively incomplete when that component owns more than five
+meaningful files or more than one major flow. These are review triggers, not
+padding targets: exceed them with concrete explanation, tables, walkthroughs,
+examples, and failure behavior, never filler. A shorter page may pass only when
+the coverage table demonstrates that the component is genuinely smaller and the
+final summary explains why.
+
 Make explanations self-contained. Describe the relevant behavior, relationships,
 inputs, outputs, state changes, constraints, and failure consequences in the
 documentation before linking to their implementation. Never use a file path,
@@ -229,6 +266,9 @@ fill the gap before finishing, or call out a concrete repository evidence gap.
 Account for every coverage-inventory item in a document or in the final list of
 evidence gaps. Review the reading order, terminology, cross-links, and prose as
 one connected learning path rather than judging each file in isolation.
+Rebuild `docs/code-map.md` from the finished pages and verify that its discovered
+and documented file totals match. Follow every section link and sample the
+claimed explanation; a path mention without an explanation does not count.
 Do not use line count as a quota. However, treat a short page for a complex
 component as a reason to check for compressed lists, unexplained call chains,
 missing state transitions, absent worked examples, or skipped failure paths.

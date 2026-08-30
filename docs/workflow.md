@@ -53,7 +53,8 @@ code history. The two branches share no ancestry.
 `adw:generate-docs` inspects the live repository and proposes an
 onboarding-ready documentation set inside `<docs.worktree>/docs/`:
 `architecture.md` as the entry point, `conventions.md` as the single source for
-shared code and contributor conventions, and one
+shared code and contributor conventions, `code-map.md` as an auditable mapping
+from first-party source to explanatory sections, and one
 `components/<component>.md` for every meaningful independently understandable
 component. Architecture explains the project, its domain model, end-to-end
 flows, design decisions, and verified setup and validation commands. Component

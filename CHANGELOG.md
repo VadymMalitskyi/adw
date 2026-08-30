@@ -17,7 +17,12 @@ All notable changes to this private plugin are documented here.
 - Documentation must stand alone as the project's complete introduction. Source
   references support verification and later implementation work but cannot
   replace detailed explanations or force a newcomer to read code to fill gaps.
-- Version bumped to 1.2.8 so provider caches load the revised skill.
+- After a real 1.2.8 generation still compressed a multi-runtime project into
+  3,051 words, the coverage inventory became a visible approval contract and
+  `docs/code-map.md` became a required source-to-explanation audit. Component
+  code tours, matching discovered/documented totals, and complexity-based depth
+  review triggers prevent heading-only compliance.
+- Version bumped to 1.2.9 so provider caches load the enforceable coverage pass.
 
 ### ADW activation is explicit
 
