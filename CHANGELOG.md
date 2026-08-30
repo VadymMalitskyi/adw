@@ -4,6 +4,17 @@ All notable changes to this private plugin are documented here.
 
 ## Unreleased
 
+### Native Claude execution and comprehensive plans
+
+- Claude execution now runs through the plugin's native workflow with the same
+  deterministic Git and validation gates as the Codex route.
+- `adw:plan` now defaults to detailed, plain-language plans with Mermaid
+  diagrams, explicit edge cases and cross-cutting effects, and acceptance
+  criteria mapped to implementation work and proof.
+- `adw:review-plan` independently checks that the added explanations, diagrams,
+  coverage, and validation agree with the live repository.
+- Version bumped to 1.3.2 so provider caches load both workflow changes.
+
 ### Documentation is consolidated around major project parts
 
 - `adw:generate-docs` now keeps narrow research partitions separate from the
