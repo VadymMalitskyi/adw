@@ -1,6 +1,6 @@
 {
   "name": "adw",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "description": "Git-native development workflows with optional work-tracker, code-host, observability, and knowledge integrations.",
   "author": {
     "name": "ADW maintainers"

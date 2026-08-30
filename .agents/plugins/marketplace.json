@@ -1,7 +1,7 @@
 {
-  "name": "adw-local",
+  "name": "adw",
   "interface": {
-    "displayName": "ADW Local"
+    "displayName": "ADW"
   },
   "plugins": [
     {

@@ -59,11 +59,11 @@ One plugin installs into both providers, so a Codex team and a Claude Code team 
 ```bash
 # Codex
 codex plugin marketplace add /absolute/path/to/adw
-codex plugin add adw@adw-local
+codex plugin add adw@adw
 
 # Claude Code
 claude plugin marketplace add /absolute/path/to/adw
-claude plugin install adw@adw-local --scope user
+claude plugin install adw@adw --scope user
 ```
 
 **2. Initialize** — start a new provider session in your project and invoke:

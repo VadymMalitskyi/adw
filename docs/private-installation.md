@@ -6,10 +6,10 @@ Use absolute paths so provider configuration does not depend on the current dire
 
 ```bash
 codex plugin marketplace add /absolute/path/to/adw
-codex plugin add adw@adw-local
+codex plugin add adw@adw
 
 claude plugin marketplace add /absolute/path/to/adw
-claude plugin install adw@adw-local --scope user
+claude plugin install adw@adw --scope user
 ```
 
 Start a new session after installation or update so the provider reloads skill metadata. The plugin is installed into provider-managed storage; do not copy `plugin/` into a target project.
@@ -29,7 +29,7 @@ External provider tooling is installed and authenticated separately. ADW does no
 
 ## Tagged private repository
 
-Push and tag only through the repository owner's normal release process. Users with read access can register the private Git source at a pinned tag or commit using each provider's marketplace command, then install `adw@adw-local`. Provider authentication must use existing Git credential mechanisms; never paste tokens into ADW configuration.
+Push and tag only through the repository owner's normal release process. Users with read access can register the private Git source at a pinned tag or commit using each provider's marketplace command, then install `adw@adw`. Provider authentication must use existing Git credential mechanisms; never paste tokens into ADW configuration.
 
 For rollback, point the marketplace at the last-known-good tag, update the marketplace snapshot, reinstall the plugin, and start a new session. A plugin-only rollback needs no managed-file repair unless `adw:doctor` reports drift.
 

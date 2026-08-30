@@ -48,6 +48,8 @@ test("repo-local marketplaces point to the approved plugin root", () => {
   const codexEntry = codexMarketplace.plugins.find(({ name }) => name === "adw");
   const claudeEntry = claudeMarketplace.plugins.find(({ name }) => name === "adw");
 
+  assert.equal(codexMarketplace.name, "adw");
+  assert.equal(claudeMarketplace.name, "adw");
   assert.ok(codexEntry);
   assert.ok(claudeEntry);
   assert.equal(codexEntry.source.source, "local");

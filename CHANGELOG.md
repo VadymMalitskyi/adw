@@ -4,6 +4,12 @@ All notable changes to this private plugin are documented here.
 
 ## Unreleased
 
+### Unified marketplace name
+
+- The Codex and Claude marketplace name is now `adw`, so the installed plugin
+  identity is consistently `adw@adw` instead of `adw@adw-local`.
+- Version bumped to 1.3.5 so provider caches load the renamed marketplace.
+
 ### Codex stage schema compatibility
 
 - Codex stage-result schemas now declare the string type alongside the stage
