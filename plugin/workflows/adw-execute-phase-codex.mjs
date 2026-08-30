@@ -10,5 +10,5 @@ const root = realpathSync(process.argv[index + 1]); let source = ""; for await (
 const envelope = validateExecutionEnvelope(JSON.parse(source));
 const emit = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
 const git = { assertTarget: (group, options) => assertTargetState(root, group, envelope.targets.find(({ group_id }) => group_id === group.group_id), options), snapshot: (group) => checkoutSnapshot(root, group.worktree).status, assertUnchanged: (group, before) => { if (checkoutSnapshot(root, group.worktree).status !== before) throw new Error("review mutated worktree"); } };
-const result = await runExecutionGroups(envelope, { adapter: createCodexAdapter(), git, emit });
+const result = await runExecutionGroups(envelope, { adapter: createCodexAdapter({ projectRoot: root }), git, emit });
 if (result.groups.some(({ status }) => status !== "passed")) process.exitCode = 5;

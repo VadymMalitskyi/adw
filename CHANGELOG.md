@@ -4,6 +4,13 @@ All notable changes to this private plugin are documented here.
 
 ## Unreleased
 
+### Codex worktree launch fix
+
+- Codex workers now receive the absolute group worktree for both their process
+  directory and `codex exec -C`, so a project-relative worktree is not resolved
+  a second time beneath itself before implementation starts.
+- Version bumped to 1.3.3 so provider caches load the corrected Codex workflow.
+
 ### Native Claude execution and comprehensive plans
 
 - Claude execution now runs through the plugin's native workflow with the same
