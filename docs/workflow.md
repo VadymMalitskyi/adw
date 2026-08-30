@@ -73,6 +73,14 @@ claim traces to source; anything that is the model's reading of the code is
 clearly labeled as interpretation. It creates or updates files only after the
 person approves the exact scope.
 
+For a nontrivial repository, generation is deliberately multi-agent and may take
+several waves. Read-only component researchers build detailed dossiers before
+scope approval. After approval, page-owning writers work on disjoint paths;
+architecture and cross-cutting pages are synthesized only after component pages
+exist. Fresh source, workflow, onboarding, and prose reviewers reject omissions
+and send them back for revision. Completeness and teaching quality take priority
+over token cost, agent turns, document length, or speed.
+
 These pages serve both people and agents. The generated `AGENTS.md` routes
 agents to them but never copies `conventions.md`; formatter, linter, type-checker,
 and validation configuration remain authoritative for rules they enforce.

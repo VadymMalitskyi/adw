@@ -4,6 +4,20 @@ All notable changes to this private plugin are documented here.
 
 ## Unreleased
 
+### Exhaustive documentation now uses independent agent waves
+
+- `adw:generate-docs` no longer lets one context research, write, and certify a
+  nontrivial repository. Parallel read-only researchers produce component
+  dossiers before approval; disjoint page owners write after approval;
+  architecture and the code map are synthesized last; and fresh source,
+  workflow, onboarding, and prose reviewers require corrections until material
+  findings are gone.
+- Completeness explicitly wins over token cost, tool calls, agent turns,
+  document length, and speed. Broad components must split, code-map rows use
+  exact section anchors, and hard anti-compression floors replace the 1.2.9
+  thresholds that real output treated as finish lines.
+- Version bumped to 1.3.0 so provider caches load the multi-agent workflow.
+
 ### Documentation depth is now verified
 
 - `adw:generate-docs` inventories domain concepts, state, major workflows,

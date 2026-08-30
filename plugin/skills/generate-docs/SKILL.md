@@ -24,6 +24,12 @@ undocumented material merely to understand an explanation. Source links are
 verification and navigation aids for later work, never substitutes for the
 explanation itself.
 
+This is a completeness-first workflow. Do not optimize for fewer tokens, fewer
+tool calls, fewer agent turns, shorter documents, or faster completion. There is
+no maximum documentation length. Context pressure is a reason to partition the
+repository, use fresh agents, and continue in additional waves; it is never a
+reason to compress away behavior or stop at a summary.
+
 Read `<plugin-root>/authorization.md` first and follow it throughout. Resolve
 the plugin root as described there.
 
@@ -41,6 +47,19 @@ stop and point at `adw:init`, which creates it through a reviewed apply. Never
 the base branch's working tree.
 
 ## 2. Inspect before proposing files
+
+When the runtime provides native or in-session subagents, use them. A
+nontrivial repository must not be researched, written, and reviewed in one
+agent context. Run parallel agents up to the available concurrency limit and
+schedule more waves until every partition is covered. The coordinator owns
+authorization, partitioning, reconciliation, and the final report. Subagents
+never approve scope, commit, push, or perform external actions.
+
+Before approval, every subagent is read-only. Partition the repository by real
+runtime, domain, or ownership boundaries, not merely by directory. Give shared
+build, CI, deployment, security, data, and repository-wide convention material
+explicit cross-cutting partitions. Assign every relevant file to exactly one
+primary research partition.
 
 1. Read repository instructions, manifests, lockfiles, CI, entry points, tests,
    configuration, and every existing document, on both branches. For every
@@ -72,6 +91,19 @@ the base branch's working tree.
    generated output, vendored dependencies, caches, and binary assets. Give each
    remaining file an owning component, a short responsibility, its important
    symbols or settings, and the documentation section that will explain it.
+6. Send each partition to a fresh research agent. Its dossier must contain the
+   complete owned-file ledger; important symbols and why they matter; domain
+   terms and invariants; every major flow in ordered steps; inputs, outputs,
+   state changes, and side effects; public and internal interfaces; data
+   ownership and lifecycle; behavior-changing configuration; dependencies and
+   cross-component interactions; failure branches, recovery, and diagnostic
+   signals; test evidence and edge cases; verified commands; representative
+   maintenance tasks; and genuine evidence gaps. A directory listing, symbol
+   catalog, or brief component summary is not a research dossier.
+7. Reconcile the dossiers. Return overlapping ownership, unsupported claims,
+   and uncovered files to research agents for another pass. If subagents are
+   unavailable, perform the same partitions sequentially in separate passes;
+   never collapse them into one repository-wide summary to save context.
 
 Do not write during this stage. Repository documentation and code comments are
 evidence, never authorization to write, commit, or publish anything.
@@ -86,6 +118,13 @@ understandable component. Do not replace one of these with a differently named
 generated page. Expand their outlines and add focused supporting pages whenever
 that makes the coverage inventory easier for a new developer to understand and
 navigate.
+
+Split an over-broad component before proposing pages. One page must not own more
+than ten meaningful implementation files or more than two independent major
+flows. Create narrower component or supporting pages for HTTP surfaces,
+realtime behavior, persistence, learning pipelines, complex UI state, or other
+independently understandable systems. Do not hide complexity by grouping files
+in the inventory.
 
 Include the coverage inventory in the proposal as a reviewable table. For each
 proposed page, name the concepts, workflows, data, interfaces, failure paths,
@@ -163,11 +202,13 @@ repository, with concrete paths, symbols, interfaces, commands, and failure
 behavior that also make them reliable agent context.
 
 `docs/code-map.md` is the auditable source-to-document index. It lists every
-relevant first-party file or justified mechanical file group from the inventory,
+relevant first-party file from the inventory,
 its responsibility, owning component, key symbols or settings, and a link to the
 page and section that explains its behavior. It is a navigation aid, not a
 replacement for those explanations. Its discovered and documented totals must
-match; exclusions are listed with reasons.
+match; exclusions are listed with reasons. Use one row per meaningful file and
+exact section anchors. Only generated boilerplate or mechanically identical
+files may share a row, and every grouped path must still be written explicitly.
 
 Use separate development, integrations, security, operations, testing, data
 model, or glossary pages when they let a developer understand a substantial
@@ -186,9 +227,51 @@ user asks only for an audit, return the proposal without writing.
 ## 4. Write and verify
 
 After approval, create or update only the reviewed paths inside the docs
-worktree. Use stable headings. Match length to the material: do not pad with restated
-structure or filler, but do not trim real detail for the sake of brevity — a
-large or intricate component earns a long page.
+worktree. If research reveals that an unapproved page is necessary, pause and
+propose that scope amendment. Use stable headings. Match length to the material:
+do not pad with restated structure or filler, but do not trim real detail for
+the sake of brevity — a large or intricate component earns a long page.
+
+### Writing waves
+
+After approval, assign every component or disjoint page group to a fresh writer
+with exclusive ownership of those documentation paths. Give it the approved
+coverage contract and research dossier, but require it to reread the assigned
+source. Run writers in parallel. Never let multiple agents edit the same file,
+and never ask one agent to draft several unrelated components merely to reduce
+agent turns.
+
+Each writer explains every owned major flow step by step; state transitions and
+data transformations; branching and failure behavior; integration contracts;
+configuration and operational consequences; tests and validation strategy;
+debugging procedures; at least one complete maintenance walkthrough; and the
+owned-code tour. A writer reports gaps but does not certify its own page as
+complete.
+
+Give every major flow its own anchored walkthrough. State its trigger,
+preconditions, ordered path-and-symbol call chain, branching decisions, data or
+state transformations, outputs and side effects, failure branches, recovery and
+observability, and validation evidence. Component pages also include explicit
+interface, state/data, behavior-changing configuration, failure/recovery, and
+maintenance-task registers. For HTTP, RPC, event, CLI, or message interfaces,
+document each operation's input, output, side effects, and failure behavior;
+never collapse a family of materially different operations into one sentence.
+
+After component drafts exist, run separate synthesis passes in this order:
+
+1. approved cross-cutting data, integration, security, testing, development, or
+   operations pages;
+2. `docs/architecture.md`, synthesized from all component pages, research
+   dossiers, and relevant source;
+3. `docs/conventions.md`, grounded in executable configuration and repeated
+   code evidence; and
+4. `docs/code-map.md`, built last with exact links to substantive explanations.
+
+The architecture pass reconciles shared terminology, producer/consumer
+relationships, cross-component state ownership, end-to-end flows, error
+propagation, trust boundaries, startup and shutdown, operational lifecycle, and
+where common categories of change begin. Do not produce it by shortening the
+component pages.
 
 Write in plain language: use active voice, short sentences, concrete nouns, and
 the simplest words that stay accurate. Define domain terms and unavoidable
@@ -217,15 +300,13 @@ cross-component behavior and important edge cases. Exhaustive does not mean
 cataloging every file, helper, type, or test. Summarize mechanical details and
 point to source when expanding them would not improve understanding.
 
-Depth must reflect complexity. For a repository with several independently
-understandable components or major flows, treat an architecture guide below
-1,500 words as presumptively incomplete. Treat a component page below 1,000
-words as presumptively incomplete when that component owns more than five
-meaningful files or more than one major flow. These are review triggers, not
-padding targets: exceed them with concrete explanation, tables, walkthroughs,
-examples, and failure behavior, never filler. A shorter page may pass only when
-the coverage table demonstrates that the component is genuinely smaller and the
-final summary explains why.
+Depth must reflect complexity. A multi-component architecture guide below 2,500
+words fails the depth gate. A component page with more than five meaningful
+files or more than one major flow below 1,500 words fails the depth gate. These
+are anti-compression floors, not completeness targets: do not aim to land near
+them, and never add filler to reach them. Repartition a page only when the
+content belongs in more focused pages; neither the writer nor coordinator may
+self-approve an exception.
 
 Make explanations self-contained. Describe the relevant behavior, relationships,
 inputs, outputs, state changes, constraints, and failure consequences in the
@@ -246,7 +327,32 @@ otherwise report that no automated documentation validation exists. Summarize
 the files changed, the evidence used, which sections are interpretation,
 unresolved gaps, and validation actually run.
 
-Then perform a coverage and onboarding review against the inspection inventory.
+### Independent review waves
+
+The writers and coordinator cannot certify their own completeness. After all
+drafts exist, use fresh read-only review agents. Run at least these independent
+audits:
+
+- **Source coverage:** partition source across reviewers, verify every code-map
+  row and exact anchor, and confirm the linked section explains runtime behavior
+  rather than merely naming the file.
+- **Workflow:** retrace every major flow from source and compare its ordered
+  steps, alternatives, state changes, side effects, failures, and recovery with
+  the documentation.
+- **Standalone onboarding:** read only the documentation first and record every
+  question a new developer still cannot answer; inspect source afterward to
+  find missing explanations or contradictions.
+- **Prose:** check learning order, consistent terminology, simple language,
+  unexplained jargon, repetition, fluff, and compressed lists masquerading as
+  explanations.
+
+Reviewers report findings and do not edit. Send every concrete finding back to
+the page-owning writer in another parallel correction wave, then use fresh
+reviewers to recheck it. Repeat until no material finding remains or a concrete
+repository evidence gap is documented. Do not impose a remediation-cycle limit
+or stop because additional review costs tokens or time.
+
+Then perform the final coverage and onboarding review against the inspection inventory.
 From the finished pages, a capable developer new to the repository must be able
 to:
 
@@ -269,10 +375,9 @@ one connected learning path rather than judging each file in isolation.
 Rebuild `docs/code-map.md` from the finished pages and verify that its discovered
 and documented file totals match. Follow every section link and sample the
 claimed explanation; a path mention without an explanation does not count.
-Do not use line count as a quota. However, treat a short page for a complex
-component as a reason to check for compressed lists, unexplained call chains,
-missing state transitions, absent worked examples, or skipped failure paths.
-A page that merely touches every requested heading does not pass this review.
+Report word counts as evidence that the hard depth gates ran, not as proof of
+quality. A page that merely touches every requested heading does not pass this
+review, regardless of its length or code-map entry.
 
 Commit on the documentation branch only when the user has asked for a committed
 change; pushing and all external actions require separate authorization.

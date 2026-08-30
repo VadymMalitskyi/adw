@@ -273,7 +273,6 @@ test("generate-docs requires evidence-backed onboarding depth, not checklist com
   assert.match(source, /where to begin[\s\S]*constraints to preserve[\s\S]*validate[\s\S]*debug/i);
   assert.match(source, /coverage and onboarding review/i);
   assert.match(source, /trace every major workflow[\s\S]*identify where to make a representative change/i);
-  assert.match(source, /Do not use line count as a quota/i);
   assert.match(source, /merely touches every requested heading does not pass/i);
   assert.match(source, /quickly form an accurate mental model[\s\S]*deepen it systematically/i);
   assert.match(source, /short orientation at the top[\s\S]*reading path/i);
@@ -295,8 +294,20 @@ test("generate-docs requires evidence-backed onboarding depth, not checklist com
   assert.match(source, /directory summary or list of paths is not a code tour/i);
   assert.match(source, /docs\/code-map\.md` is the auditable source-to-document index/i);
   assert.match(source, /discovered and documented totals must match/i);
-  assert.match(source, /architecture guide below 1,500 words as presumptively incomplete/i);
-  assert.match(source, /component page below 1,000 words as presumptively incomplete/i);
+  assert.match(source, /completeness-first workflow[\s\S]*Do not optimize for fewer tokens/i);
+  assert.match(source, /use fresh agents[\s\S]*never a reason to compress away behavior/i);
+  assert.match(source, /native or in-session subagents[\s\S]*must not be researched, written, and reviewed in one agent context/i);
+  assert.match(source, /Before approval, every subagent is read-only/i);
+  assert.match(source, /fresh research agent[\s\S]*research dossier/i);
+  assert.match(source, /One page must not own more than ten meaningful implementation files or more than two independent major flows/i);
+  assert.match(source, /fresh writer with exclusive ownership/i);
+  assert.match(source, /After component drafts exist, run separate synthesis passes in this order/i);
+  assert.match(source, /Give every major flow its own anchored walkthrough/i);
+  assert.match(source, /fresh read-only review agents[\s\S]*Source coverage[\s\S]*Workflow[\s\S]*Standalone onboarding[\s\S]*Prose/i);
+  assert.match(source, /Repeat until no material finding remains/i);
+  assert.match(source, /Do not impose a remediation-cycle limit/i);
+  assert.match(source, /architecture guide below 2,500 words fails the depth gate/i);
+  assert.match(source, /component page[\s\S]*below 1,500 words fails the depth gate/i);
 });
 
 test("the authorization contract resolves conflicts by domain", () => {
