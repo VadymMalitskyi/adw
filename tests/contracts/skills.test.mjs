@@ -213,7 +213,9 @@ test("execute uses the deterministic shared gates and both provider routes", () 
   assert.match(unwrapped, /execution-finalize/, "execute must invoke shared finalization after workers");
   assert.match(unwrapped, /preflight[\s\S]*execution-assert-target[\s\S]*finaliz/i, "execute must preserve preflight → per-stage gate → finalizer ordering");
   assert.match(unwrapped, /adw-execute-phase-codex\.mjs/, "execute must document the Codex native runner");
-  assert.match(unwrapped, /in-session subagents/i, "execute must drive Claude stages with in-session subagents");
+  assert.match(unwrapped, /adw-execute-phase-claude\.mjs/, "execute must document the Claude native workflow");
+  assert.match(unwrapped, /in-session subagent/i, "execute must drive Claude stages with in-session subagents");
+  assert.match(unwrapped, /Do not use `resumeFromRunId`/i, "execute must refuse unsafe Claude workflow cache reuse");
   assert.match(unwrapped, /\{component, cwd, command\}/, "execute must require exact configured validation tuples");
   assert.match(unwrapped, /never shell out to `claude -p`/i, "execute must prohibit a headless Claude fallback");
   assert.match(unwrapped, /even when the provider result failed/i, "execute must finalize provider failures for Git evidence");

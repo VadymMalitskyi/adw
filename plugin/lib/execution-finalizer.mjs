@@ -1,6 +1,9 @@
 // Coordinator-owned preflight and final gate. Provider output is advisory;
 // Git evidence and configured validation decide whether a run passes.
 import { createHash } from "node:crypto";
+import { constants as fsConstants } from "node:fs";
+import { open } from "node:fs/promises";
+import { isAbsolute } from "node:path";
 import { ContractError } from "./safe-files.mjs";
 import { validateExecutionPacket, validateExecutionEnvelope, validateProviderResult, validateFinalResult, EXECUTION_SCHEMA_VERSION } from "./execution-contract.mjs";
 import { captureExecutionBaselines, assertSnapshotEqual, assertTargetState } from "./execution-git.mjs";
@@ -30,6 +33,32 @@ export function executionAssertTarget(projectRoot, input) {
   const snapshot = createHash("sha256").update(actual.status).update("\0").update(actual.content).digest("hex");
   if (typeof input.since === "string" && input.since !== snapshot) throw new ContractError(`execution assert: ${group.group_id} changed during a read-only stage`);
   return { group_id: group.group_id, snapshot };
+}
+export async function executionAssertTargetFile(projectRoot, input) {
+  const path = input?.envelope_file;
+  const expected = input?.envelope_sha256;
+  if (typeof path !== "string" || !isAbsolute(path) || path.length > 4096 || path.includes("\0")) throw new ContractError("execution assert: envelope_file must be a bounded absolute path");
+  if (typeof expected !== "string" || !/^[a-f0-9]{64}$/.test(expected)) throw new ContractError("execution assert: envelope_sha256 is invalid");
+  if (typeof input.group_id !== "string" || (input.since !== undefined && (typeof input.since !== "string" || !/^[a-f0-9]{64}$/.test(input.since)))) throw new ContractError("execution assert: file gate arguments are invalid");
+  let handle;
+  try {
+    handle = await open(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+    const stat = await handle.stat();
+    if (!stat.isFile() || stat.nlink !== 1 || stat.size < 2 || stat.size > 67_108_864) throw new ContractError("execution assert: envelope_file is not a bounded regular file");
+    if (process.platform !== "win32" && (stat.mode & 0o077) !== 0) throw new ContractError("execution assert: envelope_file permissions are too broad");
+    const source = await handle.readFile("utf8");
+    const actual = createHash("sha256").update(source).digest("hex");
+    if (actual !== expected) throw new ContractError("execution assert: envelope_file digest mismatch");
+    let execution_envelope;
+    try { execution_envelope = JSON.parse(source); }
+    catch { throw new ContractError("execution assert: envelope_file is not valid JSON"); }
+    return executionAssertTarget(projectRoot, { execution_envelope, group_id: input.group_id, ...(input.since === undefined ? {} : { since: input.since }) });
+  } catch (error) {
+    if (error instanceof ContractError) throw error;
+    throw new ContractError("execution assert: envelope_file is unavailable");
+  } finally {
+    await handle?.close();
+  }
 }
 function verifyGit(projectRoot, envelope) {
   assertSnapshotEqual(projectRoot, envelope.coordinator);

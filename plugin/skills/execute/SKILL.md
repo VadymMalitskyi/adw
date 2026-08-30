@@ -113,6 +113,13 @@ non-target worktrees; it also verifies exact validation references. On a
 malformed packet, nonzero result, or malformed envelope, stop without launching
 workers.
 
+For the Claude route only, write the exact envelope object (not the CLI's outer
+`ok` wrapper) to a newly created temporary regular file outside the project,
+set mode `0600`, and compute its SHA-256 digest. This is transient transport for
+the Workflow's short gate commands, not execution state. Pass its absolute path
+and digest to the Workflow, retain the envelope itself for finalization, and
+remove the temporary file after the finalizer runs or the Workflow aborts.
+
 ## 4. Run the groups
 
 Use exactly one provider route for the preflight envelope:
@@ -122,10 +129,16 @@ Use exactly one provider route for the preflight envelope:
   the active project policy; do not add a sandbox override, bypass flag, ignore
   flag, or approval-bypass flag. It emits bounded lifecycle NDJSON and one
   terminal `workflow.completed` event.
-- **Claude Code:** drive the stages yourself with in-session subagents, one
-  subagent per stage per group, launching independent groups concurrently. A
-  subagent inherits this session's billing identity; never shell out to
-  `claude -p`, an API adapter, or any other billing route to run a stage.
+- **Claude Code:** invoke the native Workflow tool with
+  `<plugin-root>/workflows/adw-execute-phase-claude.mjs` and args
+  `{execution_envelope, project_root, plugin_root, envelope_file,
+  envelope_sha256}`. It launches one fresh in-session subagent per stage and
+  settles independent groups concurrently.
+  Use the bundled named workflow or its exact loaded path; never copy it into
+  the project. Do not use `resumeFromRunId`: a Claude workflow checkpoint is
+  not bound to the confirmed envelope or current Git snapshots. A subagent
+  inherits this session's billing identity; never shell out to `claude -p`, an
+  API adapter, or any other billing route to run a stage.
 
 Both routes use the same fixed group sequence: implementation, fresh review,
 optional fix, fresh re-review. A group has at most two fix/re-review cycles. A
@@ -146,7 +159,11 @@ After every stage, gate the group before starting the next one:
 node <plugin-root>/bin/adw.mjs execution-assert-target --project-root <absolute-project-root>
 ```
 
-Supply `{execution_envelope, group_id}` on stdin. It requires HEAD to still
+Supply `{execution_envelope, group_id}` on stdin. The Codex host uses that
+form between subprocesses. Each fresh Claude workflow stage uses the equivalent
+`--envelope-file`, `--envelope-sha256`, `--group-id`, and optional `--since`
+arguments against the coordinator-created temporary file before returning its
+structured result. The gate requires HEAD to still
 match the preflight baseline and every changed path to stay inside the group's
 affected paths, and it returns the group's current `snapshot` — a digest over
 both the changed paths and their bytes. Pass that value back as `since` on the
@@ -164,10 +181,10 @@ node <plugin-root>/bin/adw.mjs execution-finalize --project-root <absolute-proje
 ```
 
 Supply the execution envelope and the typed provider result exactly as its
-documented input contract requires. Codex returns that result directly; on the
-Claude route, assemble it from the stage outcomes you observed, reporting a
-group as passed only when its own gates passed. Require a schema-valid, zero-exit final
-result before reporting success. The finalizer independently rechecks HEAD,
+documented input contract requires. Both native workflows return that typed
+candidate result directly; a group is passed only when its own stages and gates
+passed. Require a schema-valid, zero-exit final result before reporting
+success. The finalizer independently rechecks HEAD,
 scope, and non-target snapshots; reloads each exact configured validation tuple;
 runs only those commands in confined real directories; and repeats the Git
 gates after every validation command. Provider-reported validation is never

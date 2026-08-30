@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { EXECUTION_SCHEMA_VERSION, validateExecutionEnvelope, validateExecutionPacket } from "../../plugin/lib/execution-contract.mjs";
-import { executionAssertTarget } from "../../plugin/lib/execution-finalizer.mjs";
+import { executionAssertTarget, executionAssertTargetFile } from "../../plugin/lib/execution-finalizer.mjs";
 import { captureExecutionBaselines, porcelainPaths } from "../../plugin/lib/execution-git.mjs";
 
 const git = (root, ...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
@@ -84,4 +85,29 @@ test("the between-stage gate refuses a group whose worker committed", () => {
   git(worktree, "add", ".");
   git(worktree, "commit", "-q", "-m", "worker committed");
   assert.throws(() => executionAssertTarget(root, { execution_envelope: envelope, group_id: "execution-core" }), /HEAD changed/);
+});
+
+test("the Claude file gate binds a private temporary envelope to its digest", async () => {
+  const { root, envelope } = fixture();
+  const path = join(mkdtempSync(join(tmpdir(), "adw-envelope-")), "envelope.json");
+  const source = JSON.stringify(envelope);
+  writeFileSync(path, source, { mode: 0o600 });
+  chmodSync(path, 0o600);
+  const envelope_sha256 = createHash("sha256").update(source).digest("hex");
+
+  writeInWorktree(root, "plugin/lib/example.mjs", "export const answer = 1;\n");
+  const result = await executionAssertTargetFile(root, { envelope_file: path, envelope_sha256, group_id: "execution-core" });
+  assert.match(result.snapshot, /^[0-9a-f]{64}$/);
+
+  await assert.rejects(
+    executionAssertTargetFile(root, { envelope_file: path, envelope_sha256: "0".repeat(64), group_id: "execution-core" }),
+    /digest mismatch/,
+  );
+  chmodSync(path, 0o644);
+  if (process.platform !== "win32") {
+    await assert.rejects(
+      executionAssertTargetFile(root, { envelope_file: path, envelope_sha256, group_id: "execution-core" }),
+      /permissions are too broad/,
+    );
+  }
 });

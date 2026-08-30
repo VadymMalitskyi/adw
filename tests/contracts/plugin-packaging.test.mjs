@@ -41,6 +41,7 @@ test("provider manifests identify one versioned ADW plugin and shared skill tree
   assert.equal(claudeManifest.skills, "./skills/");
   assert.equal(claudeManifest.workflows, "./workflows/");
   assert.equal(existsSync(join(pluginRoot, "workflows", "adw-execute-phase-codex.mjs")), true);
+  assert.equal(existsSync(join(pluginRoot, "workflows", "adw-execute-phase-claude.mjs")), true);
 });
 
 test("repo-local marketplaces point to the approved plugin root", () => {

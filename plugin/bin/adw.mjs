@@ -16,7 +16,7 @@ import { applyInitialization, planInitialization, refreshApply, refreshPreview }
 import { managedDevelopmentFiles } from "../lib/managed-environment.mjs";
 import { runDoctor } from "../lib/doctor.mjs";
 import { explainPermission } from "../lib/permission-policy.mjs";
-import { executionAssertTarget, executionFinalize, executionPreflight } from "../lib/execution-finalizer.mjs";
+import { executionAssertTarget, executionAssertTargetFile, executionFinalize, executionPreflight } from "../lib/execution-finalizer.mjs";
 
 const pluginRoot = resolve(fileURLToPath(import.meta.url), "../..");
 
@@ -115,7 +115,10 @@ async function dispatch(command, options) {
     }
     case "execution-assert-target": {
       const projectRoot = realpathSync(requireProjectRoot(options));
-      return { exitCode: EXIT.OK, body: { ok: true, ...executionAssertTarget(projectRoot, await readStdin()) } };
+      const result = options["envelope-file"]
+        ? await executionAssertTargetFile(projectRoot, { envelope_file: options["envelope-file"], envelope_sha256: options["envelope-sha256"], group_id: options["group-id"], ...(options.since === undefined ? {} : { since: options.since }) })
+        : executionAssertTarget(projectRoot, await readStdin());
+      return { exitCode: EXIT.OK, body: { ok: true, ...result } };
     }
     case "execution-finalize": {
       const projectRoot = realpathSync(requireProjectRoot(options));
