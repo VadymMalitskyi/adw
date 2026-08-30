@@ -263,6 +263,23 @@ test("project conventions have one home and agent instructions only route to it"
   assert.match(generateDocs, /single shared home/i, "generate-docs must define conventions ownership");
 });
 
+test("the authorization contract resolves conflicts by domain", () => {
+  const agents = read("plugin/templates/agents.md");
+  const localProfile = read("plugin/templates/user-profile.md");
+
+  assert.match(authorization, /## Resolve conflicts by domain/, "authorization.md must own precedence rules");
+  assert.match(authorization, /stricter result wins:\s+`deny` over `ask` over\s+`allow`/i, "effect conflicts must fail toward the stricter verdict");
+  assert.match(authorization, /latest explicit direction[\s\S]{0,180}current conversation/i, "current conversation must own task intent");
+  assert.match(authorization, /current conversation wins, then the checkout-local[\s\S]{0,120}\.adw\/user\.md[\s\S]{0,120}global `~\/\.config\/adw\/profile\.md`/i, "personal preference precedence must be explicit");
+  assert.match(authorization, /Personal profiles cannot override them/i, "profiles must not override shared project decisions");
+  assert.match(authorization, /Executable formatter,[\s\S]{0,320}authoritative[\s\S]{0,40}over prose/i, "executable convention configuration must beat prose");
+  assert.match(authorization, /live source and executable configuration win over[\s\S]{0,120}documentation/i, "live repository facts must beat generated docs");
+
+  assert.ok(agents.indexOf("~/.config/adw/profile.md") < agents.indexOf("then `.adw/user.md`"), "AGENTS.md must read the global profile before the checkout-local one");
+  assert.match(agents, /current conversation wins, then `.adw\/user\.md`, then the global profile/i, "AGENTS.md must state personal preference priority");
+  assert.match(localProfile, /cannot override shared project policy, project conventions, or an ADW\s+safety boundary/i, "the local profile template must state its limits");
+});
+
 test("the skills state the safety invariants ADW never trades away", () => {
   const prohibitions = SKILLS.flatMap((name) => sentences(skillText(name)))
     .filter((sentence) => /\b(?:never|not|no|refuse|stop|prohibit)\b/i.test(sentence));

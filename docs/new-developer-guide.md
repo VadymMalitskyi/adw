@@ -263,8 +263,11 @@ container without exposing your home directory.
 
 These files are readable context, not executable configuration. They cannot
 authorize an action or supply a command, and must never contain credentials.
-Shared policy wins over a conflicting preference; a current conversation can
-refine presentation but cannot weaken project security.
+For the same personal preference, the current conversation wins, then
+`.adw/user.md`, then the global profile, then ADW defaults. Shared project
+decisions and safety boundaries win over every profile. The complete,
+domain-specific conflict rules live in
+[`plugin/authorization.md`](../plugin/authorization.md#resolve-conflicts-by-domain).
 
 ### Components are the unit of scope
 

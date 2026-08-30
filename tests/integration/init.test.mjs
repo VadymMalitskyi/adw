@@ -406,6 +406,8 @@ test("init seeds agent instructions and a private profile, and never touches one
   assert.ok(existsSync(join(root, ".adw/user.md")), "the private profile is seeded");
   const agents = readFileSync(join(root, "AGENTS.md"), "utf8");
   assert.ok(agents.includes(".adw/user.md"), "AGENTS.md points at the private profile");
+  assert.ok(agents.includes("~/.config/adw/profile.md"), "AGENTS.md points at the global profile");
+  assert.ok(agents.indexOf("~/.config/adw/profile.md") < agents.indexOf("then `.adw/user.md`"), "AGENTS.md gives the checkout-local profile greater specificity");
   assert.ok(agents.includes("worktrees/docs"), "AGENTS.md names the real documentation worktree");
   assert.ok(agents.includes("docs/architecture.md"), "AGENTS.md routes to the architecture entry point");
   assert.ok(agents.includes("docs/conventions.md"), "AGENTS.md routes to shared conventions");
