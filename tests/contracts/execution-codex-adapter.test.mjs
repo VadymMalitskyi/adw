@@ -11,8 +11,10 @@ test("Codex adapter uses supported unattended argument surfaces", () => {
   assert.ok(!argv.join(" ").includes("dangerously"));
 });
 
-test("Codex stage const schema declares its property type", () => {
-  assert.deepEqual(stageResultSchema("review").properties.stage, { type: "string", const: "review" });
+test("Codex stage const schema declares and requires its property", () => {
+  const schema = stageResultSchema("review");
+  assert.deepEqual(schema.properties.stage, { type: "string", const: "review" });
+  assert.deepEqual(schema.required, Object.keys(schema.properties));
 });
 
 test("Codex adapter resolves a relative worktree once before launching the worker", async () => {

@@ -1,6 +1,6 @@
 {
   "name": "@private/adw-plugin",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "private": true,
   "description": "Private dual-provider Agentic Development Workflow plugin with optional integrations",
   "type": "module",

@@ -4,6 +4,12 @@ All notable changes to this private plugin are documented here.
 
 ## Unreleased
 
+### Codex stage schema required fields
+
+- Codex stage-result schemas now include `stage` in `required`, satisfying the
+  provider rule that every declared structured-output property be required.
+- Version bumped to 1.3.6 so provider caches load the corrected schema.
+
 ### Unified marketplace name
 
 - The Codex and Claude marketplace name is now `adw`, so the installed plugin
