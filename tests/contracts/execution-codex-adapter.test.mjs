@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { stageResultSchema } from "../../plugin/lib/execution-adapter.mjs";
 import { codexArgv, createCodexAdapter } from "../../plugin/lib/execution-adapters/codex.mjs";
 
 test("Codex adapter uses supported unattended argument surfaces", () => {
   const argv = codexArgv({ cwd: "/tmp/work", schemaPath: "/tmp/schema", resultPath: "/tmp/result" });
   assert.deepEqual(argv.slice(0, 6), ["exec", "-C", "/tmp/work", "-c", 'approval_policy="never"', "--json"]);
   assert.ok(!argv.join(" ").includes("dangerously"));
+});
+
+test("Codex stage const schema declares its property type", () => {
+  assert.deepEqual(stageResultSchema("review").properties.stage, { type: "string", const: "review" });
 });
 
 test("Codex adapter resolves a relative worktree once before launching the worker", async () => {

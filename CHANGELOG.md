@@ -4,6 +4,12 @@ All notable changes to this private plugin are documented here.
 
 ## Unreleased
 
+### Codex stage schema compatibility
+
+- Codex stage-result schemas now declare the string type alongside the stage
+  constant, satisfying the provider's structured-output schema validation.
+- Version bumped to 1.3.4 so provider caches load the corrected schema.
+
 ### Codex worktree launch fix
 
 - Codex workers now receive the absolute group worktree for both their process
