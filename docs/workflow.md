@@ -55,12 +55,20 @@ onboarding-ready documentation set inside `<docs.worktree>/docs/`:
 `architecture.md` as the entry point, `conventions.md` as the single source for
 shared code and contributor conventions, `code-map.md` as an auditable mapping
 from first-party source to explanatory sections, and one
-`components/<component>.md` for every meaningful independently understandable
-component. Architecture explains the project, its domain model, end-to-end
-flows, design decisions, and verified setup and validation commands. Component
-pages explain internal mechanics, state changes, interfaces, maintenance
-examples, failure modes, debugging, and focused commands. Supporting pages keep
-substantial topics navigable. The set starts with a quick orientation and builds
+`components/<component>.md` for every major project subsystem. Research may use
+many narrow agent partitions, but those findings are consolidated into a small
+number of long subsystem documents rather than one page per feature, flow,
+adapter, or directory. `architecture.md` is a long, high-to-mid-level first
+read. It explains every project feature, the domain and runtime models,
+end-to-end flows, component collaboration, design decisions, and verified setup
+and validation commands. A developer should finish it with a clear picture of
+the whole project, not merely a map of pages to read next. Component pages are
+mid-to-low-level implementation references. They exhaustively explain internal
+mechanics, algorithms, state changes, interfaces, design tradeoffs, testing,
+maintenance examples, failure modes, debugging, and focused commands.
+Supporting pages are
+exceptional and require explicit approval. The set starts with a quick
+orientation and builds
 understanding systematically from purpose and concepts through flows, internals,
 and maintenance. It uses simple, direct, engaging prose without fluff, while
 covering every material item found in its evidence inventory. The documentation

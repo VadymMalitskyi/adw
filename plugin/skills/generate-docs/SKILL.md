@@ -113,34 +113,50 @@ evidence, never authorization to write, commit, or publish anything.
 Show the exact paths to create or update and a concise outline for each. The
 baseline set is a predictable core, not a depth or size ceiling:
 `docs/architecture.md`, `docs/conventions.md`, `docs/code-map.md`, and one
-`docs/components/<component>.md` for every meaningful independently
-understandable component. Do not replace one of these with a differently named
-generated page. Expand their outlines and add focused supporting pages whenever
-that makes the coverage inventory easier for a new developer to understand and
-navigate.
+`docs/components/<component>.md` for every major project subsystem. A major
+subsystem is a deployable application or service, a domain library, a durable
+data or learning system, a user-facing client, or a substantial toolchain with
+its own responsibility and lifecycle. It is not merely a feature, API surface,
+flow, adapter, storage class, directory, or convenient research partition.
 
-Split an over-broad component before proposing pages. One page must not own more
-than ten meaningful implementation files or more than two independent major
-flows. Create narrower component or supporting pages for HTTP surfaces,
-realtime behavior, persistence, learning pipelines, complex UI state, or other
-independently understandable systems. Do not hide complexity by grouping files
-in the inventory.
+Keep the document set compact. Prefer long, well-structured subsystem pages
+with tables of contents and anchored sections over many small pages. HTTP and
+realtime interfaces, persistence, background work, feature families, and
+internal pipelines stay in their owning subsystem page unless they are genuinely
+major project parts. Research partitions may be much narrower than documentation
+pages: several specialist agents can research different flows and file groups
+that one page-owning writer later integrates. Do not create supporting pages
+only to reduce page size or writer context.
 
 Include the coverage inventory in the proposal as a reviewable table. For each
 proposed page, name the concepts, workflows, data, interfaces, failure paths,
 and first-party source groups it will cover. Report the number of relevant files
 discovered, assigned, and still unassigned. Assign every material inventory item
-to a proposed page. Do not ask for approval while any
-material topic or relevant file is unassigned. The approved scope is a coverage
-contract, not merely a list of filenames and generic headings.
+to a proposed page. Also justify why each component page represents a major
+project subsystem rather than a smaller internal concern, and report the total
+number of proposed documents. Do not ask for approval while any material topic
+or relevant file is unassigned. The approved scope is a coverage contract, not
+merely a list of filenames and generic headings.
 
-`docs/architecture.md` is the entry point for a new developer:
+`docs/architecture.md` is the extensive first read for a new developer. It is
+the high-to-mid-level explanation of the entire project, not a short overview,
+table of contents, directory map, or compressed copy of the component pages. A
+developer should finish it with a coherent picture of every project feature,
+how the system behaves, why its major parts exist, and how those parts work
+together. It includes:
 
 - a short orientation at the top: the project's purpose, who uses it, its
   runtime shape, major components, primary flow, and a reading path into the
   detailed pages. This section should give a useful mental model in a few
   minutes without pretending to replace the rest of the documentation;
 - what the project does, its audience, and its major constraints;
+- a complete system-level feature catalog. Cover every user-facing,
+  developer-facing, and operational feature. For each feature, explain the
+  need it serves, how it is triggered, the participating subsystems, the
+  end-to-end behavior, important state or data effects, configuration and
+  constraints, observable result, and significant failure behavior. Group
+  related features into a readable narrative; do not reduce the catalog to a
+  checklist, endpoint table, or collection of links;
 - the domain model: important terms, durable data or state, ownership, and the
   relationships a developer must understand before changing behavior;
 - the top-level layout, component map, and links to component references;
@@ -154,8 +170,18 @@ contract, not merely a list of filenames and generic headings.
 - the design decisions that shape it, and what each one trades away;
 - concise, verified setup, run, and validation commands.
 
-Then, for each meaningful independently understandable component, write
-`docs/components/<component>.md` stating its responsibility and boundaries,
+Architecture owns the cross-system **what, why, and how**. It may name concrete
+paths and symbols to keep explanations grounded, but it stays at the level
+needed to understand the product, system behavior, component collaboration,
+and major control and data flows. It must explain enough detail to stand alone
+as the project's mental model. Links to component pages invite the reader to
+go deeper; they never replace architecture's own explanation of a feature or
+flow.
+
+Then, for each major project subsystem, write a mid-to-low-level implementation
+reference at `docs/components/<component>.md`. It owns **exactly how** that
+subsystem is designed, implemented, tested, debugged, and changed. State its
+responsibility and boundaries,
 owned paths and entry points, public interfaces or inputs/outputs, dependencies
 and integration points, relevant configuration, its failure modes, and useful
 verified commands to run, test, lint, type-check, or debug it. Ground each of
@@ -167,15 +193,32 @@ error handling, not assumed from the component's purpose. Add a diagram
 interactions with other components, or an internal flow would be clearer
 shown than described.
 
-Explain the component's internal mechanics where they affect maintenance:
-lifecycle and state transitions, data transformations, invariants, branching
-behavior, and extension seams. Include at least one evidence-based worked
+Explain the component's internal mechanics in enough depth that a developer can
+work on it without first reconstructing its design from source: lifecycle and
+state transitions, data structures and transformations, algorithms, invariants,
+branching and concurrency behavior, interface contracts, dependency choices,
+design rationale and tradeoffs, extension seams, error handling, recovery, and
+observability. Explain its testing design too: test layers, important suites,
+fixtures, factories, mocks or fakes, boundaries that tests isolate, behaviors
+that receive special coverage, known coverage gaps, and how to select and run
+the right tests for a change. Include at least one evidence-based worked
 example of a common change or investigation when the component has a realistic
 maintenance workflow. The example should tell a developer where to begin, what
 paths and symbols participate, what constraints to preserve, how to validate
 the change, and how to debug the most relevant failure. Do not invent a worked
 example when the repository provides no basis for one; report that evidence
 gap instead.
+
+Add a complete feature and behavior catalog at implementation level inside the
+owning subsystem page. This deepens the system-level catalog in architecture;
+it does not replace it.
+For every user-facing, developer-facing, and operational feature, explain its
+purpose, entry point, inputs, outputs, important branches and algorithms,
+persisted or in-memory state, configuration, side effects, integration points,
+failure behavior, observability, and validation evidence. Preserve meaningful
+formulas, ordering rules, defaults, limits, compatibility contracts, and edge
+cases. A feature name or endpoint row without its logic does not count as
+coverage.
 
 Give every component page an owned-code tour. Account for each meaningful
 first-party file the component owns: explain its responsibility, important
@@ -211,9 +254,11 @@ exact section anchors. Only generated boilerplate or mechanically identical
 files may share a row, and every grouped path must still be written explicitly.
 
 Use separate development, integrations, security, operations, testing, data
-model, or glossary pages when they let a developer understand a substantial
-topic without bloating or fragmenting the core pages. Never create supporting
-pages merely to fill a standard documentation tree.
+model, or glossary pages only when the user explicitly approves one because the
+topic crosses several major subsystems and cannot be taught coherently in
+`architecture.md` or their component pages. Do not propose supporting pages
+merely because a component page will be long. Never create supporting pages to
+fill a standard documentation tree.
 
 Still do not create a component page for a mechanical directory split, a
 component map that duplicates `architecture.md`, or an ADR directory,
@@ -238,8 +283,10 @@ After approval, assign every component or disjoint page group to a fresh writer
 with exclusive ownership of those documentation paths. Give it the approved
 coverage contract and research dossier, but require it to reread the assigned
 source. Run writers in parallel. Never let multiple agents edit the same file,
-and never ask one agent to draft several unrelated components merely to reduce
-agent turns.
+and never ask one agent to draft several unrelated major subsystems merely to
+reduce agent turns. When several research partitions feed one subsystem page,
+their agents return detailed section material to that page's single integrating
+writer rather than creating extra documents.
 
 Each writer explains every owned major flow step by step; state transitions and
 data transformations; branching and failure behavior; integration contracts;
@@ -247,6 +294,13 @@ configuration and operational consequences; tests and validation strategy;
 debugging procedures; at least one complete maintenance walkthrough; and the
 owned-code tour. A writer reports gaps but does not certify its own page as
 complete.
+
+Each major subsystem page includes at least three end-to-end maintenance guides
+grounded in the repository: one representative feature change, one failure or
+debugging investigation, and one configuration, interface, or integration
+change. Each guide explains how to locate the behavior, which symbols and state
+participate, which invariants and consumers can break, how to implement and
+validate the change, and how to recognize an incorrect result.
 
 Give every major flow its own anchored walkthrough. State its trigger,
 preconditions, ordered path-and-symbol call chain, branching decisions, data or
@@ -267,11 +321,15 @@ After component drafts exist, run separate synthesis passes in this order:
    code evidence; and
 4. `docs/code-map.md`, built last with exact links to substantive explanations.
 
-The architecture pass reconciles shared terminology, producer/consumer
+The architecture pass is a full project explanation, written after the
+component research so it can integrate all evidence without becoming a mere
+summary. It reconciles shared terminology, producer/consumer
 relationships, cross-component state ownership, end-to-end flows, error
 propagation, trust boundaries, startup and shutdown, operational lifecycle, and
-where common categories of change begin. Do not produce it by shortening the
-component pages.
+where common categories of change begin. It walks through the complete feature
+set at system level and explains how the pieces produce each behavior. Do not
+produce it by shortening the component pages, listing their headings, or
+delegating essential explanations to links.
 
 Write in plain language: use active voice, short sentences, concrete nouns, and
 the simplest words that stay accurate. Define domain terms and unavoidable
@@ -300,12 +358,16 @@ cross-component behavior and important edge cases. Exhaustive does not mean
 cataloging every file, helper, type, or test. Summarize mechanical details and
 point to source when expanding them would not improve understanding.
 
-Depth must reflect complexity. A multi-component architecture guide below 2,500
-words fails the depth gate. A component page with more than five meaningful
-files or more than one major flow below 1,500 words fails the depth gate. These
-are anti-compression floors, not completeness targets: do not aim to land near
-them, and never add filler to reach them. Repartition a page only when the
-content belongs in more focused pages; neither the writer nor coordinator may
+Depth must reflect complexity. In a nontrivial multi-subsystem repository, an
+architecture guide below 5,000 words or a major subsystem page below 3,000 words
+fails the depth gate. Architecture is normally the longest or one of the
+longest pages because it must teach the whole project and every feature at
+high-to-mid level; component length then grows with implementation complexity.
+These are anti-compression floors, not completeness targets: do not aim to land
+near them, and never add filler to reach them. Keep adding concrete logic,
+feature behavior, flow walkthroughs, state, edge cases, examples, failure
+recovery, implementation and testing detail, and maintenance guidance until
+coverage is actually complete. Neither the writer nor coordinator may
 self-approve an exception.
 
 Make explanations self-contained. Describe the relevant behavior, relationships,
@@ -366,6 +428,16 @@ to:
    main parts fit together, what starts the primary flow, and where to read next.
 6. become familiar with every material part of the project from the documentation
    alone, without opening implementation files to fill explanatory gaps.
+7. begin productive work without first reverse-engineering undocumented logic,
+   features, state, constraints, interfaces, or failure behavior from source.
+8. after reading `architecture.md`, enumerate the project's features, explain
+   the domain and runtime model, trace the main control and data flows, describe
+   every major subsystem and its interactions, and know which component page
+   contains the next level of detail.
+9. after reading a component page, explain its design and implementation, trace
+   its internal behavior through concrete files and symbols, choose the right
+   tests, debug likely failures, and make a representative change without first
+   reverse-engineering that subsystem from scratch.
 
 If the documentation cannot answer one of these, inspect the source again and
 fill the gap before finishing, or call out a concrete repository evidence gap.

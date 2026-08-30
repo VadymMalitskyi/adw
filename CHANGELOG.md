@@ -4,6 +4,23 @@ All notable changes to this private plugin are documented here.
 
 ## Unreleased
 
+### Documentation is consolidated around major project parts
+
+- `adw:generate-docs` now keeps narrow research partitions separate from the
+  reader-facing structure. Specialist agents may research many flows in
+  parallel, but their work is integrated into one long document per major
+  deployable, domain library, data system, client, or toolchain instead of
+  producing pages for internal features, adapters, and pipelines.
+- `architecture.md` is now explicitly the long, high-to-mid-level first read:
+  it covers every feature and explains the complete domain, runtime, state, and
+  cross-component story instead of acting as an index or shortened synthesis.
+  Its nontrivial-project anti-compression floor is 5,000 words.
+- Major-subsystem pages remain at a 3,000-word anti-compression floor and are
+  explicitly mid-to-low-level implementation references, with exhaustive
+  algorithms, interfaces, design tradeoffs, testing strategy, debugging, and
+  three repository-grounded maintenance guides.
+- Version bumped to 1.3.1 so provider caches load the consolidated structure.
+
 ### Exhaustive documentation now uses independent agent waves
 
 - `adw:generate-docs` no longer lets one context research, write, and certify a

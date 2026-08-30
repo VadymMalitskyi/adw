@@ -299,15 +299,31 @@ test("generate-docs requires evidence-backed onboarding depth, not checklist com
   assert.match(source, /native or in-session subagents[\s\S]*must not be researched, written, and reviewed in one agent context/i);
   assert.match(source, /Before approval, every subagent is read-only/i);
   assert.match(source, /fresh research agent[\s\S]*research dossier/i);
-  assert.match(source, /One page must not own more than ten meaningful implementation files or more than two independent major flows/i);
+  assert.match(source, /Keep the document set compact[\s\S]*long, well-structured subsystem pages/i);
+  assert.match(source, /Research partitions may be much narrower than documentation pages/i);
+  assert.match(source, /justify why each component page represents a major project subsystem/i);
+  assert.match(source, /Do not create supporting pages only to reduce page size or writer context/i);
   assert.match(source, /fresh writer with exclusive ownership/i);
+  assert.match(source, /single integrating writer rather than creating extra documents/i);
   assert.match(source, /After component drafts exist, run separate synthesis passes in this order/i);
   assert.match(source, /Give every major flow its own anchored walkthrough/i);
+  assert.match(source, /complete feature and behavior catalog/i);
+  assert.match(source, /complete system-level feature catalog/i);
+  assert.match(source, /high-to-mid-level explanation of the entire project/i);
+  assert.match(source, /not a short overview, table of contents, directory map/i);
+  assert.match(source, /Architecture owns the cross-system \*\*what, why, and how\*\*/i);
+  assert.match(source, /mid-to-low-level implementation reference/i);
+  assert.match(source, /designed, implemented, tested, debugged, and changed/i);
+  assert.match(source, /test layers[\s\S]*fixtures[\s\S]*mocks or fakes/i);
+  assert.match(source, /at least three end-to-end maintenance guides/i);
   assert.match(source, /fresh read-only review agents[\s\S]*Source coverage[\s\S]*Workflow[\s\S]*Standalone onboarding[\s\S]*Prose/i);
   assert.match(source, /Repeat until no material finding remains/i);
   assert.match(source, /Do not impose a remediation-cycle limit/i);
-  assert.match(source, /architecture guide below 2,500 words fails the depth gate/i);
-  assert.match(source, /component page[\s\S]*below 1,500 words fails the depth gate/i);
+  assert.match(source, /architecture guide below 5,000 words or a major subsystem page below 3,000 words fails the depth gate/i);
+  assert.match(source, /Architecture is normally the longest or one of the longest pages/i);
+  assert.match(source, /after reading `architecture\.md`[\s\S]*enumerate the project's features/i);
+  assert.match(source, /after reading a component page[\s\S]*choose the right tests/i);
+  assert.match(source, /begin productive work without first reverse-engineering undocumented logic/i);
 });
 
 test("the authorization contract resolves conflicts by domain", () => {
