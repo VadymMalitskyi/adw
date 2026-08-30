@@ -50,18 +50,27 @@ worktree, not on the code branches. That keeps generated prose out of code
 review and lets docs be rewritten as often as they need to be without touching
 code history. The two branches share no ancestry.
 
-`adw:generate-docs` inspects the live repository and proposes a small baseline
-inside `<docs.worktree>/docs/`: `architecture.md` as the entry point,
-`conventions.md` as the single source for shared code and contributor
-conventions, and one `components/<component>.md` for every meaningful
-independently understandable component. Architecture explains the project, its
-major flows, its design decisions, and verified setup/validation commands;
-component pages explain responsibility, boundaries, interfaces, failure modes,
-and focused commands. A supporting page is added only when substantial material
-would make the baseline pages hard to navigate. Every factual claim traces to
-source; anything that is the model's reading of the code is clearly labeled as
-interpretation. It creates or updates files only after the person approves the
-exact scope.
+`adw:generate-docs` inspects the live repository and proposes an
+onboarding-ready documentation set inside `<docs.worktree>/docs/`:
+`architecture.md` as the entry point, `conventions.md` as the single source for
+shared code and contributor conventions, and one
+`components/<component>.md` for every meaningful independently understandable
+component. Architecture explains the project, its domain model, end-to-end
+flows, design decisions, and verified setup and validation commands. Component
+pages explain internal mechanics, state changes, interfaces, maintenance
+examples, failure modes, debugging, and focused commands. Supporting pages keep
+substantial topics navigable. The set starts with a quick orientation and builds
+understanding systematically from purpose and concepts through flows, internals,
+and maintenance. It uses simple, direct, engaging prose without fluff, while
+covering every material item found in its evidence inventory. The documentation
+stands alone as the project's introduction: source links verify explanations and
+guide later implementation work, but never replace missing detail. Before
+finishing, the skill checks whether a new developer can become familiar with the
+whole project from the documentation, explain the system, trace its major flows,
+locate a representative change, and validate and debug that change. Every factual
+claim traces to source; anything that is the model's reading of the code is
+clearly labeled as interpretation. It creates or updates files only after the
+person approves the exact scope.
 
 These pages serve both people and agents. The generated `AGENTS.md` routes
 agents to them but never copies `conventions.md`; formatter, linter, type-checker,

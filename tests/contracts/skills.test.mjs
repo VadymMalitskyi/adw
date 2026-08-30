@@ -263,6 +263,34 @@ test("project conventions have one home and agent instructions only route to it"
   assert.match(generateDocs, /single shared home/i, "generate-docs must define conventions ownership");
 });
 
+test("generate-docs requires evidence-backed onboarding depth, not checklist completion", () => {
+  const source = skillText("generate-docs").replace(/\s+/g, " ");
+
+  assert.match(source, /coverage inventory[\s\S]*domain concepts[\s\S]*major user or system workflow/i);
+  assert.match(source, /end-to-end walkthroughs of every major flow/i);
+  assert.match(source, /state or data transformations[\s\S]*outputs[\s\S]*handled failures/i);
+  assert.match(source, /worked example of a common change or investigation/i);
+  assert.match(source, /where to begin[\s\S]*constraints to preserve[\s\S]*validate[\s\S]*debug/i);
+  assert.match(source, /coverage and onboarding review/i);
+  assert.match(source, /trace every major workflow[\s\S]*identify where to make a representative change/i);
+  assert.match(source, /Do not use line count as a quota/i);
+  assert.match(source, /merely touches every requested heading does not pass/i);
+  assert.match(source, /quickly form an accurate mental model[\s\S]*deepen it systematically/i);
+  assert.match(source, /short orientation at the top[\s\S]*reading path/i);
+  assert.match(source, /purpose and domain concepts[\s\S]*major flows[\s\S]*maintenance work/i);
+  assert.match(source, /active voice[\s\S]*simplest words that stay accurate/i);
+  assert.match(source, /Make the prose engaging[\s\S]*cause and effect[\s\S]*concrete examples/i);
+  assert.match(source, /generic introductions[\s\S]*repeated summaries[\s\S]*decorative adjectives/i);
+  assert.match(source, /exhaustive about the material understanding[\s\S]*every item in the evidence-backed inventory/i);
+  assert.match(source, /Account for every coverage-inventory item/i);
+  assert.match(source, /only project introduction[\s\S]*stand on its own/i);
+  assert.match(source, /must not need to open source code[\s\S]*merely to understand an explanation/i);
+  assert.match(source, /Source links are[\s\S]*never substitutes for the explanation itself/i);
+  assert.match(source, /Assign every material inventory item to a proposed page/i);
+  assert.match(source, /Never use a file path[\s\S]*as a replacement for prose/i);
+  assert.match(source, /every material part of the project from the documentation alone/i);
+});
+
 test("the authorization contract resolves conflicts by domain", () => {
   const agents = read("plugin/templates/agents.md");
   const localProfile = read("plugin/templates/user-profile.md");

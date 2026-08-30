@@ -4,6 +4,21 @@ All notable changes to this private plugin are documented here.
 
 ## Unreleased
 
+### Documentation depth is now verified
+
+- `adw:generate-docs` inventories domain concepts, state, major workflows,
+  boundaries, extension points, and failure paths before proposing files. It
+  requires end-to-end code walkthroughs, component maintenance examples where
+  evidence supports them, and an onboarding review that catches checklist-only
+  pages without imposing arbitrary line-count quotas.
+- Generated sets now open with a quick repository orientation, build a
+  systematic learning path, cover every material evidence-backed inventory
+  item, and use simple, engaging prose with explicit anti-fluff rules.
+- Documentation must stand alone as the project's complete introduction. Source
+  references support verification and later implementation work but cannot
+  replace detailed explanations or force a newcomer to read code to fill gaps.
+- Version bumped to 1.2.8 so provider caches load the revised skill.
+
 ### ADW activation is explicit
 
 - Codex and Claude can no longer invoke ADW skills implicitly. Installing the
